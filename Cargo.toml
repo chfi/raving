@@ -1,0 +1,56 @@
+[package]
+name = "engine"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ash = "0.34"
+ash-window = "0.8"
+gpu-allocator = { version = "0.12.0", features = ["vulkan"] }
+
+
+# vk-mem = "0.2.2"
+
+winit = "0.25"
+# winit = { version = "0.25", default-features = false, features = ["x11"] }
+egui = "0.15"
+clipboard = "0.5"
+
+crossbeam = "0.8"
+parking_lot = "0.11.1"
+rayon = "1.5"
+futures = { version = "0.3", features = ["thread-pool"] }
+futures-timer = { version = "3.0.2" }
+
+rgb = "0.8.25"
+colorous = "1.0.5"
+
+nalgebra = "0.24"
+nalgebra-glm = "0.10"
+
+gfa = { version = "0.10" }
+handlegraph = "0.7.0-alpha.7"
+
+lazy_static = "1.4.0"
+anyhow = "1.0"
+
+rustc-hash = "1.1"
+
+bstr = "0.2"
+
+rhai = { version = "1.0.1", features = ["sync", "f32_float"] }
+
+bytemuck = { version = "1.7", features = ["derive"] }
+
+num_cpus = "1.13.0"
+
+log = "0.4"
+flexi_logger = { version = "0.18", features = ["async"] }
+argh = "0.1.5"
+
+rand = "0.8"
+
+[profile.dev]
+opt-level = 2
