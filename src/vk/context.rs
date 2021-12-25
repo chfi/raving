@@ -10,6 +10,29 @@ use ash::vk::{KhrGetPhysicalDeviceProperties2Fn, StructureType};
 
 use ash::vk;
 
+pub struct VkQueue {
+    queue: vk::Queue,
+    queue_family: u32,
+    index: u32,
+
+    graphics: bool,
+    compute: bool,
+    transfer: bool,
+}
+
+pub struct Queues {
+    queues: Vec<VkQueue>,
+
+    graphics_tx: crossbeam::channel::Sender<()>,
+    graphics_rx: crossbeam::channel::Receiver<()>,
+
+    compute_tx: crossbeam::channel::Sender<()>,
+    compute_rx: crossbeam::channel::Receiver<()>,
+
+    transfer_tx: crossbeam::channel::Sender<()>,
+    transfer_rx: crossbeam::channel::Receiver<()>,
+}
+
 pub struct VkContext {
     _entry: Entry,
     instance: Instance,
@@ -20,6 +43,7 @@ pub struct VkContext {
     surface_khr: vk::SurfaceKHR,
     physical_device: vk::PhysicalDevice,
     device: Device,
+
 
     #[allow(dead_code)]
     get_physical_device_features2: KhrGetPhysicalDeviceProperties2Fn,
