@@ -8,7 +8,7 @@ use ash::{
 
 use anyhow::Result;
 
-use self::context::{VkContext, VkQueue, Queues};
+use self::context::{VkContext, VkQueueThread, Queues};
 
 pub mod context;
 pub mod debug;
@@ -31,6 +31,7 @@ pub struct VkEngine {
 
     swapchain_images: Vec<vk::Image>,
     swapchain_image_views: Vec<vk::ImageView>,
+    swapchain_framebuffers: Vec<vk::Framebuffer>,
 
     frames: [FrameData; FRAME_OVERLAP],
     frame_number: usize,

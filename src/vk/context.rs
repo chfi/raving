@@ -4,33 +4,49 @@ use ash::{Device, Entry, Instance};
 
 use ash::extensions::{ext::DebugUtils, khr::Surface};
 
+use crossbeam::channel::{Receiver, Sender};
+
 // use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 
 use ash::vk::{KhrGetPhysicalDeviceProperties2Fn, StructureType};
 
 use ash::vk;
 
-pub struct VkQueue {
-    queue: vk::Queue,
-    queue_family: u32,
-    index: u32,
+pub struct GpuTask {}
 
+// pub type GpuTask = Box<dyn FnOnce()
+
+pub struct VkQueueThread {
+    queue: vk::Queue,
+    queue_family_index: u32,
+    queue_index: u32,
+
+    tasks_rx: Receiver<GpuTask>,
+    tasks_tx: Sender<GpuTask>,
+
+    present: bool,
     graphics: bool,
     compute: bool,
     transfer: bool,
+    // present: Option<Receiver<GpuTask>>,
+    // graphics: Option<Receiver<GpuTask>>,
+    // compute: Option<Receiver<GpuTask>>,
+    // transfer: Option<Receiver<GpuTask>>,
 }
 
 pub struct Queues {
-    queues: Vec<VkQueue>,
+    // queues: Vec<VkQueueThread>,
+    queue: VkQueueThread,
+    /*
+    graphics_tx: Sender<GpuTask>,
+    graphics_rx: Receiver<GpuTask>,
 
-    graphics_tx: crossbeam::channel::Sender<()>,
-    graphics_rx: crossbeam::channel::Receiver<()>,
+    compute_tx: Sender<GpuTask>,
+    compute_rx: Receiver<GpuTask>,
 
-    compute_tx: crossbeam::channel::Sender<()>,
-    compute_rx: crossbeam::channel::Receiver<()>,
-
-    transfer_tx: crossbeam::channel::Sender<()>,
-    transfer_rx: crossbeam::channel::Receiver<()>,
+    transfer_tx: Sender<GpuTask>,
+    transfer_rx: Receiver<GpuTask>,
+    */
 }
 
 pub struct VkContext {
@@ -43,7 +59,6 @@ pub struct VkContext {
     surface_khr: vk::SurfaceKHR,
     physical_device: vk::PhysicalDevice,
     device: Device,
-
 
     #[allow(dead_code)]
     get_physical_device_features2: KhrGetPhysicalDeviceProperties2Fn,
@@ -85,16 +100,11 @@ impl VkContext {
         physical_device: vk::PhysicalDevice,
         device: Device,
     ) -> anyhow::Result<Self> {
-        let get_physical_device_features2 =
-            unsafe {
-                KhrGetPhysicalDeviceProperties2Fn::load(|name| {
-                    std::mem::transmute(entry.get_instance_proc_addr(
-                        instance.handle(),
-                        name.as_ptr(),
-                    ))
-                })
-            };
-
+        let get_physical_device_features2 = unsafe {
+            KhrGetPhysicalDeviceProperties2Fn::load(|name| {
+                std::mem::transmute(entry.get_instance_proc_addr(instance.handle(), name.as_ptr()))
+            })
+        };
 
         Ok(VkContext {
             _entry: entry,
@@ -127,13 +137,10 @@ impl VkContext {
     ) -> Option<vk::Format> {
         candidates.iter().cloned().find(|candidate| {
             let props = unsafe {
-                self.instance.get_physical_device_format_properties(
-                    self.physical_device,
-                    *candidate,
-                )
+                self.instance
+                    .get_physical_device_format_properties(self.physical_device, *candidate)
             };
-            (tiling == vk::ImageTiling::LINEAR
-                && props.linear_tiling_features.contains(features))
+            (tiling == vk::ImageTiling::LINEAR && props.linear_tiling_features.contains(features))
                 || (tiling == vk::ImageTiling::OPTIMAL
                     && props.optimal_tiling_features.contains(features))
         })
@@ -175,4 +182,3 @@ impl VkContext {
 //         }
 //     }
 // }
-
