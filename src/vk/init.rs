@@ -249,7 +249,8 @@ pub(super) fn choose_physical_device(
     surface: &Surface,
     surface_khr: vk::SurfaceKHR,
     force_device: Option<&str>,
-) -> Result<(vk::PhysicalDevice, u32, u32, u32)> {
+// ) -> Result<(vk::PhysicalDevice, u32, u32, u32)> {
+) -> Result<(vk::PhysicalDevice, u32)> {
     let devices = unsafe { instance.enumerate_physical_devices() }?;
 
     log::debug!("Enumerating physical devices");
@@ -317,15 +318,15 @@ pub(super) fn choose_physical_device(
     Ok((
         device,
         graphics_ix.unwrap(),
-        present_ix.unwrap(),
-        compute_ix.unwrap(),
+        // present_ix.unwrap(),
+        // compute_ix.unwrap(),
     ))
 }
 
 pub(super) fn create_swapchain_and_images(
     vk_context: &VkContext,
     graphics_ix: u32,
-    present_ix: u32,
+    // present_ix: u32,
     dimensions: [u32; 2],
 ) -> Result<(
     Swapchain,
@@ -361,7 +362,7 @@ pub(super) fn create_swapchain_and_images(
         );
     }
 
-    let family_indices = [graphics_ix, present_ix];
+    let family_indices = [graphics_ix];
 
     let create_info = {
         let mut builder = vk::SwapchainCreateInfoKHR::builder()
@@ -371,15 +372,8 @@ pub(super) fn create_swapchain_and_images(
             .image_color_space(props.format.color_space)
             .image_extent(props.extent)
             .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT);
-
-        builder = if graphics_ix != present_ix {
-            builder
-                .image_sharing_mode(vk::SharingMode::CONCURRENT)
-                .queue_family_indices(&family_indices)
-        } else {
-            builder.image_sharing_mode(vk::SharingMode::EXCLUSIVE)
-        };
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         builder
             .pre_transform(details.capabilities.current_transform)
@@ -430,14 +424,15 @@ pub(super) fn create_logical_device(
     instance: &Instance,
     device: vk::PhysicalDevice,
     graphics_ix: u32,
-    present_ix: u32,
-    compute_ix: u32,
-) -> Result<(Device, vk::Queue, vk::Queue, vk::Queue)> {
+    // present_ix: u32,
+    // compute_ix: u32,
+) -> Result<(Device, vk::Queue)> {
     let queue_priorities = [1.0f32];
 
     let queue_infos = {
         use rustc_hash::FxHashSet;
-        let indices = [graphics_ix, present_ix, compute_ix]
+        // let indices = [graphics_ix, present_ix, compute_ix]
+        let indices = [graphics_ix]
             .iter()
             .copied()
             .collect::<FxHashSet<_>>();
@@ -494,10 +489,10 @@ pub(super) fn create_logical_device(
         unsafe { instance.create_device(device, &device_create_info, None) }?;
 
     let graphics_queue = unsafe { device.get_device_queue(graphics_ix, 0) };
-    let present_queue = unsafe { device.get_device_queue(present_ix, 0) };
-    let compute_queue = unsafe { device.get_device_queue(compute_ix, 0) };
+    // let present_queue = unsafe { device.get_device_queue(present_ix, 0) };
+    // let compute_queue = unsafe { device.get_device_queue(compute_ix, 0) };
 
-    Ok((device, graphics_queue, present_queue, compute_queue))
+    Ok((device, graphics_queue))
 }
 
 pub(super) fn find_memory_type(

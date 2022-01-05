@@ -12,7 +12,17 @@ use ash::vk::{KhrGetPhysicalDeviceProperties2Fn, StructureType};
 
 use ash::vk;
 
-pub struct GpuTask {}
+pub struct GpuTask {
+    cmd_bufs: Vec<vk::CommandBuffer>,
+
+    wait: Vec<vk::Semaphore>,
+    signal: Vec<vk::Semaphore>,
+
+    // should also contain a reference to the command pool -- 
+    // or some other way to identify the pool, so the buffers can be freed after use
+    //
+    // wait, is that necessary? i forget
+}
 
 // pub type GpuTask = Box<dyn FnOnce()
 

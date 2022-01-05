@@ -10,6 +10,15 @@ use std::{sync::Arc, path::PathBuf};
 use anyhow::Result;
 
 
+pub struct ImageInput {
+    format: vk::Format,
+    layout: vk::ImageLayout,
+    image: vk::Image,
+
+    // width: u32,
+    // height: u32,
+}
+
 pub struct RenderGraph {
     //
 }

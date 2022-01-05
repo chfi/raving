@@ -1,14 +1,16 @@
 use ash::{
     extensions::khr::{Surface, Swapchain},
     // version::DeviceV1_0,
-    vk,
+    vk::{self},
     Device,
     Entry,
 };
 
+use winit::window::Window;
+
 use anyhow::Result;
 
-use self::context::{VkContext, VkQueueThread, Queues};
+use self::context::{Queues, VkContext, VkQueueThread};
 
 pub mod context;
 pub mod debug;
@@ -38,6 +40,78 @@ pub struct VkEngine {
 }
 
 impl VkEngine {
+    pub fn new(window: &Window) -> Result<Self> {
+        let entry = Entry::new();
+
+        // let instance_exts = init::instance_extensions(&entry)?;
+
+        log::debug!("Created Vulkan entry");
+        let instance = init::create_instance(&entry, window)?;
+        log::debug!("Created Vulkan instance");
+
+        let surface = Surface::new(&entry, &instance);
+        let surface_khr = unsafe { ash_window::create_surface(&entry, &instance, window, None) }?;
+        log::debug!("Created window surface");
+
+        let debug_utils = debug::setup_debug_utils(&entry, &instance);
+
+        // let (physical_device, graphics_ix, present_ix, compute_ix) = init::choose_physical_device(
+        let (physical_device, graphics_ix) = init::choose_physical_device(
+            &instance,
+            &surface,
+            surface_khr,
+            None,
+            // args.force_graphics_device.as_deref(),
+        )?;
+
+        // let (device, graphics_queue, present_queue, _compute_queue) = init::create_logical_device(
+        let (device, graphics_queue) = init::create_logical_device(
+            &instance,
+            physical_device,
+            graphics_ix,
+        )?;
+
+        /*
+        let allocator_create_info = gpu_allocator::vulkan::AllocatorCreateDesc {
+            instance,
+            device,
+            physical_device,
+            debug_settings: Default::default(),
+            buffer_device_address: false,
+        };
+        */
+
+        // let allocator = gpu_allocator::vulkan::Allocator::new(desc)
+        // let allocator = vk_mem::Allocator::new(&allocator_create_info)?;
+
+        let vk_context = VkContext::new(
+            entry,
+            instance,
+            debug_utils,
+            surface,
+            surface_khr,
+            physical_device,
+            device,
+        )?;
+
+        let width = 800u32;
+        let height = 600u32;
+
+        let (swapchain, swapchain_khr, swapchain_props, images) =
+            init::create_swapchain_and_images(
+                &vk_context,
+                graphics_ix,
+                // present_ix,
+                [width, height],
+            )?;
+        let swapchain_image_views =
+            init::create_swapchain_image_views(vk_context.device(), &images, swapchain_props)?;
+
+        let msaa_samples = vk_context.get_max_usable_sample_count();
+
+        unimplemented!();
+    }
+
     pub fn current_frame(&self) -> &FrameData {
         &self.frames[self.frame_number % FRAME_OVERLAP]
     }
