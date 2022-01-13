@@ -83,15 +83,18 @@ dependencies = [
 
 [[package]]
 name = "ash"
-version = "0.34.0+1.2.203"
+version = "0.35.0+1.2.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0f780da53d0063880d45554306489f09dd8d1bda47688b4a57bc579119356df"
+checksum = "5a7638ce84f8c84d6fd6faa63aa267574d345181ba591c0eeb5550d4c30cd600"
+dependencies = [
+ "libloading 0.7.2",
+]
 
 [[package]]
 name = "ash-window"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58c1b9de0bddc6d24af3c3db002a99085acf13b89b586051c3bbbac40899f2b8"
+checksum = "c2f510c6da81963f828aaaf863983bc51f223fba4e8c3f054d98c941c7e19ee7"
 dependencies = [
  "ash",
  "raw-window-handle 0.3.4",
@@ -771,9 +774,9 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "gpu-allocator"
-version = "0.12.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32d337e0f296f2d3399a133cbd327db5996615a2b2c0f95e36bd863bc8f64eae"
+checksum = "f82bf43581ac956c5f9245baf8e9a10ca25ace4f188e6e453cab354bd1a2a7c5"
 dependencies = [
  "ash",
  "backtrace",

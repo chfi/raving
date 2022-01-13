@@ -6,6 +6,7 @@ use ash::{
     Entry,
 };
 
+use gpu_allocator::vulkan::Allocator;
 use winit::window::Window;
 
 use anyhow::Result;
@@ -23,6 +24,7 @@ pub mod graph;
 pub const FRAME_OVERLAP: usize = 2;
 
 pub struct VkEngine {
+    // allocator: Allocator,
     context: VkContext,
 
     queues: Queues,
@@ -40,7 +42,7 @@ pub struct VkEngine {
 
 impl VkEngine {
     pub fn new(window: &Window) -> Result<Self> {
-        let entry = Entry::new();
+        let entry = Entry::linked();
 
         // let instance_exts = init::instance_extensions(&entry)?;
 
