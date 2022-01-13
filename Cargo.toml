@@ -20,6 +20,7 @@ parking_lot = "0.11.1"
 rayon = "1.5"
 futures = { version = "0.3", features = ["thread-pool"] }
 futures-timer = { version = "3.0.2" }
+poll-promise = "0.1"
 
 rhai = { version = "1.0.1", features = ["sync", "f32_float"] }
 bytemuck = { version = "1.7", features = ["derive"] }
@@ -27,8 +28,9 @@ bytemuck = { version = "1.7", features = ["derive"] }
 rgb = "0.8.25"
 colorous = "1.0.5"
 
-nalgebra = "0.24"
-nalgebra-glm = "0.10"
+nalgebra = "0.30"
+nalgebra-glm = "0.16"
+nalgebra-sparse = "0.6"
 
 lazy_static = "1.4.0"
 anyhow = "1.0"

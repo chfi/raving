@@ -17,8 +17,7 @@ pub struct GpuTask {
 
     wait: Vec<vk::Semaphore>,
     signal: Vec<vk::Semaphore>,
-
-    // should also contain a reference to the command pool -- 
+    // should also contain a reference to the command pool --
     // or some other way to identify the pool, so the buffers can be freed after use
     //
     // wait, is that necessary? i forget
@@ -29,8 +28,7 @@ pub struct GpuTask {
 pub struct VkQueueThread {
     queue: vk::Queue,
     queue_family_index: u32,
-    queue_index: u32,
-
+    // queue_index: u32,
     tasks_rx: Receiver<GpuTask>,
     tasks_tx: Sender<GpuTask>,
 
@@ -46,7 +44,10 @@ pub struct VkQueueThread {
 
 pub struct Queues {
     // queues: Vec<VkQueueThread>,
-    queue: VkQueueThread,
+    thread: VkQueueThread,
+    // task_tx: Sender<GpuTask>,
+    // task_rx: Receiver<GpuTask>,
+    // queue: VkQueueThread,
     /*
     graphics_tx: Sender<GpuTask>,
     graphics_rx: Receiver<GpuTask>,
@@ -57,6 +58,27 @@ pub struct Queues {
     transfer_tx: Sender<GpuTask>,
     transfer_rx: Receiver<GpuTask>,
     */
+}
+
+impl Queues {
+    pub fn init(queue: vk::Queue, family_ix: u32) -> anyhow::Result<Self> {
+        // 1st just find the graphics queue and use that for everything
+
+        let (tasks_tx, tasks_rx) = crossbeam::channel::unbounded();
+
+        let thread = VkQueueThread {
+            queue_family_index: family_ix,
+            queue,
+            tasks_tx,
+            tasks_rx,
+            present: true,
+            graphics: true,
+            compute: true,
+            transfer: true,
+        };
+
+        Ok(Queues { thread })
+    }
 }
 
 pub struct VkContext {

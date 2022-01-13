@@ -33,8 +33,7 @@ pub struct VkEngine {
 
     swapchain_images: Vec<vk::Image>,
     swapchain_image_views: Vec<vk::ImageView>,
-    swapchain_framebuffers: Vec<vk::Framebuffer>,
-
+    // swapchain_framebuffers: Vec<vk::Framebuffer>,
     frames: [FrameData; FRAME_OVERLAP],
     frame_number: usize,
 }
@@ -65,16 +64,13 @@ impl VkEngine {
         )?;
 
         // let (device, graphics_queue, present_queue, _compute_queue) = init::create_logical_device(
-        let (device, graphics_queue) = init::create_logical_device(
-            &instance,
-            physical_device,
-            graphics_ix,
-        )?;
+        let (device, graphics_queue) =
+            init::create_logical_device(&instance, physical_device, graphics_ix)?;
 
         /*
         let allocator_create_info = gpu_allocator::vulkan::AllocatorCreateDesc {
             instance,
-            device,
+
             physical_device,
             debug_settings: Default::default(),
             buffer_device_address: false,
@@ -109,7 +105,26 @@ impl VkEngine {
 
         let msaa_samples = vk_context.get_max_usable_sample_count();
 
-        unimplemented!();
+        let queues = Queues::init(graphics_queue, graphics_ix)?;
+
+        let frames = todo!();
+
+        let frame_number = 0;
+
+        let engine = VkEngine {
+            context: vk_context,
+            queues,
+            swapchain,
+            swapchain_khr,
+            swapchain_props,
+            swapchain_images: images,
+            swapchain_image_views,
+
+            frames,
+            frame_number,
+        };
+
+        Ok(engine)
     }
 
     pub fn current_frame(&self) -> &FrameData {
