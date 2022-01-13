@@ -107,7 +107,12 @@ impl VkEngine {
 
         let queues = Queues::init(graphics_queue, graphics_ix)?;
 
-        let frames = todo!();
+        let create_flags = vk::CommandPoolCreateFlags::empty();
+
+        let frames = [
+            FrameData::new(&vk_context, graphics_ix, create_flags)?,
+            FrameData::new(&vk_context, graphics_ix, create_flags)?,
+        ];
 
         let frame_number = 0;
 
@@ -140,6 +145,51 @@ pub struct FrameData {
 
     command_pool: vk::CommandPool,
     main_command_buffer: vk::CommandBuffer,
+}
+
+impl FrameData {
+    pub fn new(
+        ctx: &VkContext,
+        queue_ix: u32,
+        create_flags: vk::CommandPoolCreateFlags,
+    ) -> Result<Self> {
+        let dev = ctx.device();
+
+        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
+        let present_semaphore = unsafe { dev.create_semaphore(&semaphore_info, None) }?;
+        let render_semaphore = unsafe { dev.create_semaphore(&semaphore_info, None) }?;
+
+        let fence_info = vk::FenceCreateInfo::builder().build();
+        let render_fence = unsafe { dev.create_fence(&fence_info, None) }?;
+
+        let command_pool_info = vk::CommandPoolCreateInfo::builder()
+            .queue_family_index(queue_ix)
+            .flags(create_flags)
+            .build();
+
+        let command_pool = unsafe { dev.create_command_pool(&command_pool_info, None) }?;
+
+        let cmd_buf = {
+            let alloc_info = vk::CommandBufferAllocateInfo::builder()
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_pool(command_pool)
+                .command_buffer_count(FRAME_OVERLAP as u32)
+                .build();
+
+            let bufs = unsafe { dev.allocate_command_buffers(&alloc_info) }?;
+            bufs[0]
+        };
+        let main_command_buffer = cmd_buf;
+
+        Ok(Self {
+            present_semaphore,
+            render_semaphore,
+
+            render_fence,
+            command_pool,
+            main_command_buffer,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
