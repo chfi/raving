@@ -137,6 +137,63 @@ impl VkEngine {
     pub fn current_frame(&self) -> &FrameData {
         &self.frames[self.frame_number % FRAME_OVERLAP]
     }
+
+    pub fn draw_next_frame(&mut self) -> Result<bool> {
+        let ctx = &self.context;
+        let device = ctx.device();
+
+        let f_ix = self.frame_number % FRAME_OVERLAP;
+
+        // wait for previous frame (no such thing if this is frame zero)
+        /*
+        if self.frame_number != 0 {
+            let prev_ix = (self.frame_number - 1) % FRAME_OVERLAP;
+            let prev_frame = &self.frames[prev_ix];
+
+            let fences = [prev_frame.render_fence];
+
+            unsafe {
+        // timeout of 1 second
+                device.wait_for_fences(fences, wait_all, timeout)
+            }
+        }
+        */
+
+        let present_semaphore = self.frames[f_ix].present_semaphore;
+
+        let img_result = unsafe {
+            self.swapchain.acquire_next_image(
+                self.swapchain_khr,
+                1_000_000_000,
+                present_semaphore,
+                vk::Fence::null(),
+            )
+        };
+
+        let swap_img_index = match img_result {
+            Ok((img_index)) => img_index,
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(false),
+            Err(error) => anyhow::bail!("Error while acquiring next image: {}", error),
+        };
+
+        unsafe {
+            device.reset_command_buffer(
+                self.frames[f_ix].main_command_buffer,
+                vk::CommandBufferResetFlags::empty(),
+            )
+        }?;
+
+        let cmd = self.frames[f_ix].main_command_buffer;
+
+        let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
+
+        self.frame_number += 1;
+
+        Ok(true)
+    }
 }
 
 pub struct FrameData {
