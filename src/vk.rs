@@ -19,6 +19,7 @@ pub mod init;
 pub mod resource;
 pub mod util;
 
+pub mod compute;
 pub mod graph;
 
 pub const FRAME_OVERLAP: usize = 2;
