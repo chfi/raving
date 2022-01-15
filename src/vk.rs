@@ -28,8 +28,9 @@ pub struct GpuResources {
     // TODO replace this with a system that allocates new descriptor
     // pools as needed
     descriptor_pool: vk::DescriptorPool,
-
     pub descriptor_sets: Vec<vk::DescriptorSet>,
+
+    pipelines: Vec<(vk::Pipeline, vk::PipelineLayout)>,
 
     storage_image_layout: vk::DescriptorSetLayout,
 }
@@ -90,10 +91,90 @@ impl GpuResources {
             descriptor_pool,
             descriptor_sets: Vec::new(),
 
+            pipelines: Vec::new(),
+
             storage_image_layout,
         };
 
         Ok(result)
+    }
+
+    // TODO this is completely temporary
+    pub fn load_compute_shader(&mut self, context: &VkContext, shader: &[u8]) -> Result<usize> {
+        let comp_src = {
+            let mut cursor = std::io::Cursor::new(shader);
+            ash::util::read_spv(&mut cursor)
+        }?;
+
+        let create_info = vk::ShaderModuleCreateInfo::builder()
+            .code(&comp_src)
+            .build();
+
+        let shader_module = unsafe { context.device().create_shader_module(&create_info, None) }?;
+
+        let pipeline_layout = {
+            let pc_size = std::mem::size_of::<[f32; 4]>() + std::mem::size_of::<[i32; 2]>();
+
+            let pc_range = vk::PushConstantRange::builder()
+                .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                .offset(0)
+                .size(pc_size as u32)
+                .build();
+
+            let pc_ranges = [pc_range];
+
+            let layouts = [self.storage_image_layout];
+
+            let layout_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(&layouts)
+                .push_constant_ranges(&pc_ranges)
+                .build();
+
+            unsafe { context.device().create_pipeline_layout(&layout_info, None) }
+        }?;
+
+        let entry_point = std::ffi::CString::new("main").unwrap();
+
+        let comp_state_info = vk::PipelineShaderStageCreateInfo::builder()
+            .stage(vk::ShaderStageFlags::COMPUTE)
+            .module(shader_module)
+            .name(&entry_point)
+            .build();
+
+        let pipeline_info = vk::ComputePipelineCreateInfo::builder()
+            .layout(pipeline_layout)
+            .stage(comp_state_info)
+            .build();
+
+        let pipeline_infos = [pipeline_info];
+
+        let result = unsafe {
+            context.device().create_compute_pipelines(
+                vk::PipelineCache::null(),
+                &pipeline_infos,
+                None,
+            )
+        };
+
+        let pipelines = match result {
+            Ok(pipelines) => pipelines,
+            Err((pipelines, err)) => {
+                log::warn!("{:?}", err);
+                pipelines
+            }
+        };
+
+        let pipeline = pipelines[0];
+
+        let i = self.pipelines.len();
+
+        self.pipelines.push((pipeline, pipeline_layout));
+
+        unsafe {
+            context.device().destroy_shader_module(shader_module, None);
+        }
+
+        Ok(i)
     }
 
     pub fn storage_image_layout(&self) -> vk::DescriptorSetLayout {
