@@ -35,6 +35,7 @@ nalgebra-sparse = "0.6"
 lazy_static = "1.4.0"
 anyhow = "1.0"
 
+thunderdome = "0.5"
 rustc-hash = "1.1"
 
 bstr = "0.2"

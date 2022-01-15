@@ -24,8 +24,103 @@ pub mod graph;
 
 pub const FRAME_OVERLAP: usize = 2;
 
+pub struct GpuResources {
+    // TODO replace this with a system that allocates new descriptor
+    // pools as needed
+    descriptor_pool: vk::DescriptorPool,
+
+    pub descriptor_sets: Vec<vk::DescriptorSet>,
+
+    storage_image_layout: vk::DescriptorSetLayout,
+}
+
+impl GpuResources {
+    pub fn new(context: &VkContext) -> Result<Self> {
+        // TODO replace this with a system that allocates new descriptor
+        // pools as needed
+        let descriptor_pool = {
+            let descriptor_count = 1024;
+            let max_sets = descriptor_count * 4;
+
+            let pool_size = |ty: vk::DescriptorType| vk::DescriptorPoolSize {
+                ty,
+                descriptor_count,
+            };
+
+            let sampled_image_size = pool_size(vk::DescriptorType::COMBINED_IMAGE_SAMPLER);
+            let storage_buffer_size = pool_size(vk::DescriptorType::STORAGE_BUFFER);
+            let storage_image_size = pool_size(vk::DescriptorType::STORAGE_IMAGE);
+
+            let pool_sizes = [sampled_image_size, storage_buffer_size, storage_image_size];
+
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .pool_sizes(&pool_sizes)
+                .max_sets(max_sets)
+                .build();
+
+            unsafe { context.device().create_descriptor_pool(&pool_info, None) }
+        }?;
+
+        let storage_image_layout = {
+            use vk::ShaderStageFlags as Stages;
+
+            let output_image_binding = vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(Stages::COMPUTE)
+                .build();
+
+            let bindings = [output_image_binding];
+
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings)
+                .build();
+
+            let layout = unsafe {
+                context
+                    .device()
+                    .create_descriptor_set_layout(&layout_info, None)
+            }?;
+
+            layout
+        };
+
+        let result = Self {
+            descriptor_pool,
+            descriptor_sets: Vec::new(),
+
+            storage_image_layout,
+        };
+
+        Ok(result)
+    }
+
+    pub fn storage_image_layout(&self) -> vk::DescriptorSetLayout {
+        self.storage_image_layout
+    }
+
+    // returns the index of the descriptor set
+    pub fn allocate_storage_image_set(&mut self, context: &VkContext) -> Result<usize> {
+        let i = self.descriptor_sets.len();
+
+        let layouts = [self.storage_image_layout];
+
+        let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+            .descriptor_pool(self.descriptor_pool)
+            .set_layouts(&layouts)
+            .build();
+
+        let sets = unsafe { context.device().allocate_descriptor_sets(&alloc_info) }?;
+
+        self.descriptor_sets.push(sets[0]);
+
+        Ok(i)
+    }
+}
+
 pub struct VkEngine {
-    // allocator: Allocator,
+    allocator: Allocator,
     context: VkContext,
 
     queues: Queues,
@@ -70,17 +165,15 @@ impl VkEngine {
         let (device, graphics_queue) =
             init::create_logical_device(&instance, physical_device, graphics_ix)?;
 
-        /*
-        let allocator_create_info = gpu_allocator::vulkan::AllocatorCreateDesc {
-            instance,
-
+        let allocator_create = gpu_allocator::vulkan::AllocatorCreateDesc {
+            instance: instance.clone(),
+            device: device.clone(),
             physical_device,
             debug_settings: Default::default(),
             buffer_device_address: false,
         };
-        */
 
-        // let allocator = gpu_allocator::vulkan::Allocator::new(desc)
+        let allocator = gpu_allocator::vulkan::Allocator::new(&allocator_create)?;
         // let allocator = vk_mem::Allocator::new(&allocator_create_info)?;
 
         let vk_context = VkContext::new(
@@ -120,6 +213,7 @@ impl VkEngine {
         let frame_number = 0;
 
         let engine = VkEngine {
+            allocator,
             context: vk_context,
             queues,
             swapchain,
