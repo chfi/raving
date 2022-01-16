@@ -59,23 +59,23 @@ fn main() -> Result<()> {
         let mut dirty_swapchain = false;
 
         match event {
-            // Event::MainEventsCleared => {
-            //     let screen_dims = app.dims();
-            //     let mouse_pos = app.mouse_pos();
-            //     main_view.update_view_animation(screen_dims, mouse_pos);
+            Event::MainEventsCleared => {
+                //     let screen_dims = app.dims();
+                //     let mouse_pos = app.mouse_pos();
+                //     main_view.update_view_animation(screen_dims, mouse_pos);
 
-            //     let edge_ubo = app.settings.edge_renderer().load();
+                //     let edge_ubo = app.settings.edge_renderer().load();
 
-            //     for er in edge_renderer.iter_mut() {
-            //         er.write_ubo(&edge_ubo).unwrap();
-            //     }
+                //     for er in edge_renderer.iter_mut() {
+                //         er.write_ubo(&edge_ubo).unwrap();
+                //     }
 
-            //     let focus = &app.shared_state().gui_focus_state;
-            //     if !focus.mouse_over_gui() {
-            //         main_view.produce_context(&context_mgr);
-            //         // main_view.send_context(context_menu.tx());
-            //     }
-            // }
+                //     let focus = &app.shared_state().gui_focus_state;
+                //     if !focus.mouse_over_gui() {
+                //         main_view.produce_context(&context_mgr);
+                //         // main_view.send_context(context_menu.tx());
+                //     }
+            }
             Event::RedrawEventsCleared => {
                 //
             }

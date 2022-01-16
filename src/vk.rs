@@ -56,7 +56,7 @@ impl GpuResources {
             .get(pipeline_ix)
             .ok_or(anyhow!("tried to dispatch with nonexistent pipeline"))?;
 
-        let image = *self.images.get(image_ix).ok_or(anyhow!(
+        let image = self.images.get(image_ix).ok_or(anyhow!(
             "tried to use nonexistent image in compute dispatch"
         ))?;
         let desc_set = *self
@@ -560,6 +560,67 @@ impl VkEngine {
         &self.frames[self.frame_number % FRAME_OVERLAP]
     }
 
+    pub fn draw_from_compute(
+        &mut self,
+        pipeline_ix: usize,
+        image_ix: usize,
+        desc_set_ix: usize,
+        // width: u32,
+        // height: u32,
+    ) -> Result<bool> {
+        let ctx = &self.context;
+        let device = self.context.device();
+
+        let frame_n = self.frame_number;
+        let f_ix = frame_n % FRAME_OVERLAP;
+
+        let frame = &self.frames[f_ix];
+
+        if frame_n != f_ix {
+            let fences = [frame.render_fence];
+
+            unsafe {
+                device.wait_for_fences(&fences, true, 1_000_000_000)?;
+                device.reset_fences(&fences)?;
+            };
+        }
+
+        let img_available = frame.present_semaphore;
+
+        let swapchain_img_ix = unsafe {
+            let result = self.swapchain.acquire_next_image(
+                self.swapchain_khr,
+                std::u64::MAX,
+                img_available,
+                vk::Fence::null(),
+            );
+
+            match result {
+                Ok((img_index, _)) => img_index,
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(true),
+                Err(error) => bail!("Error while acquiring next swapchain image: {}", error),
+            }
+        };
+
+        unsafe {
+            device.reset_command_buffer(
+                frame.main_command_buffer,
+                vk::CommandBufferResetFlags::empty(),
+            )
+        }?;
+
+        let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
+
+        let compute_cmds = {
+            let cmd = frame.main_command_buffer;
+        };
+
+        let copy_cmds = {};
+
+        Ok(true)
+    }
+
+    /*
     pub fn draw_next_frame(&mut self) -> Result<bool> {
         let ctx = &self.context;
         let device = ctx.device();
@@ -616,6 +677,7 @@ impl VkEngine {
 
         Ok(true)
     }
+                             */
 }
 
 pub struct FrameData {
