@@ -20,7 +20,6 @@ pub mod resource;
 pub mod util;
 
 pub mod compute;
-pub mod graph;
 
 pub const FRAME_OVERLAP: usize = 2;
 
@@ -201,8 +200,8 @@ impl GpuResources {
 }
 
 pub struct VkEngine {
-    allocator: Allocator,
-    context: VkContext,
+    pub(crate) allocator: Allocator,
+    pub(crate) context: VkContext,
 
     queues: Queues,
 
