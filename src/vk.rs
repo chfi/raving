@@ -9,9 +9,12 @@ use ash::{
 use gpu_allocator::vulkan::Allocator;
 use winit::window::Window;
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 
-use self::context::{Queues, VkContext, VkQueueThread};
+use self::{
+    context::{Queues, VkContext, VkQueueThread},
+    resource::ImageRes,
+};
 
 pub mod context;
 pub mod debug;
@@ -32,6 +35,9 @@ pub struct GpuResources {
     pipelines: Vec<(vk::Pipeline, vk::PipelineLayout)>,
 
     storage_image_layout: vk::DescriptorSetLayout,
+
+    images: Vec<ImageRes>,
+    image_views: Vec<(vk::ImageView, usize)>, // 2nd val is index into `images`
 }
 
 impl GpuResources {
@@ -93,9 +99,82 @@ impl GpuResources {
             pipelines: Vec::new(),
 
             storage_image_layout,
+
+            images: Vec::new(),
+            image_views: Vec::new(),
         };
 
         Ok(result)
+    }
+
+    pub fn allocate_image_for_compute(
+        &mut self,
+        allocator: &mut Allocator,
+        ctx: &VkContext,
+        width: u32,
+        height: u32,
+    ) -> Result<usize> {
+        let format = vk::Format::R8G8B8A8_UNORM;
+        let layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+        let usage = vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC;
+
+        let image = ImageRes::allocate_2d(allocator, ctx, width, height, format, layout, usage)?;
+
+        let ix = self.images.len();
+        self.images.push(image);
+
+        Ok(ix)
+    }
+
+    pub fn create_image_view_for_image(
+        &mut self,
+        ctx: &VkContext,
+        image_ix: usize,
+    ) -> Result<usize> {
+        let img = self
+            .images
+            .get(image_ix)
+            // .ok_or_else(|| bail!("tried to create image view for nonexistent image"))?;
+            .ok_or(anyhow!("tried to create image view for nonexistent image"))?;
+
+        let view = img.create_image_view(ctx)?;
+
+        let view_ix = self.image_views.len();
+        self.image_views.push((view, image_ix));
+
+        Ok(view_ix)
+    }
+
+    pub fn create_desc_set_for_image(&mut self, ctx: &VkContext, view_ix: usize) -> Result<usize> {
+        let (view, _image_ix) = *self.image_views.get(view_ix).ok_or(anyhow!(
+            "tried to create descriptor set using nonexistent image view"
+        ))?;
+
+        let desc_set_ix = self.allocate_storage_image_set(ctx)?;
+        let desc_set = self.descriptor_sets[desc_set_ix];
+
+        let img_info = vk::DescriptorImageInfo::builder()
+            .image_layout(vk::ImageLayout::GENERAL)
+            .image_view(view)
+            .build();
+
+        let img_infos = [img_info];
+
+        let write_set = vk::WriteDescriptorSet::builder()
+            .dst_set(desc_set)
+            .dst_binding(0)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+            .image_info(&img_infos)
+            .build();
+
+        let writes = [write_set];
+
+        unsafe {
+            ctx.device().update_descriptor_sets(&writes, &[]);
+        };
+
+        Ok(desc_set_ix)
     }
 
     // TODO this is completely temporary

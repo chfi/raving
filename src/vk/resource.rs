@@ -7,26 +7,46 @@ use ash::{
 };
 
 use anyhow::Result;
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, Allocator};
 
 use super::{context::VkContext, VkEngine};
 
 pub struct ImageRes {
-    image: vk::Image,
-    format: vk::Format,
+    pub(super) image: vk::Image,
+    pub(super) format: vk::Format,
+
     alloc: Allocation,
-    layout: vk::ImageLayout,
+    pub(super) layout: vk::ImageLayout,
     img_type: vk::ImageType,
 
-    extent: vk::Extent3D,
+    pub(super) extent: vk::Extent3D,
     // width: u32,
     // height: u32,
 }
 
 impl ImageRes {
+    pub fn create_image_view(&self, ctx: &VkContext) -> Result<vk::ImageView> {
+        let create_info = vk::ImageViewCreateInfo::builder()
+            .image(self.image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(self.format)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .build();
+
+        let view = unsafe { ctx.device().create_image_view(&create_info, None) }?;
+
+        Ok(view)
+    }
+
     pub fn allocate_2d(
-        engine: &mut VkEngine,
-        // ctx: &VkContext,
+        allocator: &mut Allocator,
+        ctx: &VkContext,
         width: u32,
         height: u32,
         format: vk::Format,
@@ -57,7 +77,7 @@ impl ImageRes {
             .flags(flags)
             .build();
 
-        let device = engine.context.device();
+        let device = ctx.device();
 
         let (image, requirements) = unsafe {
             let image = device.create_image(&image_info, None)?;
@@ -73,7 +93,7 @@ impl ImageRes {
             linear: false,
         };
 
-        let alloc = engine.allocator.allocate(&alloc_desc)?;
+        let alloc = allocator.allocate(&alloc_desc)?;
 
         unsafe { device.bind_image_memory(image, alloc.memory(), alloc.offset()) }?;
 
