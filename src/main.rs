@@ -17,12 +17,35 @@ fn main() -> Result<()> {
 
     let event_loop = EventLoop::new();
 
+    let width = 800;
+    let height = 600;
+
     let window = WindowBuilder::new()
-        .with_title("Gfaestus")
-        .with_inner_size(winit::dpi::PhysicalSize::new(800, 600))
+        .with_title("engine")
+        .with_inner_size(winit::dpi::PhysicalSize::new(width, height))
         .build(&event_loop)?;
 
     let mut engine = VkEngine::new(&window)?;
+
+    let shader_code = engine::include_shader!("fill_color.comp.spv");
+    let pipeline_ix = engine
+        .resources
+        .load_compute_shader(&engine.context, shader_code)
+        .unwrap();
+
+    let image_ix = engine
+        .resources
+        .allocate_image_for_compute(&mut engine.allocator, &engine.context, width, height)
+        .unwrap();
+    let view_ix = engine
+        .resources
+        .create_image_view_for_image(&engine.context, image_ix)
+        .unwrap();
+
+    let desc_set_ix = engine
+        .resources
+        .create_desc_set_for_image(&engine.context, view_ix)
+        .unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = winit::event_loop::ControlFlow::Poll;

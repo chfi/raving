@@ -41,6 +41,161 @@ pub struct GpuResources {
 }
 
 impl GpuResources {
+    pub fn dispatch_compute(
+        &self,
+        device: &Device,
+        cmd: vk::CommandBuffer,
+        pipeline_ix: usize,
+        image_ix: usize,
+        desc_set_ix: usize,
+        width: u32,
+        height: u32,
+    ) -> Result<()> {
+        let (pipeline, pipeline_layout) = *self
+            .pipelines
+            .get(pipeline_ix)
+            .ok_or(anyhow!("tried to dispatch with nonexistent pipeline"))?;
+
+        let image = *self.images.get(image_ix).ok_or(anyhow!(
+            "tried to use nonexistent image in compute dispatch"
+        ))?;
+        let desc_set = *self
+            .descriptor_sets
+            .get(desc_set_ix)
+            .ok_or(anyhow!("descriptor set missing for compute dispatch"))?;
+
+        // transition image TRANSFER_SRC_OPTIMAL -> GENERAL
+
+        use vk::AccessFlags as Access;
+        use vk::PipelineStageFlags as Stage;
+
+        let memory_barriers = [];
+        let buffer_barriers = [];
+
+        let from_transfer_barrier = vk::ImageMemoryBarrier::builder()
+            // .src_access_mask(Access::COLOR_ATTACHMENT_WRITE)
+            // .src_access_mask(Access::SHADER_READ)
+            .src_access_mask(Access::TRANSFER_READ)
+            .dst_access_mask(Access::SHADER_WRITE)
+            .old_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .new_layout(vk::ImageLayout::GENERAL)
+            .image(image.image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .build();
+
+        let src_stage_mask = Stage::TRANSFER;
+        let dst_stage_mask = Stage::COMPUTE_SHADER;
+
+        let image_barriers = [from_transfer_barrier];
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                cmd,
+                src_stage_mask,
+                dst_stage_mask,
+                vk::DependencyFlags::BY_REGION,
+                &memory_barriers,
+                &buffer_barriers,
+                &image_barriers,
+            );
+        };
+
+        // dispatch
+
+        unsafe {
+            let bind_point = vk::PipelineBindPoint::COMPUTE;
+            device.cmd_bind_pipeline(cmd, bind_point, pipeline);
+
+            let desc_sets = [desc_set];
+            let null = [];
+
+            device.cmd_bind_descriptor_sets(
+                cmd,
+                bind_point,
+                pipeline_layout,
+                0,
+                // &desc_sets[0..=1],
+                &desc_sets,
+                &null,
+            );
+
+            let float_consts = [1f32, 0f32, 0f32, 1f32];
+
+            let push_constants = [
+                width as u32,
+                height as u32,
+                // 0u32,
+                // 0u32,
+            ];
+
+            let mut bytes: Vec<u8> = Vec::with_capacity(24);
+            bytes.extend_from_slice(bytemuck::cast_slice(&float_consts));
+            bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
+
+            device.cmd_push_constants(
+                cmd,
+                pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                &bytes,
+            );
+        };
+
+        let mut x_groups = (width / 256) + width % 256;
+        let mut y_groups = (height / 256) + height % 256;
+
+        unsafe {
+            device.cmd_dispatch(cmd, x_groups, y_groups, 1);
+        };
+
+        // transition image GENERAL -> TRANSFER_SRC_OPTIMAL
+        let from_general_barrier = vk::ImageMemoryBarrier::builder()
+            // .src_access_mask(Access::COLOR_ATTACHMENT_WRITE)
+            // .src_access_mask(Access::SHADER_READ)
+            .src_access_mask(Access::SHADER_WRITE)
+            .dst_access_mask(Access::TRANSFER_READ)
+            .old_layout(vk::ImageLayout::GENERAL)
+            .new_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .image(image.image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .build();
+
+        let dst_stage_mask = Stage::TRANSFER;
+        let src_stage_mask = Stage::COMPUTE_SHADER;
+
+        let image_barriers = [from_transfer_barrier];
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                cmd,
+                src_stage_mask,
+                dst_stage_mask,
+                vk::DependencyFlags::BY_REGION,
+                &memory_barriers,
+                &buffer_barriers,
+                &image_barriers,
+            );
+        };
+
+        Ok(())
+    }
+
     pub fn new(context: &VkContext) -> Result<Self> {
         // TODO replace this with a system that allocates new descriptor
         // pools as needed
@@ -279,8 +434,9 @@ impl GpuResources {
 }
 
 pub struct VkEngine {
-    pub(crate) allocator: Allocator,
-    pub(crate) context: VkContext,
+    pub allocator: Allocator,
+    pub resources: GpuResources,
+    pub context: VkContext,
 
     queues: Queues,
 
@@ -371,8 +527,12 @@ impl VkEngine {
 
         let frame_number = 0;
 
+        let resources = GpuResources::new(&vk_context)?;
+
         let engine = VkEngine {
             allocator,
+            resources,
+
             context: vk_context,
             queues,
             swapchain,
@@ -386,6 +546,14 @@ impl VkEngine {
         };
 
         Ok(engine)
+    }
+
+    pub fn ctx(&self) -> &VkContext {
+        &self.context
+    }
+
+    pub fn device(&self) -> &Device {
+        self.context.device()
     }
 
     pub fn current_frame(&self) -> &FrameData {
