@@ -26,8 +26,8 @@ pub struct GpuTask {
 // pub type GpuTask = Box<dyn FnOnce()
 
 pub struct VkQueueThread {
-    queue: vk::Queue,
-    queue_family_index: u32,
+    pub(super) queue: vk::Queue,
+    pub(super) queue_family_index: u32,
     // queue_index: u32,
     tasks_rx: Receiver<GpuTask>,
     tasks_tx: Sender<GpuTask>,
@@ -44,7 +44,7 @@ pub struct VkQueueThread {
 
 pub struct Queues {
     // queues: Vec<VkQueueThread>,
-    thread: VkQueueThread,
+    pub(super) thread: VkQueueThread,
     // task_tx: Sender<GpuTask>,
     // task_rx: Receiver<GpuTask>,
     // queue: VkQueueThread,

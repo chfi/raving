@@ -37,7 +37,9 @@ pub struct GpuResources {
     storage_image_layout: vk::DescriptorSetLayout,
 
     images: Vec<ImageRes>,
-    image_views: Vec<(vk::ImageView, usize)>, // 2nd val is index into `images`
+    // 2nd val is index into `images`
+    image_views: Vec<(vk::ImageView, usize)>,
+    semaphores: Vec<vk::Semaphore>,
 }
 
 impl GpuResources {
@@ -77,7 +79,8 @@ impl GpuResources {
             // .src_access_mask(Access::SHADER_READ)
             .src_access_mask(Access::TRANSFER_READ)
             .dst_access_mask(Access::SHADER_WRITE)
-            .old_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            // .old_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .old_layout(vk::ImageLayout::UNDEFINED)
             .new_layout(vk::ImageLayout::GENERAL)
             .image(image.image)
             .subresource_range(vk::ImageSubresourceRange {
@@ -257,6 +260,8 @@ impl GpuResources {
 
             images: Vec::new(),
             image_views: Vec::new(),
+
+            semaphores: Vec::new(),
         };
 
         Ok(result)
@@ -270,10 +275,10 @@ impl GpuResources {
         height: u32,
     ) -> Result<usize> {
         let format = vk::Format::R8G8B8A8_UNORM;
-        let layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+        // let layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
         let usage = vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC;
 
-        let image = ImageRes::allocate_2d(allocator, ctx, width, height, format, layout, usage)?;
+        let image = ImageRes::allocate_2d(allocator, ctx, width, height, format, usage)?;
 
         let ix = self.images.len();
         self.images.push(image);
@@ -527,7 +532,15 @@ impl VkEngine {
 
         let frame_number = 0;
 
-        let resources = GpuResources::new(&vk_context)?;
+        let mut resources = GpuResources::new(&vk_context)?;
+
+        let device = vk_context.device();
+
+        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
+        let semaphore = unsafe { device.create_semaphore(&semaphore_info, None) }?;
+        resources.semaphores.push(semaphore);
+        let semaphore = unsafe { device.create_semaphore(&semaphore_info, None) }?;
+        resources.semaphores.push(semaphore);
 
         let engine = VkEngine {
             allocator,
@@ -565,8 +578,8 @@ impl VkEngine {
         pipeline_ix: usize,
         image_ix: usize,
         desc_set_ix: usize,
-        // width: u32,
-        // height: u32,
+        width: u32,
+        height: u32,
     ) -> Result<bool> {
         let ctx = &self.context;
         let device = self.context.device();
@@ -606,16 +619,133 @@ impl VkEngine {
             device.reset_command_buffer(
                 frame.main_command_buffer,
                 vk::CommandBufferResetFlags::empty(),
-            )
-        }?;
+            )?;
+            device.reset_command_buffer(
+                frame.copy_command_buffer,
+                vk::CommandBufferResetFlags::empty(),
+            )?;
+        };
 
         let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
 
-        let compute_cmds = {
+        {
             let cmd = frame.main_command_buffer;
+
+            self.resources.dispatch_compute(
+                device,
+                cmd,
+                pipeline_ix,
+                image_ix,
+                desc_set_ix,
+                width,
+                height,
+            )?;
         };
 
-        let copy_cmds = {};
+        {
+            let cmd = frame.copy_command_buffer;
+
+            let src_img = self.resources.images.get(image_ix).unwrap();
+            let dst_img = swapchain_img;
+
+            let src_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+            let dst_layout = vk::ImageLayout::PRESENT_SRC_KHR;
+
+            let src_subres = vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            };
+
+            let region = vk::ImageCopy::builder()
+                .src_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+                .dst_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+                .src_subresource(src_subres)
+                .dst_subresource(src_subres)
+                .extent(src_img.extent)
+                .build();
+
+            let regions = [region];
+
+            unsafe {
+                device.cmd_copy_image(
+                    cmd,
+                    src_img.image,
+                    src_layout,
+                    dst_img,
+                    dst_layout,
+                    &regions,
+                )
+            };
+        };
+
+        let main_bufs = [frame.main_command_buffer];
+
+        let main_wait = [];
+        let main_signal = [frame.render_semaphore];
+        let main_wait_stages = [];
+        // let main_wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+
+        let main_batch = vk::SubmitInfo::builder()
+            .wait_semaphores(&main_wait)
+            .wait_dst_stage_mask(&main_wait_stages)
+            .signal_semaphores(&main_signal)
+            .command_buffers(&main_bufs)
+            .build();
+
+        let copy_semaphore = self.resources.semaphores[f_ix];
+
+        let copy_bufs = [frame.copy_command_buffer];
+
+        let copy_wait = [frame.render_semaphore, img_available];
+        let copy_signal = [copy_semaphore];
+        let copy_wait_stages = [
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+        ];
+
+        let copy_batch = vk::SubmitInfo::builder()
+            .wait_semaphores(&copy_wait)
+            .wait_dst_stage_mask(&copy_wait_stages)
+            .signal_semaphores(&copy_signal)
+            .command_buffers(&copy_bufs)
+            .build();
+
+        let queue = self.queues.thread.queue;
+
+        unsafe {
+            let batches = [main_batch, copy_batch];
+
+            device.queue_submit(queue, &batches, frame.render_fence)?;
+        }
+
+        /*
+        let swapchains = [self.swapchain_khr];
+        let img_indices = [swapchain_img_ix];
+
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&copy_signal)
+            .swapchains(&swapchains)
+            .image_indices(&img_indices)
+            .build();
+
+        let result = unsafe { self.swapchain.queue_present(queue, &present_info) };
+
+        match result {
+            Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                return Ok(true);
+            }
+            Err(error) => panic!("Failed to present queue: {}", error),
+            _ => {}
+        }
+
+        unsafe {
+            device.queue_wait_idle(queue)?;
+        };
+        */
+
+        self.frame_number += 1;
 
         Ok(true)
     }
@@ -688,6 +818,7 @@ pub struct FrameData {
 
     command_pool: vk::CommandPool,
     main_command_buffer: vk::CommandBuffer,
+    copy_command_buffer: vk::CommandBuffer,
 }
 
 impl FrameData {
@@ -712,17 +843,19 @@ impl FrameData {
 
         let command_pool = unsafe { dev.create_command_pool(&command_pool_info, None) }?;
 
-        let cmd_buf = {
+        let (main, copy) = {
             let alloc_info = vk::CommandBufferAllocateInfo::builder()
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_pool(command_pool)
-                .command_buffer_count(FRAME_OVERLAP as u32)
+                .command_buffer_count(2)
+                // .command_buffer_count(2 * FRAME_OVERLAP as u32)
                 .build();
 
             let bufs = unsafe { dev.allocate_command_buffers(&alloc_info) }?;
-            bufs[0]
+            (bufs[0], bufs[1])
         };
-        let main_command_buffer = cmd_buf;
+        let main_command_buffer = main;
+        let copy_command_buffer = copy;
 
         Ok(Self {
             present_semaphore,
@@ -731,6 +864,7 @@ impl FrameData {
             render_fence,
             command_pool,
             main_command_buffer,
+            copy_command_buffer,
         })
     }
 }

@@ -50,7 +50,6 @@ impl ImageRes {
         width: u32,
         height: u32,
         format: vk::Format,
-        initial_layout: vk::ImageLayout,
         usage: vk::ImageUsageFlags,
     ) -> Result<Self> {
         let extent = vk::Extent3D {
@@ -65,12 +64,13 @@ impl ImageRes {
 
         let img_type = vk::ImageType::TYPE_2D;
         let image_info = vk::ImageCreateInfo::builder()
+            .image_type(img_type)
             .extent(extent)
             .mip_levels(1)
             .array_layers(1)
             .format(format)
             .tiling(tiling)
-            .initial_layout(initial_layout)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
             .usage(usage)
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .samples(sample_count)
@@ -101,7 +101,7 @@ impl ImageRes {
             image,
             format,
             alloc,
-            layout: initial_layout,
+            layout: vk::ImageLayout::UNDEFINED,
             img_type,
             extent,
         })
