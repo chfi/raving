@@ -22,7 +22,7 @@ void main() {
     // imageStore(image, xy, inputs.color);
   // }
 
-  vec4 color = vec4(1.0, 0.0, 0.0, 1.0);
+  vec4 color = vec4(0.0, 0.0, 1.0, 1.0);
 
   if (xy.x >= inputs.img_width || xy.y >= inputs.img_height) {
     color.a = 0.0;

@@ -665,7 +665,7 @@ impl VkEngine {
             let src_img = self.resources.images.get(image_ix).unwrap();
             let dst_img = swapchain_img;
 
-            // transition swapchain image PRESENT_SRC -> TRANSFER_DST_OPTIMAL
+            // transition swapchain image UNDEFINED -> GENERAL
 
             use vk::AccessFlags as Access;
             use vk::PipelineStageFlags as Stage;
@@ -673,12 +673,14 @@ impl VkEngine {
             let memory_barriers = [];
             let buffer_barriers = [];
 
-            let from_transfer_barrier = vk::ImageMemoryBarrier::builder()
-                .src_access_mask(Access::SHADER_WRITE)
-                .dst_access_mask(Access::TRANSFER_READ)
-                .old_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            let from_undefined_barrier = vk::ImageMemoryBarrier::builder()
+                .src_access_mask(Access::NONE_KHR)
+                .dst_access_mask(Access::NONE_KHR)
+                // .old_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+                .old_layout(vk::ImageLayout::UNDEFINED)
+                // .new_layout(vk::ImageLayout::GENERAL)
                 .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .image(image.image)
+                .image(dst_img)
                 .subresource_range(vk::ImageSubresourceRange {
                     aspect_mask: vk::ImageAspectFlags::COLOR,
                     base_mip_level: 0,
@@ -690,10 +692,10 @@ impl VkEngine {
                 .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                 .build();
 
-            // let src_stage_mask = Stage::TRANSFER;
-            // let dst_stage_mask = Stage::
+            let src_stage_mask = Stage::TOP_OF_PIPE;
+            let dst_stage_mask = Stage::TRANSFER;
 
-            let image_barriers = [from_transfer_barrier];
+            let image_barriers = [from_undefined_barrier];
 
             unsafe {
                 device.cmd_pipeline_barrier(
@@ -707,8 +709,11 @@ impl VkEngine {
                 );
             };
 
+            // let src_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
+            // let dst_layout = vk::ImageLayout::PRESENT_SRC_KHR;
+
             let src_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
-            let dst_layout = vk::ImageLayout::PRESENT_SRC_KHR;
+            let dst_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
 
             let src_subres = vk::ImageSubresourceLayers {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -736,6 +741,46 @@ impl VkEngine {
                     dst_layout,
                     &regions,
                 )
+            };
+
+            // transition swapchain image GENERAL -> PRESENT
+
+            let memory_barriers = [];
+            let buffer_barriers = [];
+
+            let from_transfer_barrier = vk::ImageMemoryBarrier::builder()
+                .src_access_mask(Access::TRANSFER_WRITE)
+                .dst_access_mask(Access::MEMORY_READ)
+                .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+                // .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                .image(dst_img)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .build();
+
+            let src_stage_mask = Stage::TRANSFER;
+            let dst_stage_mask = Stage::TOP_OF_PIPE;
+
+            let image_barriers = [from_transfer_barrier];
+
+            unsafe {
+                device.cmd_pipeline_barrier(
+                    cmd,
+                    src_stage_mask,
+                    dst_stage_mask,
+                    vk::DependencyFlags::BY_REGION,
+                    &memory_barriers,
+                    &buffer_barriers,
+                    &image_barriers,
+                );
             };
 
             unsafe { device.end_command_buffer(cmd) }?;

@@ -64,22 +64,15 @@ fn main() -> Result<()> {
 
     dbg!();
 
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = winit::event_loop::ControlFlow::Poll;
 
-        // let event = if let Some(ev) = event.to_static() {
-        //     ev
-        // } else {
-        //     return;
-        // };
-
         let mut dirty_swapchain = false;
-
-        dbg!();
 
         match event {
             Event::MainEventsCleared => {
-                dbg!();
                 let render_success = engine
                     .draw_from_compute(pipeline_ix, image_ix, desc_set_ix, width, height)
                     .unwrap();
