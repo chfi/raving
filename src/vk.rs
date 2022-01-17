@@ -130,7 +130,7 @@ impl GpuResources {
                 &null,
             );
 
-            let float_consts = [1f32, 0f32, 0f32, 1f32];
+            // let float_consts = [1f32, 0f32, 0f32, 1f32];
 
             let push_constants = [
                 width as u32,
@@ -139,8 +139,9 @@ impl GpuResources {
                 // 0u32,
             ];
 
-            let mut bytes: Vec<u8> = Vec::with_capacity(24);
-            bytes.extend_from_slice(bytemuck::cast_slice(&float_consts));
+            // let mut bytes: Vec<u8> = Vec::with_capacity(24);
+            let mut bytes: Vec<u8> = Vec::with_capacity(8);
+            // bytes.extend_from_slice(bytemuck::cast_slice(&float_consts));
             bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
 
             device.cmd_push_constants(
@@ -152,8 +153,11 @@ impl GpuResources {
             );
         };
 
-        let mut x_groups = (width / 256) + width % 256;
-        let mut y_groups = (height / 256) + height % 256;
+        let x_size = 16;
+        let y_size = 16;
+
+        let x_groups = (width / x_size) + width % x_size;
+        let y_groups = (height / y_size) + height % y_size;
 
         unsafe {
             device.cmd_dispatch(cmd, x_groups, y_groups, 1);
@@ -182,7 +186,7 @@ impl GpuResources {
         let dst_stage_mask = Stage::TRANSFER;
         let src_stage_mask = Stage::COMPUTE_SHADER;
 
-        let image_barriers = [from_transfer_barrier];
+        let image_barriers = [from_general_barrier];
 
         unsafe {
             device.cmd_pipeline_barrier(
@@ -351,7 +355,8 @@ impl GpuResources {
         let shader_module = unsafe { context.device().create_shader_module(&create_info, None) }?;
 
         let pipeline_layout = {
-            let pc_size = std::mem::size_of::<[f32; 4]>() + std::mem::size_of::<[i32; 2]>();
+            let pc_size = std::mem::size_of::<[i32; 2]>();
+            // let pc_size = std::mem::size_of::<[f32; 4]>() + std::mem::size_of::<[i32; 2]>();
 
             let pc_range = vk::PushConstantRange::builder()
                 .stage_flags(vk::ShaderStageFlags::COMPUTE)
@@ -523,7 +528,7 @@ impl VkEngine {
 
         let queues = Queues::init(graphics_queue, graphics_ix)?;
 
-        let create_flags = vk::CommandPoolCreateFlags::empty();
+        let create_flags = vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER;
 
         let frames = [
             FrameData::new(&vk_context, graphics_ix, create_flags)?,
@@ -631,6 +636,11 @@ impl VkEngine {
         {
             let cmd = frame.main_command_buffer;
 
+            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
+
             self.resources.dispatch_compute(
                 device,
                 cmd,
@@ -640,13 +650,62 @@ impl VkEngine {
                 width,
                 height,
             )?;
+
+            unsafe { device.end_command_buffer(cmd) }?;
         };
 
         {
             let cmd = frame.copy_command_buffer;
 
+            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
+
             let src_img = self.resources.images.get(image_ix).unwrap();
             let dst_img = swapchain_img;
+
+            // transition swapchain image PRESENT_SRC -> TRANSFER_DST_OPTIMAL
+
+            use vk::AccessFlags as Access;
+            use vk::PipelineStageFlags as Stage;
+
+            let memory_barriers = [];
+            let buffer_barriers = [];
+
+            let from_transfer_barrier = vk::ImageMemoryBarrier::builder()
+                .src_access_mask(Access::SHADER_WRITE)
+                .dst_access_mask(Access::TRANSFER_READ)
+                .old_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+                .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                .image(image.image)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .build();
+
+            // let src_stage_mask = Stage::TRANSFER;
+            // let dst_stage_mask = Stage::
+
+            let image_barriers = [from_transfer_barrier];
+
+            unsafe {
+                device.cmd_pipeline_barrier(
+                    cmd,
+                    src_stage_mask,
+                    dst_stage_mask,
+                    vk::DependencyFlags::BY_REGION,
+                    &memory_barriers,
+                    &buffer_barriers,
+                    &image_barriers,
+                );
+            };
 
             let src_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
             let dst_layout = vk::ImageLayout::PRESENT_SRC_KHR;
@@ -678,6 +737,8 @@ impl VkEngine {
                     &regions,
                 )
             };
+
+            unsafe { device.end_command_buffer(cmd) }?;
         };
 
         let main_bufs = [frame.main_command_buffer];
@@ -720,7 +781,6 @@ impl VkEngine {
             device.queue_submit(queue, &batches, frame.render_fence)?;
         }
 
-        /*
         let swapchains = [self.swapchain_khr];
         let img_indices = [swapchain_img_ix];
 
@@ -743,7 +803,6 @@ impl VkEngine {
         unsafe {
             device.queue_wait_idle(queue)?;
         };
-        */
 
         self.frame_number += 1;
 
