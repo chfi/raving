@@ -11,6 +11,8 @@ use winit::window::Window;
 
 use anyhow::{anyhow, bail, Result};
 
+use thunderdome::{Arena, Index};
+
 use self::{
     context::{Queues, VkContext, VkQueueThread},
     resource::ImageRes,
@@ -30,15 +32,16 @@ pub struct GpuResources {
     // TODO replace this with a system that allocates new descriptor
     // pools as needed
     descriptor_pool: vk::DescriptorPool,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
+    pub descriptor_sets: Arena<vk::DescriptorSet>,
 
-    pipelines: Vec<(vk::Pipeline, vk::PipelineLayout)>,
+    pipelines: Arena<(vk::Pipeline, vk::PipelineLayout)>,
 
+    // descriptor_set_layouts: FxHashMap<Vec<vk::DescriptorSetType>, vk::DescriptorSetLayout>,
     storage_image_layout: vk::DescriptorSetLayout,
 
-    images: Vec<ImageRes>,
+    images: Arena<ImageRes>,
     // 2nd val is index into `images`
-    image_views: Vec<(vk::ImageView, usize)>,
+    image_views: Arena<(vk::ImageView, Index)>,
     semaphores: Vec<vk::Semaphore>,
 }
 
@@ -47,9 +50,9 @@ impl GpuResources {
         &self,
         device: &Device,
         cmd: vk::CommandBuffer,
-        pipeline_ix: usize,
-        image_ix: usize,
-        desc_set_ix: usize,
+        pipeline_ix: Index,
+        image_ix: Index,
+        desc_set_ix: Index,
         width: u32,
         height: u32,
     ) -> Result<()> {
@@ -256,14 +259,14 @@ impl GpuResources {
 
         let result = Self {
             descriptor_pool,
-            descriptor_sets: Vec::new(),
+            descriptor_sets: Arena::new(),
 
-            pipelines: Vec::new(),
+            pipelines: Arena::new(),
 
             storage_image_layout,
 
-            images: Vec::new(),
-            image_views: Vec::new(),
+            images: Arena::new(),
+            image_views: Arena::new(),
 
             semaphores: Vec::new(),
         };
@@ -277,15 +280,14 @@ impl GpuResources {
         ctx: &VkContext,
         width: u32,
         height: u32,
-    ) -> Result<usize> {
+    ) -> Result<Index> {
         let format = vk::Format::R8G8B8A8_UNORM;
         // let layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
         let usage = vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC;
 
         let image = ImageRes::allocate_2d(allocator, ctx, width, height, format, usage)?;
 
-        let ix = self.images.len();
-        self.images.push(image);
+        let ix = self.images.insert(image);
 
         Ok(ix)
     }
@@ -293,8 +295,8 @@ impl GpuResources {
     pub fn create_image_view_for_image(
         &mut self,
         ctx: &VkContext,
-        image_ix: usize,
-    ) -> Result<usize> {
+        image_ix: Index,
+    ) -> Result<Index> {
         let img = self
             .images
             .get(image_ix)
@@ -302,14 +304,12 @@ impl GpuResources {
             .ok_or(anyhow!("tried to create image view for nonexistent image"))?;
 
         let view = img.create_image_view(ctx)?;
+        let ix = self.image_views.insert((view, image_ix));
 
-        let view_ix = self.image_views.len();
-        self.image_views.push((view, image_ix));
-
-        Ok(view_ix)
+        Ok(ix)
     }
 
-    pub fn create_desc_set_for_image(&mut self, ctx: &VkContext, view_ix: usize) -> Result<usize> {
+    pub fn create_desc_set_for_image(&mut self, ctx: &VkContext, view_ix: Index) -> Result<Index> {
         let (view, _image_ix) = *self.image_views.get(view_ix).ok_or(anyhow!(
             "tried to create descriptor set using nonexistent image view"
         ))?;
@@ -342,7 +342,7 @@ impl GpuResources {
     }
 
     // TODO this is completely temporary
-    pub fn load_compute_shader(&mut self, context: &VkContext, shader: &[u8]) -> Result<usize> {
+    pub fn load_compute_shader(&mut self, context: &VkContext, shader: &[u8]) -> Result<Index> {
         let comp_src = {
             let mut cursor = std::io::Cursor::new(shader);
             ash::util::read_spv(&mut cursor)
@@ -409,15 +409,13 @@ impl GpuResources {
 
         let pipeline = pipelines[0];
 
-        let i = self.pipelines.len();
-
-        self.pipelines.push((pipeline, pipeline_layout));
+        let ix = self.pipelines.insert((pipeline, pipeline_layout));
 
         unsafe {
             context.device().destroy_shader_module(shader_module, None);
         }
 
-        Ok(i)
+        Ok(ix)
     }
 
     pub fn storage_image_layout(&self) -> vk::DescriptorSetLayout {
@@ -425,7 +423,7 @@ impl GpuResources {
     }
 
     // returns the index of the descriptor set
-    pub fn allocate_storage_image_set(&mut self, context: &VkContext) -> Result<usize> {
+    pub fn allocate_storage_image_set(&mut self, context: &VkContext) -> Result<Index> {
         let i = self.descriptor_sets.len();
 
         let layouts = [self.storage_image_layout];
@@ -437,9 +435,9 @@ impl GpuResources {
 
         let sets = unsafe { context.device().allocate_descriptor_sets(&alloc_info) }?;
 
-        self.descriptor_sets.push(sets[0]);
+        let ix = self.descriptor_sets.insert(sets[0]);
 
-        Ok(i)
+        Ok(ix)
     }
 }
 
@@ -580,9 +578,9 @@ impl VkEngine {
 
     pub fn draw_from_compute(
         &mut self,
-        pipeline_ix: usize,
-        image_ix: usize,
-        desc_set_ix: usize,
+        pipeline_ix: Index,
+        image_ix: Index,
+        desc_set_ix: Index,
         width: u32,
         height: u32,
     ) -> Result<bool> {
@@ -676,9 +674,7 @@ impl VkEngine {
             let from_undefined_barrier = vk::ImageMemoryBarrier::builder()
                 .src_access_mask(Access::NONE_KHR)
                 .dst_access_mask(Access::NONE_KHR)
-                // .old_layout(vk::ImageLayout::PRESENT_SRC_KHR)
                 .old_layout(vk::ImageLayout::UNDEFINED)
-                // .new_layout(vk::ImageLayout::GENERAL)
                 .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
                 .image(dst_img)
                 .subresource_range(vk::ImageSubresourceRange {
@@ -708,9 +704,6 @@ impl VkEngine {
                     &image_barriers,
                 );
             };
-
-            // let src_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
-            // let dst_layout = vk::ImageLayout::PRESENT_SRC_KHR;
 
             let src_layout = vk::ImageLayout::TRANSFER_SRC_OPTIMAL;
             let dst_layout = vk::ImageLayout::TRANSFER_DST_OPTIMAL;
