@@ -3,7 +3,7 @@
 layout (rgba8, set = 0, binding = 0) writeonly uniform image2D image;
 
 layout (push_constant) uniform Inputs {
-  // vec4 color;
+  vec4 color;
   int img_width;
   int img_height;
 } inputs;
@@ -13,23 +13,9 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 void main() {
   ivec2 xy = ivec2(gl_GlobalInvocationID.xy);
 
-  // if (xy.x >= inputs.img_width || xy.y >= inputs.img_height) {
-  //   return;
-  // }
-
-
-  // if (xy.x < inputs.img_width || xy.y < inputs.img_height) {
-    // imageStore(image, xy, inputs.color);
-  // }
-
-  vec4 color = vec4(0.0, 0.0, 1.0, 1.0);
-
   if (xy.x >= inputs.img_width || xy.y >= inputs.img_height) {
-    color.a = 0.0;
+    return;
   }
 
-  int x = min(xy.x, inputs.img_width - 1);
-  int y = min(xy.y, inputs.img_height - 1);
-
-  imageStore(image, xy, color);
+  imageStore(image, xy, inputs.color);
 }

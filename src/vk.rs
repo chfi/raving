@@ -151,6 +151,7 @@ impl VkEngine {
         desc_set_ix: Index,
         width: u32,
         height: u32,
+        color: [f32; 4],
     ) -> Result<bool> {
         let ctx = &self.context;
         let device = self.context.device();
@@ -215,6 +216,7 @@ impl VkEngine {
                 desc_set_ix,
                 width,
                 height,
+                color,
             )?;
 
             unsafe { device.end_command_buffer(cmd) }?;

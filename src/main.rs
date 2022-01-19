@@ -1,18 +1,11 @@
 use engine::vk::VkEngine;
 
-use ash::{
-    extensions::khr::{Surface, Swapchain},
-    vk::{self},
-    Device, Entry,
-};
+use ash::vk;
 
 use flexi_logger::{Duplicate, FileSpec, Logger};
 use winit::event::{Event, WindowEvent};
-use winit::platform::unix::*;
-use winit::{
-    event_loop::EventLoop,
-    window::{Window, WindowBuilder},
-};
+// use winit::platform::unix::*;
+use winit::{event_loop::EventLoop, window::WindowBuilder};
 
 use anyhow::Result;
 
@@ -47,7 +40,11 @@ fn main() -> Result<()> {
     let image_ix = engine.allocate_image(
         width,
         height,
-        vk::Format::R8G8B8A8_UNORM,
+        // right now this image is copied to the swapchain, which on
+        // my system uses BGRA rather than RGBA, so this is just a
+        // temporary fix
+        vk::Format::B8G8R8A8_UNORM,
+        // vk::Format::R8G8B8A8_UNORM,
         vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
     )?;
 
@@ -59,16 +56,29 @@ fn main() -> Result<()> {
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
+    let start = std::time::Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = winit::event_loop::ControlFlow::Poll;
 
-        let mut dirty_swapchain = false;
+        let mut _dirty_swapchain = false;
 
         match event {
             Event::MainEventsCleared => {
+                let t = start.elapsed().as_secs_f32();
+
+                let r = (t.sin() + 1.0) / 2.0;
+                let b = (t.cos() + 1.0) / 2.0;
+
+                let color = [r, 1.0, b, 1.0];
+
                 let render_success = engine
-                    .draw_from_compute(pipeline_ix, image_ix, desc_set_ix, width, height)
+                    .draw_from_compute(pipeline_ix, image_ix, desc_set_ix, width, height, color)
                     .unwrap();
+
+                if !render_success {
+                    _dirty_swapchain = true;
+                }
             }
             Event::RedrawEventsCleared => {
                 //
@@ -79,7 +89,7 @@ fn main() -> Result<()> {
                     *control_flow = winit::event_loop::ControlFlow::Exit;
                 }
                 WindowEvent::Resized { .. } => {
-                    dirty_swapchain = true;
+                    _dirty_swapchain = true;
                 }
                 _ => (),
             },
@@ -89,8 +99,4 @@ fn main() -> Result<()> {
             _ => (),
         }
     });
-
-    // println!("Hello, world!");
-
-    // Ok(())
 }

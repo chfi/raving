@@ -35,6 +35,7 @@ impl GpuResources {
         desc_set_ix: Index,
         width: u32,
         height: u32,
+        color: [f32; 4],
     ) -> Result<()> {
         let (pipeline, pipeline_layout) = *self
             .pipelines
@@ -112,9 +113,8 @@ impl GpuResources {
                 // 0u32,
             ];
 
-            // let mut bytes: Vec<u8> = Vec::with_capacity(24);
-            let mut bytes: Vec<u8> = Vec::with_capacity(8);
-            // bytes.extend_from_slice(bytemuck::cast_slice(&float_consts));
+            let mut bytes: Vec<u8> = Vec::with_capacity(24);
+            bytes.extend_from_slice(bytemuck::cast_slice(&color));
             bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
 
             device.cmd_push_constants(
@@ -283,7 +283,7 @@ impl GpuResources {
         let shader_module = unsafe { context.device().create_shader_module(&create_info, None) }?;
 
         let pipeline_layout = {
-            let pc_size = std::mem::size_of::<[i32; 2]>();
+            let pc_size = std::mem::size_of::<[i32; 2]>() + std::mem::size_of::<[f32; 4]>();
 
             let pc_range = vk::PushConstantRange::builder()
                 .stage_flags(vk::ShaderStageFlags::COMPUTE)
