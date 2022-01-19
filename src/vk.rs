@@ -15,6 +15,7 @@ use thunderdome::{Arena, Index};
 
 use self::{
     context::{Queues, VkContext, VkQueueThread},
+    descriptor::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
     resource::ImageRes,
 };
 
@@ -32,14 +33,15 @@ pub const FRAME_OVERLAP: usize = 2;
 pub struct GpuResources {
     // TODO replace this with a system that allocates new descriptor
     // pools as needed
-    descriptor_pool: vk::DescriptorPool,
+    // descriptor_pool: vk::DescriptorPool,
+    descriptor_allocator: DescriptorAllocator,
+    layout_cache: DescriptorLayoutCache,
     pub descriptor_sets: Arena<vk::DescriptorSet>,
 
     pipelines: Arena<(vk::Pipeline, vk::PipelineLayout)>,
 
     // descriptor_set_layouts: FxHashMap<Vec<vk::DescriptorSetType>, vk::DescriptorSetLayout>,
-    storage_image_layout: vk::DescriptorSetLayout,
-
+    // storage_image_layout: vk::DescriptorSetLayout,
     images: Arena<ImageRes>,
     // 2nd val is index into `images`
     image_views: Arena<(vk::ImageView, Index)>,
@@ -65,6 +67,7 @@ impl GpuResources {
         let image = self.images.get(image_ix).ok_or(anyhow!(
             "tried to use nonexistent image in compute dispatch"
         ))?;
+
         let desc_set = *self
             .descriptor_sets
             .get(desc_set_ix)
@@ -208,8 +211,7 @@ impl GpuResources {
     }
 
     pub fn new(context: &VkContext) -> Result<Self> {
-        // TODO replace this with a system that allocates new descriptor
-        // pools as needed
+        /*
         let descriptor_pool = {
             let descriptor_count = 1024;
             let max_sets = descriptor_count * 4;
@@ -232,7 +234,6 @@ impl GpuResources {
 
             unsafe { context.device().create_descriptor_pool(&pool_info, None) }
         }?;
-
         let storage_image_layout = {
             use vk::ShaderStageFlags as Stages;
 
@@ -257,15 +258,20 @@ impl GpuResources {
 
             layout
         };
+        */
+
+        let descriptor_allocator = DescriptorAllocator::new(context)?;
+        let layout_cache = DescriptorLayoutCache::new(context.device().to_owned());
 
         let result = Self {
-            descriptor_pool,
+            // descriptor_pool,
+            descriptor_allocator,
+            layout_cache,
             descriptor_sets: Arena::new(),
 
             pipelines: Arena::new(),
 
-            storage_image_layout,
-
+            // storage_image_layout,
             images: Arena::new(),
             image_views: Arena::new(),
 
@@ -342,6 +348,22 @@ impl GpuResources {
         Ok(desc_set_ix)
     }
 
+    fn storage_image_layout_info() -> vk::DescriptorSetLayoutCreateInfo {
+        let output_image_binding = vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::COMPUTE)
+            .build();
+
+        let bindings = [output_image_binding];
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(&bindings)
+            .build();
+
+        layout_info
+    }
+
     // TODO this is completely temporary
     pub fn load_compute_shader(&mut self, context: &VkContext, shader: &[u8]) -> Result<Index> {
         let comp_src = {
@@ -367,7 +389,10 @@ impl GpuResources {
 
             let pc_ranges = [pc_range];
 
-            let layouts = [self.storage_image_layout];
+            let layout_info = Self::storage_image_layout_info();
+
+            let layout = self.layout_cache.get_descriptor_layout(&layout_info)?;
+            let layouts = [layout];
 
             let layout_info = vk::PipelineLayoutCreateInfo::builder()
                 .set_layouts(&layouts)
@@ -419,24 +444,26 @@ impl GpuResources {
         Ok(ix)
     }
 
-    pub fn storage_image_layout(&self) -> vk::DescriptorSetLayout {
-        self.storage_image_layout
-    }
+    // pub fn storage_image_layout(&self) -> vk::DescriptorSetLayout {
+    //     self.storage_image_layout
+    // }
 
     // returns the index of the descriptor set
     pub fn allocate_storage_image_set(&mut self, context: &VkContext) -> Result<Index> {
-        let i = self.descriptor_sets.len();
+        let mut builder =
+            DescriptorBuilder::begin(&mut self.layout_cache, &mut self.descriptor_allocator);
 
-        let layouts = [self.storage_image_layout];
+        let image_info = [];
+        builder.bind_image(
+            0,
+            &image_info,
+            vk::DescriptorType::STORAGE_IMAGE,
+            vk::ShaderStageFlags::COMPUTE,
+        );
 
-        let alloc_info = vk::DescriptorSetAllocateInfo::builder()
-            .descriptor_pool(self.descriptor_pool)
-            .set_layouts(&layouts)
-            .build();
+        let set = builder.build()?;
 
-        let sets = unsafe { context.device().allocate_descriptor_sets(&alloc_info) }?;
-
-        let ix = self.descriptor_sets.insert(sets[0]);
+        let ix = self.descriptor_sets.insert(set);
 
         Ok(ix)
     }

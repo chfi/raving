@@ -95,7 +95,7 @@ impl DescriptorAllocator {
         ]
     };
 
-    pub(super) fn init(ctx: &VkContext) -> Result<Self> {
+    pub(super) fn new(ctx: &VkContext) -> Result<Self> {
         let free_pools = Default::default();
         let used_pools = Default::default();
 
@@ -223,14 +223,14 @@ impl DescriptorAllocator {
 }
 
 impl DescriptorLayoutCache {
-    pub(super) fn init(device: Device) -> Self {
+    pub(super) fn new(device: Device) -> Self {
         Self {
             device,
             layout_cache: Default::default(),
         }
     }
 
-    pub(super) fn create_descriptor_layout(
+    pub(super) fn get_descriptor_layout(
         &mut self,
         info: &vk::DescriptorSetLayoutCreateInfo,
     ) -> Result<vk::DescriptorSetLayout> {
@@ -297,12 +297,12 @@ impl<'a> DescriptorBuilder<'a> {
     }
 
     pub(super) fn bind_buffer(
-        mut self,
+        &mut self,
         binding: u32,
         buffer_info: &[vk::DescriptorBufferInfo],
         ty: vk::DescriptorType,
         stage_flags: vk::ShaderStageFlags,
-    ) -> Self {
+    ) -> &mut Self {
         let layout_binding = vk::DescriptorSetLayoutBinding::builder()
             .descriptor_type(ty)
             .binding(binding)
@@ -326,12 +326,12 @@ impl<'a> DescriptorBuilder<'a> {
     }
 
     pub(super) fn bind_image(
-        mut self,
+        &mut self,
         binding: u32,
         image_info: &[vk::DescriptorImageInfo],
         ty: vk::DescriptorType,
         stage_flags: vk::ShaderStageFlags,
-    ) -> Self {
+    ) -> &mut Self {
         let layout_binding = vk::DescriptorSetLayoutBinding::builder()
             .descriptor_type(ty)
             .binding(binding)
@@ -359,7 +359,7 @@ impl<'a> DescriptorBuilder<'a> {
             .bindings(self.bindings.as_slice())
             .build();
 
-        let layout = self.layout_cache.create_descriptor_layout(&create_info)?;
+        let layout = self.layout_cache.get_descriptor_layout(&create_info)?;
 
         let set = self.allocator.allocate(layout)?;
 
