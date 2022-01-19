@@ -20,6 +20,7 @@ use self::{
 
 pub mod context;
 pub mod debug;
+pub mod descriptor;
 pub mod init;
 pub mod resource;
 pub mod util;
