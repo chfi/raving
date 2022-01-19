@@ -304,6 +304,7 @@ impl<'a> DescriptorBuilder<'a> {
         stage_flags: vk::ShaderStageFlags,
     ) -> &mut Self {
         let layout_binding = vk::DescriptorSetLayoutBinding::builder()
+            .descriptor_count(1)
             .descriptor_type(ty)
             .binding(binding)
             .stage_flags(stage_flags)
@@ -311,12 +312,9 @@ impl<'a> DescriptorBuilder<'a> {
 
         self.bindings.push(layout_binding);
 
-        // TODO this is just to make sure the info lifetimes don't get messed up
-        let infos = Vec::from(buffer_info);
-
         let write = vk::WriteDescriptorSet::builder()
             .descriptor_type(ty)
-            .buffer_info(infos.as_slice()) // see above
+            .buffer_info(buffer_info)
             .dst_binding(binding)
             .build();
 
@@ -333,6 +331,7 @@ impl<'a> DescriptorBuilder<'a> {
         stage_flags: vk::ShaderStageFlags,
     ) -> &mut Self {
         let layout_binding = vk::DescriptorSetLayoutBinding::builder()
+            .descriptor_count(1)
             .descriptor_type(ty)
             .binding(binding)
             .stage_flags(stage_flags)
@@ -340,16 +339,19 @@ impl<'a> DescriptorBuilder<'a> {
 
         self.bindings.push(layout_binding);
 
-        // TODO this is just to make sure the info lifetimes don't get messed up
-        let infos = Vec::from(image_info);
-
-        let write = vk::WriteDescriptorSet::builder()
+        let mut write = vk::WriteDescriptorSet::builder()
             .descriptor_type(ty)
-            .image_info(infos.as_slice()) // see above
-            .dst_binding(binding)
-            .build();
+            .image_info(image_info)
+            .dst_binding(binding);
+
+        log::warn!("write desc count: {}", write.descriptor_count);
+
+        let write = write.build();
 
         self.writes.push(write);
+
+        log::debug!("bindings.len() {}", self.bindings.len());
+        log::debug!("writes.len() {}", self.writes.len());
 
         self
     }
@@ -365,7 +367,10 @@ impl<'a> DescriptorBuilder<'a> {
 
         for write in self.writes.iter_mut() {
             write.dst_set = set;
+            // write.descriptor_count = 1;
         }
+
+        // log::warn!("
 
         unsafe {
             self.allocator
