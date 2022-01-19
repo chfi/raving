@@ -239,8 +239,6 @@ impl DescriptorLayoutCache {
         let count = info.binding_count as usize;
         layout_info.bindings.reserve(count);
 
-        // let mut is_sorted = true;
-        // let mut last_binding: Option<usize> = None;
         let mut is_sorted = true;
         let mut prev = None;
 
@@ -339,19 +337,14 @@ impl<'a> DescriptorBuilder<'a> {
 
         self.bindings.push(layout_binding);
 
-        let mut write = vk::WriteDescriptorSet::builder()
+        let write = vk::WriteDescriptorSet::builder()
             .descriptor_type(ty)
             .image_info(image_info)
             .dst_binding(binding);
 
-        log::warn!("write desc count: {}", write.descriptor_count);
-
         let write = write.build();
 
         self.writes.push(write);
-
-        log::debug!("bindings.len() {}", self.bindings.len());
-        log::debug!("writes.len() {}", self.writes.len());
 
         self
     }
@@ -367,10 +360,7 @@ impl<'a> DescriptorBuilder<'a> {
 
         for write in self.writes.iter_mut() {
             write.dst_set = set;
-            // write.descriptor_count = 1;
         }
-
-        // log::warn!("
 
         unsafe {
             self.allocator

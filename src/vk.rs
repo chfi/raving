@@ -321,31 +321,27 @@ impl GpuResources {
             "tried to create descriptor set using nonexistent image view"
         ))?;
 
-        let desc_set_ix = self.allocate_storage_image_set(ctx)?;
-        let desc_set = self.descriptor_sets[desc_set_ix];
+        let mut builder =
+            DescriptorBuilder::begin(&mut self.layout_cache, &mut self.descriptor_allocator);
 
         let img_info = vk::DescriptorImageInfo::builder()
             .image_layout(vk::ImageLayout::GENERAL)
             .image_view(view)
             .build();
 
-        let img_infos = [img_info];
+        let image_info = [img_info];
+        builder.bind_image(
+            0,
+            &image_info,
+            vk::DescriptorType::STORAGE_IMAGE,
+            vk::ShaderStageFlags::COMPUTE,
+        );
 
-        let write_set = vk::WriteDescriptorSet::builder()
-            .dst_set(desc_set)
-            .dst_binding(0)
-            .dst_array_element(0)
-            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-            .image_info(&img_infos)
-            .build();
+        let set = builder.build()?;
 
-        let writes = [write_set];
+        let ix = self.descriptor_sets.insert(set);
 
-        unsafe {
-            ctx.device().update_descriptor_sets(&writes, &[]);
-        };
-
-        Ok(desc_set_ix)
+        Ok(ix)
     }
 
     fn storage_image_layout_info() -> vk::DescriptorSetLayoutCreateInfo {
@@ -449,24 +445,24 @@ impl GpuResources {
     // }
 
     // returns the index of the descriptor set
-    pub fn allocate_storage_image_set(&mut self, context: &VkContext) -> Result<Index> {
-        let mut builder =
-            DescriptorBuilder::begin(&mut self.layout_cache, &mut self.descriptor_allocator);
+    // pub fn allocate_storage_image_set(&mut self, context: &VkContext) -> Result<Index> {
+    //     let mut builder =
+    //         DescriptorBuilder::begin(&mut self.layout_cache, &mut self.descriptor_allocator);
 
-        let image_info = [];
-        builder.bind_image(
-            0,
-            &image_info,
-            vk::DescriptorType::STORAGE_IMAGE,
-            vk::ShaderStageFlags::COMPUTE,
-        );
+    //     let image_info = [];
+    //     builder.bind_image(
+    //         0,
+    //         &image_info,
+    //         vk::DescriptorType::STORAGE_IMAGE,
+    //         vk::ShaderStageFlags::COMPUTE,
+    //     );
 
-        let set = builder.build()?;
+    //     let set = builder.build()?;
 
-        let ix = self.descriptor_sets.insert(set);
+    //     let ix = self.descriptor_sets.insert(set);
 
-        Ok(ix)
-    }
+    //     Ok(ix)
+    // }
 }
 
 pub struct VkEngine {
