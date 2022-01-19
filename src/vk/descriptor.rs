@@ -33,6 +33,7 @@ pub struct DescriptorLayoutCache {
     layout_cache: HashMap<DescriptorLayoutInfo, vk::DescriptorSetLayout>,
 }
 
+#[derive(Default)]
 pub struct DescriptorLayoutInfo {
     bindings: Vec<vk::DescriptorSetLayoutBinding>,
 }
@@ -50,6 +51,7 @@ impl PartialEq for DescriptorLayoutInfo {
                 a.binding == b.binding
                     && a.descriptor_count == b.descriptor_count
                     && a.descriptor_type == b.descriptor_type
+                    && a.stage_flags == b.stage_flags
             })
     }
 }
@@ -62,6 +64,7 @@ impl std::hash::Hash for DescriptorLayoutInfo {
             layout_binding.binding.hash(state);
             layout_binding.descriptor_count.hash(state);
             layout_binding.descriptor_type.hash(state);
+            layout_binding.stage_flags.hash(state);
         }
     }
 }
@@ -228,13 +231,54 @@ impl DescriptorLayoutCache {
     }
 
     pub(super) fn create_descriptor_layout(
+        &mut self,
         info: vk::DescriptorSetLayoutCreateInfo,
     ) -> Result<vk::DescriptorSetLayout> {
-        unimplemented!()
+        let mut layout_info = DescriptorLayoutInfo::default();
+
+        let count = info.binding_count as usize;
+        layout_info.bindings.reserve(count);
+
+        // let mut is_sorted = true;
+        // let mut last_binding: Option<usize> = None;
+        let mut is_sorted = true;
+        let mut prev = None;
+
+        let bindings = unsafe { std::slice::from_raw_parts::<_>(info.p_bindings, count) };
+
+        for &b in bindings {
+            if let Some(p) = prev {
+                is_sorted = p < b.binding;
+            }
+            layout_info.bindings.push(b);
+            prev = Some(b.binding);
+        }
+
+        if !is_sorted {
+            layout_info.bindings.sort_by_key(|l| l.binding);
+        }
+
+        if let Some(v) = self.layout_cache.get(&layout_info) {
+            return Ok(*v);
+        }
+
+        let layout = unsafe { self.device.create_descriptor_set_layout(&info, None)? };
+
+        self.layout_cache.insert(layout_info, layout);
+
+        Ok(layout)
     }
 
     pub(super) fn cleanup(&mut self) -> Result<()> {
-        unimplemented!();
+        for layout in self.layout_cache.values() {
+            unsafe {
+                self.device.destroy_descriptor_set_layout(*layout, None);
+            }
+        }
+
+        self.layout_cache.clear();
+
+        Ok(())
     }
 }
 
