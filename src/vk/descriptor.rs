@@ -232,7 +232,7 @@ impl DescriptorLayoutCache {
 
     pub(super) fn create_descriptor_layout(
         &mut self,
-        info: vk::DescriptorSetLayoutCreateInfo,
+        info: &vk::DescriptorSetLayoutCreateInfo,
     ) -> Result<vk::DescriptorSetLayout> {
         let mut layout_info = DescriptorLayoutInfo::default();
 
@@ -262,7 +262,7 @@ impl DescriptorLayoutCache {
             return Ok(*v);
         }
 
-        let layout = unsafe { self.device.create_descriptor_set_layout(&info, None)? };
+        let layout = unsafe { self.device.create_descriptor_set_layout(info, None)? };
 
         self.layout_cache.insert(layout_info, layout);
 
@@ -354,7 +354,25 @@ impl<'a> DescriptorBuilder<'a> {
         self
     }
 
-    pub(super) fn build(self) -> Result<()> {
-        unimplemented!();
+    pub(super) fn build(mut self) -> Result<vk::DescriptorSet> {
+        let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(self.bindings.as_slice())
+            .build();
+
+        let layout = self.layout_cache.create_descriptor_layout(&create_info)?;
+
+        let set = self.allocator.allocate(layout)?;
+
+        for write in self.writes.iter_mut() {
+            write.dst_set = set;
+        }
+
+        unsafe {
+            self.allocator
+                .device
+                .update_descriptor_sets(self.writes.as_slice(), &[]);
+        }
+
+        Ok(set)
     }
 }
