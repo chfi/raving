@@ -21,6 +21,8 @@ use super::context::VkContext;
 pub struct DescriptorAllocator {
     device: Device,
 
+    current_pool: Option<vk::DescriptorPool>,
+
     free_pools: VecDeque<vk::DescriptorPool>,
     used_pools: VecDeque<vk::DescriptorPool>,
 }
@@ -37,7 +39,18 @@ pub struct DescriptorLayoutInfo {
 
 impl PartialEq for DescriptorLayoutInfo {
     fn eq(&self, other: &Self) -> bool {
-        unimplemented!();
+        if self.bindings.len() != other.bindings.len() {
+            return false;
+        }
+
+        self.bindings
+            .iter()
+            .zip(other.bindings.iter())
+            .all(|(&a, &b)| {
+                a.binding == b.binding
+                    && a.descriptor_count == b.descriptor_count
+                    && a.descriptor_type == b.descriptor_type
+            })
     }
 }
 
@@ -45,7 +58,11 @@ impl Eq for DescriptorLayoutInfo {}
 
 impl std::hash::Hash for DescriptorLayoutInfo {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        todo!()
+        for layout_binding in &self.bindings {
+            layout_binding.binding.hash(state);
+            layout_binding.descriptor_count.hash(state);
+            layout_binding.descriptor_type.hash(state);
+        }
     }
 }
 
@@ -82,20 +99,104 @@ impl DescriptorAllocator {
         Ok(Self {
             device: ctx.device().to_owned(),
 
+            current_pool: None,
+
             free_pools,
             used_pools,
         })
     }
 
+    fn create_pool(
+        device: &Device,
+        count: u32,
+        flags: vk::DescriptorPoolCreateFlags,
+    ) -> Result<vk::DescriptorPool> {
+        // let fcount = count as f32;
+
+        let sizes = Self::POOL_SIZES
+            .into_iter()
+            .map(|(ty, size)| {
+                let desc_count = (count as f32 * size as f32) as u32;
+                vk::DescriptorPoolSize::builder()
+                    .descriptor_count(desc_count)
+                    .ty(ty)
+                    .build()
+            })
+            .collect::<Vec<_>>();
+
+        let create_info = vk::DescriptorPoolCreateInfo::builder()
+            .max_sets(count)
+            .flags(flags)
+            .pool_sizes(sizes.as_slice())
+            .build();
+
+        let pool = unsafe { device.create_descriptor_pool(&create_info, None)? };
+
+        Ok(pool)
+    }
+
     pub(super) fn reset_pools(&mut self) -> Result<()> {
-        unimplemented!();
+        for &pool in &self.used_pools {
+            unsafe {
+                self.device
+                    .reset_descriptor_pool(pool, vk::DescriptorPoolResetFlags::empty())?
+            };
+        }
+
+        // TODO i think this is correct?
+        self.free_pools.clone_from(&mut self.used_pools);
+        self.used_pools.clear();
+
+        self.current_pool = None;
+
+        Ok(())
     }
 
     pub(super) fn allocate(
         &mut self,
         layout: vk::DescriptorSetLayout,
     ) -> Result<vk::DescriptorSet> {
-        unimplemented!();
+        let current_pool = if let Some(pool) = self.current_pool {
+            pool
+        } else {
+            let new_pool = self.grab_descriptor_pool()?;
+            self.current_pool = Some(new_pool);
+            self.used_pools.push_back(new_pool);
+            new_pool
+        };
+
+        let layouts = [layout];
+
+        let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+            .set_layouts(&layouts)
+            .descriptor_pool(current_pool)
+            .build();
+
+        let alloc_result = unsafe { self.device.allocate_descriptor_sets(&alloc_info) };
+
+        let desc_sets = match alloc_result {
+            Ok(sets) => Some(sets),
+            Err(vk::Result::ERROR_FRAGMENTED_POOL | vk::Result::ERROR_OUT_OF_POOL_MEMORY) => None,
+            Err(_) => bail!("Unrecoverable error when attempting to allocate descriptor set"),
+        };
+
+        if let Some(sets) = desc_sets {
+            return Ok(sets[0]);
+        }
+
+        // need reallocation
+
+        let new_pool = self.grab_descriptor_pool()?;
+        self.current_pool = Some(new_pool);
+        self.used_pools.push_back(new_pool);
+
+        let alloc_result = unsafe { self.device.allocate_descriptor_sets(&alloc_info) };
+
+        // if reallocation doesn't work, we're screwed
+        match alloc_result {
+            Ok(sets) => Ok(sets[0]),
+            Err(_) => bail!("Unrecoverable error when attempting to allocate descriptor set"),
+        }
     }
 
     pub(super) fn cleanup(&mut self) -> Result<()> {
@@ -109,17 +210,12 @@ impl DescriptorAllocator {
         Ok(())
     }
 
-    pub(super) fn grab_descriptor_pool(&mut self) -> Option<vk::DescriptorPool> {
-        /*
-        if let Some(pool) = self.free_pools.pop() {
-            return Some(pool);
+    pub(super) fn grab_descriptor_pool(&mut self) -> Result<vk::DescriptorPool> {
+        if let Some(pool) = self.free_pools.pop_back() {
+            Ok(pool)
         } else {
-            // Self::create_pool(self.device, self.descriptor_sizes, 1000, 0)
-            todo!();
+            Self::create_pool(&self.device, 1000, vk::DescriptorPoolCreateFlags::empty())
         }
-        */
-
-        unimplemented!();
     }
 }
 
