@@ -1,4 +1,10 @@
-use engine::vk::{self, VkEngine};
+use engine::vk::VkEngine;
+
+use ash::{
+    extensions::khr::{Surface, Swapchain},
+    vk::{self},
+    Device, Entry,
+};
 
 use flexi_logger::{Duplicate, FileSpec, Logger};
 use winit::event::{Event, WindowEvent};
@@ -20,8 +26,6 @@ fn main() -> Result<()> {
         .duplicate_to_stderr(Duplicate::Debug)
         .start()?;
 
-    // log::debug!("Logger initalized");
-
     let event_loop = EventLoop::new();
 
     let width = 800;
@@ -32,37 +36,26 @@ fn main() -> Result<()> {
         .with_inner_size(winit::dpi::PhysicalSize::new(width, height))
         .build(&event_loop)?;
 
-    dbg!();
     let mut engine = VkEngine::new(&window)?;
 
     let shader_code = engine::include_shader!("fill_color.comp.spv");
 
-    dbg!();
     let pipeline_ix = engine
         .resources
-        .load_compute_shader(&engine.context, shader_code)
-        .unwrap();
+        .load_compute_shader(&engine.context, shader_code)?;
 
-    dbg!();
+    let image_ix = engine.allocate_image(
+        width,
+        height,
+        vk::Format::R8G8B8A8_UNORM,
+        vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+    )?;
 
-    let image_ix = engine
-        .resources
-        .allocate_image_for_compute(&mut engine.allocator, &engine.context, width, height)
-        .unwrap();
-
-    dbg!();
     let view_ix = engine
         .resources
-        .create_image_view_for_image(&engine.context, image_ix)
-        .unwrap();
+        .create_image_view_for_image(&engine.context, image_ix)?;
 
-    dbg!();
-    let desc_set_ix = engine
-        .resources
-        .create_desc_set_for_image(&engine.context, view_ix)
-        .unwrap();
-
-    dbg!();
+    let desc_set_ix = engine.resources.create_compute_desc_set(view_ix)?;
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
@@ -76,22 +69,6 @@ fn main() -> Result<()> {
                 let render_success = engine
                     .draw_from_compute(pipeline_ix, image_ix, desc_set_ix, width, height)
                     .unwrap();
-
-                //     let screen_dims = app.dims();
-                //     let mouse_pos = app.mouse_pos();
-                //     main_view.update_view_animation(screen_dims, mouse_pos);
-
-                //     let edge_ubo = app.settings.edge_renderer().load();
-
-                //     for er in edge_renderer.iter_mut() {
-                //         er.write_ubo(&edge_ubo).unwrap();
-                //     }
-
-                //     let focus = &app.shared_state().gui_focus_state;
-                //     if !focus.mouse_over_gui() {
-                //         main_view.produce_context(&context_mgr);
-                //         // main_view.send_context(context_menu.tx());
-                //     }
             }
             Event::RedrawEventsCleared => {
                 //
