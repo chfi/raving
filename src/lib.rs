@@ -1,3 +1,4 @@
+pub mod graph;
 pub mod vk;
 
 #[macro_export]
