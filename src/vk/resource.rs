@@ -8,7 +8,9 @@ use thunderdome::{Arena, Index};
 
 use super::{
     context::VkContext,
-    descriptor::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
+    descriptor::{
+        DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache,
+    },
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -121,7 +123,14 @@ impl GpuResources {
             let desc_sets = [desc_set];
             let null = [];
 
-            device.cmd_bind_descriptor_sets(cmd, bind_point, pipeline_layout, 0, &desc_sets, &null);
+            device.cmd_bind_descriptor_sets(
+                cmd,
+                bind_point,
+                pipeline_layout,
+                0,
+                &desc_sets,
+                &null,
+            );
 
             // let float_consts = [1f32, 0f32, 0f32, 1f32];
 
@@ -195,7 +204,8 @@ impl GpuResources {
 
     pub fn new(context: &VkContext) -> Result<Self> {
         let descriptor_allocator = DescriptorAllocator::new(context)?;
-        let layout_cache = DescriptorLayoutCache::new(context.device().to_owned());
+        let layout_cache =
+            DescriptorLayoutCache::new(context.device().to_owned());
 
         let result = Self {
             descriptor_allocator,
@@ -216,20 +226,30 @@ impl GpuResources {
 
     pub fn allocate_image(
         &mut self,
-        allocator: &mut Allocator,
         ctx: &VkContext,
+        allocator: &mut Allocator,
         width: u32,
         height: u32,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
     ) -> Result<ImageIx> {
-        let image = ImageRes::allocate_2d(allocator, ctx, width, height, format, usage)?;
+        let image = ImageRes::allocate_2d(
+            allocator, ctx, width, height, format, usage,
+        )?;
         let ix = self.images.insert(image);
         Ok(ImageIx(ix))
     }
 
-    pub fn allocate_semaphore(&mut self, ctx: &VkContext) -> Result<SemaphoreIx> {
-        todo!();
+    pub fn allocate_semaphore(
+        &mut self,
+        ctx: &VkContext,
+    ) -> Result<SemaphoreIx> {
+        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
+        let semaphore =
+            unsafe { ctx.device().create_semaphore(&semaphore_info, None) }?;
+        let ix = self.semaphores.insert(semaphore);
+
+        Ok(SemaphoreIx(ix))
     }
 
     pub fn create_image_view_for_image(
@@ -237,10 +257,9 @@ impl GpuResources {
         ctx: &VkContext,
         image_ix: ImageIx,
     ) -> Result<ImageViewIx> {
-        let img = self
-            .images
-            .get(image_ix.0)
-            .ok_or(anyhow!("tried to create image view for nonexistent image"))?;
+        let img = self.images.get(image_ix.0).ok_or(anyhow!(
+            "tried to create image view for nonexistent image"
+        ))?;
 
         let view = img.create_image_view(ctx)?;
         let ix = self.image_views.insert((view, image_ix));
@@ -248,13 +267,19 @@ impl GpuResources {
         Ok(ImageViewIx(ix))
     }
 
-    pub fn create_compute_desc_set(&mut self, view_ix: ImageViewIx) -> Result<DescSetIx> {
-        let (view, _image_ix) = *self.image_views.get(view_ix.0).ok_or(anyhow!(
-            "tried to create descriptor set using nonexistent image view"
-        ))?;
+    pub fn create_compute_desc_set(
+        &mut self,
+        view_ix: ImageViewIx,
+    ) -> Result<DescSetIx> {
+        let (view, _image_ix) =
+            *self.image_views.get(view_ix.0).ok_or(anyhow!(
+                "tried to create descriptor set using nonexistent image view"
+            ))?;
 
-        let mut builder =
-            DescriptorBuilder::begin(&mut self.layout_cache, &mut self.descriptor_allocator);
+        let mut builder = DescriptorBuilder::begin(
+            &mut self.layout_cache,
+            &mut self.descriptor_allocator,
+        );
 
         let img_info = vk::DescriptorImageInfo::builder()
             .image_layout(vk::ImageLayout::GENERAL)
@@ -308,10 +333,13 @@ impl GpuResources {
             .code(&comp_src)
             .build();
 
-        let shader_module = unsafe { context.device().create_shader_module(&create_info, None) }?;
+        let shader_module = unsafe {
+            context.device().create_shader_module(&create_info, None)
+        }?;
 
         let pipeline_layout = {
-            let pc_size = std::mem::size_of::<[i32; 2]>() + std::mem::size_of::<[f32; 4]>();
+            let pc_size = std::mem::size_of::<[i32; 2]>()
+                + std::mem::size_of::<[f32; 4]>();
 
             let pc_range = vk::PushConstantRange::builder()
                 .stage_flags(vk::ShaderStageFlags::COMPUTE)
@@ -323,7 +351,8 @@ impl GpuResources {
 
             let layout_info = Self::storage_image_layout_info();
 
-            let layout = self.layout_cache.get_descriptor_layout(&layout_info)?;
+            let layout =
+                self.layout_cache.get_descriptor_layout(&layout_info)?;
             let layouts = [layout];
 
             let layout_info = vk::PipelineLayoutCreateInfo::builder()
@@ -331,7 +360,9 @@ impl GpuResources {
                 .push_constant_ranges(&pc_ranges)
                 .build();
 
-            unsafe { context.device().create_pipeline_layout(&layout_info, None) }
+            unsafe {
+                context.device().create_pipeline_layout(&layout_info, None)
+            }
         }?;
 
         let entry_point = std::ffi::CString::new("main").unwrap();
@@ -404,7 +435,8 @@ impl ImageRes {
             })
             .build();
 
-        let view = unsafe { ctx.device().create_image_view(&create_info, None) }?;
+        let view =
+            unsafe { ctx.device().create_image_view(&create_info, None) }?;
 
         Ok(view)
     }
@@ -460,7 +492,9 @@ impl ImageRes {
 
         let alloc = allocator.allocate(&alloc_desc)?;
 
-        unsafe { device.bind_image_memory(image, alloc.memory(), alloc.offset()) }?;
+        unsafe {
+            device.bind_image_memory(image, alloc.memory(), alloc.offset())
+        }?;
 
         Ok(Self {
             image,

@@ -51,16 +51,25 @@ impl VkEngine {
         log::debug!("Created Vulkan instance");
 
         let surface = Surface::new(&entry, &instance);
-        let surface_khr = unsafe { ash_window::create_surface(&entry, &instance, window, None) }?;
+        let surface_khr = unsafe {
+            ash_window::create_surface(&entry, &instance, window, None)
+        }?;
         log::debug!("Created window surface");
 
         let debug_utils = debug::setup_debug_utils(&entry, &instance);
 
-        let (physical_device, graphics_ix) =
-            init::choose_physical_device(&instance, &surface, surface_khr, None)?;
+        let (physical_device, graphics_ix) = init::choose_physical_device(
+            &instance,
+            &surface,
+            surface_khr,
+            None,
+        )?;
 
-        let (device, graphics_queue) =
-            init::create_logical_device(&instance, physical_device, graphics_ix)?;
+        let (device, graphics_queue) = init::create_logical_device(
+            &instance,
+            physical_device,
+            graphics_ix,
+        )?;
 
         let allocator_create = gpu_allocator::vulkan::AllocatorCreateDesc {
             instance: instance.clone(),
@@ -70,7 +79,8 @@ impl VkEngine {
             buffer_device_address: false,
         };
 
-        let allocator = gpu_allocator::vulkan::Allocator::new(&allocator_create)?;
+        let allocator =
+            gpu_allocator::vulkan::Allocator::new(&allocator_create)?;
 
         let vk_context = VkContext::new(
             entry,
@@ -86,9 +96,16 @@ impl VkEngine {
         let height = 600u32;
 
         let (swapchain, swapchain_khr, swapchain_props, images) =
-            init::create_swapchain_and_images(&vk_context, graphics_ix, [width, height])?;
-        let swapchain_image_views =
-            init::create_swapchain_image_views(vk_context.device(), &images, swapchain_props)?;
+            init::create_swapchain_and_images(
+                &vk_context,
+                graphics_ix,
+                [width, height],
+            )?;
+        let swapchain_image_views = init::create_swapchain_image_views(
+            vk_context.device(),
+            &images,
+            swapchain_props,
+        )?;
 
         let msaa_samples = vk_context.get_max_usable_sample_count();
 
@@ -108,9 +125,11 @@ impl VkEngine {
         let device = vk_context.device();
 
         let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
-        let semaphore = unsafe { device.create_semaphore(&semaphore_info, None) }?;
+        let semaphore =
+            unsafe { device.create_semaphore(&semaphore_info, None) }?;
         resources.semaphores_old.push(semaphore);
-        let semaphore = unsafe { device.create_semaphore(&semaphore_info, None) }?;
+        let semaphore =
+            unsafe { device.create_semaphore(&semaphore_info, None) }?;
         resources.semaphores_old.push(semaphore);
 
         let engine = VkEngine {
@@ -130,6 +149,13 @@ impl VkEngine {
         };
 
         Ok(engine)
+    }
+
+    pub fn with_allocators<T, F>(&mut self, f: F) -> Result<T>
+    where
+        F: FnOnce(&VkContext, &mut GpuResources, &mut Allocator) -> Result<T>,
+    {
+        f(&self.context, &mut self.resources, &mut self.allocator)
     }
 
     pub fn ctx(&self) -> &VkContext {
@@ -183,7 +209,10 @@ impl VkEngine {
             match result {
                 Ok((img_index, _)) => img_index,
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(true),
-                Err(error) => bail!("Error while acquiring next swapchain image: {}", error),
+                Err(error) => bail!(
+                    "Error while acquiring next swapchain image: {}",
+                    error
+                ),
             }
         };
 
@@ -396,7 +425,8 @@ impl VkEngine {
             .image_indices(&img_indices)
             .build();
 
-        let result = unsafe { self.swapchain.queue_present(queue, &present_info) };
+        let result =
+            unsafe { self.swapchain.queue_present(queue, &present_info) };
 
         match result {
             Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
@@ -423,8 +453,8 @@ impl VkEngine {
         usage: vk::ImageUsageFlags,
     ) -> Result<ImageIx> {
         self.resources.allocate_image(
-            &mut self.allocator,
             &self.context,
+            &mut self.allocator,
             width,
             height,
             format,
@@ -453,8 +483,10 @@ impl FrameData {
         let dev = ctx.device();
 
         let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
-        let present_semaphore = unsafe { dev.create_semaphore(&semaphore_info, None) }?;
-        let render_semaphore = unsafe { dev.create_semaphore(&semaphore_info, None) }?;
+        let present_semaphore =
+            unsafe { dev.create_semaphore(&semaphore_info, None) }?;
+        let render_semaphore =
+            unsafe { dev.create_semaphore(&semaphore_info, None) }?;
 
         let fence_info = vk::FenceCreateInfo::builder().build();
         let render_fence = unsafe { dev.create_fence(&fence_info, None) }?;
@@ -464,7 +496,8 @@ impl FrameData {
             .flags(create_flags)
             .build();
 
-        let command_pool = unsafe { dev.create_command_pool(&command_pool_info, None) }?;
+        let command_pool =
+            unsafe { dev.create_command_pool(&command_pool_info, None) }?;
 
         let (main, copy) = {
             let alloc_info = vk::CommandBufferAllocateInfo::builder()
@@ -512,13 +545,20 @@ impl SwapchainSupportDetails {
         surface_khr: vk::SurfaceKHR,
     ) -> Result<Self> {
         unsafe {
-            let capabilities =
-                surface.get_physical_device_surface_capabilities(device, surface_khr)?;
+            let capabilities = surface
+                .get_physical_device_surface_capabilities(
+                    device,
+                    surface_khr,
+                )?;
 
-            let formats = surface.get_physical_device_surface_formats(device, surface_khr)?;
+            let formats = surface
+                .get_physical_device_surface_formats(device, surface_khr)?;
 
-            let present_modes =
-                surface.get_physical_device_surface_present_modes(device, surface_khr)?;
+            let present_modes = surface
+                .get_physical_device_surface_present_modes(
+                    device,
+                    surface_khr,
+                )?;
 
             Ok(Self {
                 capabilities,
@@ -533,8 +573,12 @@ impl SwapchainSupportDetails {
         preferred_dimensions: [u32; 2],
     ) -> SwapchainProperties {
         let format = Self::choose_swapchain_surface_format(&self.formats);
-        let present_mode = Self::choose_swapchain_surface_present_mode(&self.present_modes);
-        let extent = Self::choose_swapchain_extent(self.capabilities, preferred_dimensions);
+        let present_mode =
+            Self::choose_swapchain_surface_present_mode(&self.present_modes);
+        let extent = Self::choose_swapchain_extent(
+            self.capabilities,
+            preferred_dimensions,
+        );
         SwapchainProperties {
             format,
             present_mode,
@@ -549,7 +593,9 @@ impl SwapchainSupportDetails {
     fn choose_swapchain_surface_format(
         available_formats: &[vk::SurfaceFormatKHR],
     ) -> vk::SurfaceFormatKHR {
-        if available_formats.len() == 1 && available_formats[0].format == vk::Format::UNDEFINED {
+        if available_formats.len() == 1
+            && available_formats[0].format == vk::Format::UNDEFINED
+        {
             return vk::SurfaceFormatKHR {
                 format: vk::Format::B8G8R8A8_UNORM,
                 color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,

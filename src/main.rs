@@ -34,7 +34,6 @@ fn main() -> Result<()> {
 
     /*
 
-    */
 
     let mut dsl = engine::graph::test_graph();
 
@@ -42,46 +41,53 @@ fn main() -> Result<()> {
     let window_size = [width, height];
     let color = [1.0, 0.0, 0.0, 1.0];
 
-    // image
-    let comp_image = engine.allocate_image(
-        width,
-        height,
-        // right now this image is copied to the swapchain, which on
-        // my system uses BGRA rather than RGBA, so this is just a
-        // temporary fix
-        vk::Format::B8G8R8A8_UNORM,
-        // vk::Format::R8G8B8A8_UNORM,
-        vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
-    )?;
+    let mut comp_image = None;
+    let mut swapchain_available = None;
 
-    // let swapchain_available =
+    engine.with_allocators(|ctx, res, alloc| {
+        let img = res.allocate_image(
+            ctx,
+            alloc,
+            width,
+            height,
+            vk::Format::B8G8R8A8_UNORM,
+            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+        )?;
+        comp_image = Some(img);
 
-    /*
+        let semaphore = res.allocate_semaphore(ctx)?;
+        swapchain_available = Some(semaphore);
+
+        Ok(())
+    })?;
 
     */
 
-    let shader_code = engine::include_shader!("fill_color.comp.spv");
+    let (pipeline, image, image_view, desc_set) =
+        engine.with_allocators(|ctx, res, alloc| {
+            let shader_code = engine::include_shader!("fill_color.comp.spv");
+            let pipeline = res.load_compute_shader(ctx, shader_code)?;
 
-    let pipeline_ix = engine
-        .resources
-        .load_compute_shader(&engine.context, shader_code)?;
+            let image = res.allocate_image(
+                ctx,
+                alloc,
+                width,
+                height,
+                // right now this image is copied to the swapchain, which on
+                // my system uses BGRA rather than RGBA, so this is just a
+                // temporary fix
+                vk::Format::B8G8R8A8_UNORM,
+                // vk::Format::R8G8B8A8_UNORM,
+                vk::ImageUsageFlags::STORAGE
+                    | vk::ImageUsageFlags::TRANSFER_SRC,
+            )?;
 
-    let image_ix = engine.allocate_image(
-        width,
-        height,
-        // right now this image is copied to the swapchain, which on
-        // my system uses BGRA rather than RGBA, so this is just a
-        // temporary fix
-        vk::Format::B8G8R8A8_UNORM,
-        // vk::Format::R8G8B8A8_UNORM,
-        vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
-    )?;
+            let view = res.create_image_view_for_image(ctx, image)?;
 
-    let view_ix = engine
-        .resources
-        .create_image_view_for_image(&engine.context, image_ix)?;
+            let desc_set = res.create_compute_desc_set(view)?;
 
-    let desc_set_ix = engine.resources.create_compute_desc_set(view_ix)?;
+            Ok((pipeline, image, view, desc_set))
+        })?;
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
@@ -102,7 +108,9 @@ fn main() -> Result<()> {
                 let color = [r, 1.0, b, 1.0];
 
                 let render_success = engine
-                    .draw_from_compute(pipeline_ix, image_ix, desc_set_ix, width, height, color)
+                    .draw_from_compute(
+                        pipeline, image, desc_set, width, height, color,
+                    )
                     .unwrap();
 
                 if !render_success {
