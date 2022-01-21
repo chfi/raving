@@ -1,3 +1,4 @@
+use engine::graph::GraphDsl;
 use engine::vk::VkEngine;
 
 use ash::vk;
@@ -30,6 +31,34 @@ fn main() -> Result<()> {
         .build(&event_loop)?;
 
     let mut engine = VkEngine::new(&window)?;
+
+    /*
+
+    */
+
+    let mut dsl = engine::graph::test_graph();
+
+    // graph inputs
+    let window_size = [width, height];
+    let color = [1.0, 0.0, 0.0, 1.0];
+
+    // image
+    let comp_image = engine.allocate_image(
+        width,
+        height,
+        // right now this image is copied to the swapchain, which on
+        // my system uses BGRA rather than RGBA, so this is just a
+        // temporary fix
+        vk::Format::B8G8R8A8_UNORM,
+        // vk::Format::R8G8B8A8_UNORM,
+        vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+    )?;
+
+    // let swapchain_available =
+
+    /*
+
+    */
 
     let shader_code = engine::include_shader!("fill_color.comp.spv");
 

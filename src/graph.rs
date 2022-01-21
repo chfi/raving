@@ -20,20 +20,20 @@ pub enum VxKind {
 }
 
 pub struct VertexInfo {
-    name: String,
-    kind: VxKind,
+    pub name: String,
+    pub kind: VxKind,
 
-    graph_inputs: Vec<GraphInIx>,
-    vertex_inputs: Vec<Vx>,
+    pub graph_inputs: Vec<GraphInIx>,
+    pub vertex_inputs: Vec<Vx>,
 }
 
 pub struct GraphDsl {
-    graph_inputs: Arena<(String, ScalarType)>,
-    vertices: Arena<VertexInfo>,
+    pub graph_inputs: Arena<(String, ScalarType)>,
+    pub vertices: Arena<VertexInfo>,
 
-    orders: Vec<Vec<Vx>>,
+    pub orders: Vec<Vec<Vx>>,
 
-    batches: Vec<usize>,
+    pub batches: Vec<usize>,
     // edges: Arena<EdgeInfo>,
 }
 

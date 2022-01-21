@@ -109,9 +109,9 @@ impl VkEngine {
 
         let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
         let semaphore = unsafe { device.create_semaphore(&semaphore_info, None) }?;
-        resources.semaphores.push(semaphore);
+        resources.semaphores_old.push(semaphore);
         let semaphore = unsafe { device.create_semaphore(&semaphore_info, None) }?;
-        resources.semaphores.push(semaphore);
+        resources.semaphores_old.push(semaphore);
 
         let engine = VkEngine {
             allocator,
@@ -146,9 +146,9 @@ impl VkEngine {
 
     pub fn draw_from_compute(
         &mut self,
-        pipeline_ix: Index,
-        image_ix: Index,
-        desc_set_ix: Index,
+        pipeline_ix: PipelineIx,
+        image_ix: ImageIx,
+        desc_set_ix: DescSetIx,
         width: u32,
         height: u32,
         color: [f32; 4],
@@ -230,7 +230,7 @@ impl VkEngine {
 
             unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
 
-            let src_img = self.resources.images.get(image_ix).unwrap();
+            let src_img = self.resources.images.get(image_ix.0).unwrap();
             let dst_img = swapchain_img;
 
             // transition swapchain image UNDEFINED -> GENERAL
@@ -361,7 +361,7 @@ impl VkEngine {
             .command_buffers(&main_bufs)
             .build();
 
-        let copy_semaphore = self.resources.semaphores[f_ix];
+        let copy_semaphore = self.resources.semaphores_old[f_ix];
 
         let copy_bufs = [frame.copy_command_buffer];
 
@@ -421,7 +421,7 @@ impl VkEngine {
         height: u32,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
-    ) -> Result<Index> {
+    ) -> Result<ImageIx> {
         self.resources.allocate_image(
             &mut self.allocator,
             &self.context,

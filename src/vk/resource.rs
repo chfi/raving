@@ -11,6 +11,25 @@ use super::{
     descriptor::{DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache},
 };
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PipelineIx(Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DescSetIx(Index);
+
+// TODO make private
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ImageIx(pub(super) Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ImageViewIx(Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BufferIx(Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SemaphoreIx(Index);
+
 pub struct GpuResources {
     descriptor_allocator: DescriptorAllocator,
     layout_cache: DescriptorLayoutCache,
@@ -20,9 +39,9 @@ pub struct GpuResources {
 
     pub(super) images: Arena<ImageRes>,
 
-    // 2nd val is index into `images`
-    image_views: Arena<(vk::ImageView, Index)>,
-    pub(super) semaphores: Vec<vk::Semaphore>,
+    image_views: Arena<(vk::ImageView, ImageIx)>,
+    semaphores: Arena<vk::Semaphore>,
+    pub(super) semaphores_old: Vec<vk::Semaphore>,
 }
 
 impl GpuResources {
@@ -30,25 +49,25 @@ impl GpuResources {
         &self,
         device: &Device,
         cmd: vk::CommandBuffer,
-        pipeline_ix: Index,
-        image_ix: Index,
-        desc_set_ix: Index,
+        pipeline_ix: PipelineIx,
+        image_ix: ImageIx,
+        desc_set_ix: DescSetIx,
         width: u32,
         height: u32,
         color: [f32; 4],
     ) -> Result<()> {
         let (pipeline, pipeline_layout) = *self
             .pipelines
-            .get(pipeline_ix)
+            .get(pipeline_ix.0)
             .ok_or(anyhow!("tried to dispatch with nonexistent pipeline"))?;
 
-        let image = self.images.get(image_ix).ok_or(anyhow!(
+        let image = self.images.get(image_ix.0).ok_or(anyhow!(
             "tried to use nonexistent image in compute dispatch"
         ))?;
 
         let desc_set = *self
             .descriptor_sets
-            .get(desc_set_ix)
+            .get(desc_set_ix.0)
             .ok_or(anyhow!("descriptor set missing for compute dispatch"))?;
 
         // transition image TRANSFER_SRC_OPTIMAL -> GENERAL
@@ -187,8 +206,9 @@ impl GpuResources {
 
             images: Arena::new(),
             image_views: Arena::new(),
+            semaphores: Arena::new(),
 
-            semaphores: Vec::new(),
+            semaphores_old: Vec::new(),
         };
 
         Ok(result)
@@ -202,30 +222,34 @@ impl GpuResources {
         height: u32,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
-    ) -> Result<Index> {
+    ) -> Result<ImageIx> {
         let image = ImageRes::allocate_2d(allocator, ctx, width, height, format, usage)?;
         let ix = self.images.insert(image);
-        Ok(ix)
+        Ok(ImageIx(ix))
+    }
+
+    pub fn allocate_semaphore(&mut self, ctx: &VkContext) -> Result<SemaphoreIx> {
+        todo!();
     }
 
     pub fn create_image_view_for_image(
         &mut self,
         ctx: &VkContext,
-        image_ix: Index,
-    ) -> Result<Index> {
+        image_ix: ImageIx,
+    ) -> Result<ImageViewIx> {
         let img = self
             .images
-            .get(image_ix)
+            .get(image_ix.0)
             .ok_or(anyhow!("tried to create image view for nonexistent image"))?;
 
         let view = img.create_image_view(ctx)?;
         let ix = self.image_views.insert((view, image_ix));
 
-        Ok(ix)
+        Ok(ImageViewIx(ix))
     }
 
-    pub fn create_compute_desc_set(&mut self, view_ix: Index) -> Result<Index> {
-        let (view, _image_ix) = *self.image_views.get(view_ix).ok_or(anyhow!(
+    pub fn create_compute_desc_set(&mut self, view_ix: ImageViewIx) -> Result<DescSetIx> {
+        let (view, _image_ix) = *self.image_views.get(view_ix.0).ok_or(anyhow!(
             "tried to create descriptor set using nonexistent image view"
         ))?;
 
@@ -249,7 +273,7 @@ impl GpuResources {
 
         let ix = self.descriptor_sets.insert(set);
 
-        Ok(ix)
+        Ok(DescSetIx(ix))
     }
 
     fn storage_image_layout_info() -> vk::DescriptorSetLayoutCreateInfo {
@@ -270,7 +294,11 @@ impl GpuResources {
 
     // TODO this is completely temporary and will be handled in a
     // generic way that uses reflection to find the pipeline layout
-    pub fn load_compute_shader(&mut self, context: &VkContext, shader: &[u8]) -> Result<Index> {
+    pub fn load_compute_shader(
+        &mut self,
+        context: &VkContext,
+        shader: &[u8],
+    ) -> Result<PipelineIx> {
         let comp_src = {
             let mut cursor = std::io::Cursor::new(shader);
             ash::util::read_spv(&mut cursor)
@@ -345,7 +373,7 @@ impl GpuResources {
             context.device().destroy_shader_module(shader_module, None);
         }
 
-        Ok(ix)
+        Ok(PipelineIx(ix))
     }
 }
 
