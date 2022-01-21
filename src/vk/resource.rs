@@ -4,7 +4,7 @@ use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, Allocator};
 
 #[allow(unused_imports)]
 use anyhow::{anyhow, bail, Result};
-use thunderdome::{Arena, Index};
+use thunderdome::Arena;
 
 use super::{
     context::VkContext,
@@ -13,24 +13,9 @@ use super::{
     },
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PipelineIx(Index);
+pub mod index;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DescSetIx(Index);
-
-// TODO make private
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ImageIx(pub(super) Index);
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ImageViewIx(Index);
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BufferIx(Index);
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SemaphoreIx(Index);
+pub use index::*;
 
 pub struct GpuResources {
     descriptor_allocator: DescriptorAllocator,
@@ -58,7 +43,7 @@ impl GpuResources {
         height: u32,
         color: [f32; 4],
     ) -> Result<()> {
-        let (pipeline, pipeline_layout) = *self
+        let (pipeline, pipeline_layout) = self
             .pipelines
             .get(pipeline_ix.0)
             .ok_or(anyhow!("tried to dispatch with nonexistent pipeline"))?;

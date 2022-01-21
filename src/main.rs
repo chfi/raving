@@ -63,7 +63,7 @@ fn main() -> Result<()> {
 
     */
 
-    let (pipeline, image, image_view, desc_set) =
+    let (pipeline, image, desc_set) =
         engine.with_allocators(|ctx, res, alloc| {
             let shader_code = engine::include_shader!("fill_color.comp.spv");
             let pipeline = res.load_compute_shader(ctx, shader_code)?;
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
 
             let desc_set = res.create_compute_desc_set(view)?;
 
-            Ok((pipeline, image, view, desc_set))
+            Ok((pipeline, image, desc_set))
         })?;
 
     std::thread::sleep(std::time::Duration::from_millis(100));
