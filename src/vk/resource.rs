@@ -32,8 +32,6 @@ pub struct GpuResources {
     image_views: Arena<(vk::ImageView, ImageIx)>,
     semaphores: Arena<vk::Semaphore>,
     fences: Arena<vk::Fence>,
-
-    pub(super) semaphores_old: Vec<vk::Semaphore>,
 }
 
 impl GpuResources {
@@ -53,8 +51,6 @@ impl GpuResources {
             image_views: Arena::new(),
             semaphores: Arena::new(),
             fences: Arena::new(),
-
-            semaphores_old: Vec::new(),
         };
 
         Ok(result)

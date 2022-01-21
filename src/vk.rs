@@ -4,6 +4,7 @@ use ash::{
 };
 
 use gpu_allocator::vulkan::Allocator;
+use rustc_hash::FxHashMap;
 use winit::window::Window;
 
 use anyhow::{anyhow, bail, Result};
@@ -39,7 +40,70 @@ pub struct VkEngine {
     swapchain_image_views: Vec<vk::ImageView>,
 
     frames: [FrameData; FRAME_OVERLAP],
+
     frame_number: usize,
+}
+
+pub struct FrameData {
+    present_semaphore: SemaphoreIx,
+    copy_semaphore: SemaphoreIx,
+    render_semaphore: SemaphoreIx,
+
+    render_fence: FenceIx,
+
+    command_pool: vk::CommandPool,
+    main_command_buffers: [vk::CommandBuffer; FRAME_OVERLAP],
+    copy_command_buffers: [vk::CommandBuffer; FRAME_OVERLAP],
+}
+
+impl FrameData {
+    pub fn new(
+        ctx: &VkContext,
+        res: &mut GpuResources,
+        alloc: &mut Allocator,
+        queue_ix: u32,
+    ) -> Result<Self> {
+        let present_semaphore = res.allocate_semaphore(ctx)?;
+        let copy_semaphore = res.allocate_semaphore(ctx)?;
+        let render_semaphore = res.allocate_semaphore(ctx)?;
+
+        let render_fence = res.allocate_fence(ctx)?;
+
+        let create_flags = vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER;
+
+        let command_pool_info = vk::CommandPoolCreateInfo::builder()
+            .queue_family_index(queue_ix)
+            .flags(create_flags)
+            .build();
+
+        let command_pool = unsafe {
+            ctx.device().create_command_pool(&command_pool_info, None)
+        }?;
+
+        let (main, copy) = {
+            let alloc_info = vk::CommandBufferAllocateInfo::builder()
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_pool(command_pool)
+                .command_buffer_count(2 * FRAME_OVERLAP as u32)
+                .build();
+
+            let bufs =
+                unsafe { ctx.device().allocate_command_buffers(&alloc_info) }?;
+            ([bufs[0], bufs[1]], [bufs[2], bufs[3]])
+        };
+
+        Ok(Self {
+            present_semaphore,
+            copy_semaphore,
+            render_semaphore,
+
+            render_fence,
+
+            command_pool,
+            main_command_buffers: main,
+            copy_command_buffers: copy,
+        })
+    }
 }
 
 impl VkEngine {
@@ -79,7 +143,7 @@ impl VkEngine {
             buffer_device_address: false,
         };
 
-        let allocator =
+        let mut allocator =
             gpu_allocator::vulkan::Allocator::new(&allocator_create)?;
 
         let vk_context = VkContext::new(
@@ -113,24 +177,26 @@ impl VkEngine {
 
         let create_flags = vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER;
 
-        let frames = [
-            FrameData::new(&vk_context, graphics_ix, create_flags)?,
-            FrameData::new(&vk_context, graphics_ix, create_flags)?,
-        ];
-
         let frame_number = 0;
 
         let mut resources = GpuResources::new(&vk_context)?;
 
         let device = vk_context.device();
 
-        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
-        let semaphore =
-            unsafe { device.create_semaphore(&semaphore_info, None) }?;
-        resources.semaphores_old.push(semaphore);
-        let semaphore =
-            unsafe { device.create_semaphore(&semaphore_info, None) }?;
-        resources.semaphores_old.push(semaphore);
+        let frames = [
+            FrameData::new(
+                &vk_context,
+                &mut resources,
+                &mut allocator,
+                graphics_ix,
+            )?,
+            FrameData::new(
+                &vk_context,
+                &mut resources,
+                &mut allocator,
+                graphics_ix,
+            )?,
+        ];
 
         let engine = VkEngine {
             allocator,
@@ -188,7 +254,7 @@ impl VkEngine {
         let frame = &self.frames[f_ix];
 
         if frame_n != f_ix {
-            let fences = [frame.render_fence];
+            let fences = [self.resources[frame.render_fence]];
 
             unsafe {
                 device.wait_for_fences(&fences, true, 1_000_000_000)?;
@@ -196,7 +262,7 @@ impl VkEngine {
             };
         }
 
-        let img_available = frame.present_semaphore;
+        let img_available = self.resources[frame.present_semaphore];
 
         let swapchain_img_ix = unsafe {
             let result = self.swapchain.acquire_next_image(
@@ -216,13 +282,16 @@ impl VkEngine {
             }
         };
 
+        let main_cmd = frame.main_command_buffers[f_ix];
+        let copy_cmd = frame.copy_command_buffers[f_ix];
+
         unsafe {
             device.reset_command_buffer(
-                frame.main_command_buffer,
+                main_cmd,
                 vk::CommandBufferResetFlags::empty(),
             )?;
             device.reset_command_buffer(
-                frame.copy_command_buffer,
+                copy_cmd,
                 vk::CommandBufferResetFlags::empty(),
             )?;
         };
@@ -230,7 +299,7 @@ impl VkEngine {
         let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
 
         {
-            let cmd = frame.main_command_buffer;
+            let cmd = main_cmd;
 
             let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
@@ -252,7 +321,7 @@ impl VkEngine {
         };
 
         {
-            let cmd = frame.copy_command_buffer;
+            let cmd = copy_cmd;
 
             let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
@@ -377,10 +446,10 @@ impl VkEngine {
             unsafe { device.end_command_buffer(cmd) }?;
         };
 
-        let main_bufs = [frame.main_command_buffer];
+        let main_bufs = [main_cmd];
 
         let main_wait = [];
-        let main_signal = [frame.render_semaphore];
+        let main_signal = [self.resources[frame.render_semaphore]];
         let main_wait_stages = [];
 
         let main_batch = vk::SubmitInfo::builder()
@@ -390,11 +459,11 @@ impl VkEngine {
             .command_buffers(&main_bufs)
             .build();
 
-        let copy_semaphore = self.resources.semaphores_old[f_ix];
+        let copy_semaphore = self.resources[frame.copy_semaphore];
 
-        let copy_bufs = [frame.copy_command_buffer];
+        let copy_bufs = [copy_cmd];
 
-        let copy_wait = [frame.render_semaphore, img_available];
+        let copy_wait = [self.resources[frame.render_semaphore], img_available];
         let copy_signal = [copy_semaphore];
         let copy_wait_stages = [
             vk::PipelineStageFlags::COMPUTE_SHADER,
@@ -413,7 +482,11 @@ impl VkEngine {
         unsafe {
             let batches = [main_batch, copy_batch];
 
-            device.queue_submit(queue, &batches, frame.render_fence)?;
+            device.queue_submit(
+                queue,
+                &batches,
+                self.resources[frame.render_fence],
+            )?;
         }
 
         let swapchains = [self.swapchain_khr];
@@ -460,68 +533,6 @@ impl VkEngine {
             format,
             usage,
         )
-    }
-}
-
-pub struct FrameData {
-    present_semaphore: vk::Semaphore,
-    render_semaphore: vk::Semaphore,
-
-    render_fence: vk::Fence,
-
-    command_pool: vk::CommandPool,
-    main_command_buffer: vk::CommandBuffer,
-    copy_command_buffer: vk::CommandBuffer,
-}
-
-impl FrameData {
-    pub fn new(
-        ctx: &VkContext,
-        queue_ix: u32,
-        create_flags: vk::CommandPoolCreateFlags,
-    ) -> Result<Self> {
-        let dev = ctx.device();
-
-        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
-        let present_semaphore =
-            unsafe { dev.create_semaphore(&semaphore_info, None) }?;
-        let render_semaphore =
-            unsafe { dev.create_semaphore(&semaphore_info, None) }?;
-
-        let fence_info = vk::FenceCreateInfo::builder().build();
-        let render_fence = unsafe { dev.create_fence(&fence_info, None) }?;
-
-        let command_pool_info = vk::CommandPoolCreateInfo::builder()
-            .queue_family_index(queue_ix)
-            .flags(create_flags)
-            .build();
-
-        let command_pool =
-            unsafe { dev.create_command_pool(&command_pool_info, None) }?;
-
-        let (main, copy) = {
-            let alloc_info = vk::CommandBufferAllocateInfo::builder()
-                .level(vk::CommandBufferLevel::PRIMARY)
-                .command_pool(command_pool)
-                .command_buffer_count(2)
-                // .command_buffer_count(2 * FRAME_OVERLAP as u32)
-                .build();
-
-            let bufs = unsafe { dev.allocate_command_buffers(&alloc_info) }?;
-            (bufs[0], bufs[1])
-        };
-        let main_command_buffer = main;
-        let copy_command_buffer = copy;
-
-        Ok(Self {
-            present_semaphore,
-            render_semaphore,
-
-            render_fence,
-            command_pool,
-            main_command_buffer,
-            copy_command_buffer,
-        })
     }
 }
 
