@@ -14,8 +14,10 @@ use super::{
     },
 };
 
+pub mod graph;
 pub mod index;
 
+use graph::*;
 pub use index::*;
 
 pub struct GpuResources {
@@ -33,6 +35,28 @@ pub struct GpuResources {
 }
 
 impl GpuResources {
+    pub fn new(context: &VkContext) -> Result<Self> {
+        let descriptor_allocator = DescriptorAllocator::new(context)?;
+        let layout_cache =
+            DescriptorLayoutCache::new(context.device().to_owned());
+
+        let result = Self {
+            descriptor_allocator,
+            layout_cache,
+            descriptor_sets: Arena::new(),
+
+            pipelines: Arena::new(),
+
+            images: Arena::new(),
+            image_views: Arena::new(),
+            semaphores: Arena::new(),
+
+            semaphores_old: Vec::new(),
+        };
+
+        Ok(result)
+    }
+
     pub fn dispatch_compute(
         &self,
         cmd: vk::CommandBuffer,
@@ -118,28 +142,6 @@ impl GpuResources {
         );
 
         Ok(())
-    }
-
-    pub fn new(context: &VkContext) -> Result<Self> {
-        let descriptor_allocator = DescriptorAllocator::new(context)?;
-        let layout_cache =
-            DescriptorLayoutCache::new(context.device().to_owned());
-
-        let result = Self {
-            descriptor_allocator,
-            layout_cache,
-            descriptor_sets: Arena::new(),
-
-            pipelines: Arena::new(),
-
-            images: Arena::new(),
-            image_views: Arena::new(),
-            semaphores: Arena::new(),
-
-            semaphores_old: Vec::new(),
-        };
-
-        Ok(result)
     }
 
     pub fn allocate_image(
