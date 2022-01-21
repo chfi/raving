@@ -20,6 +20,9 @@ pub struct ImageIx(pub(super) Index);
 pub struct ImageViewIx(pub(super) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SamplerIx(pub(super) Index);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BufferIx(pub(super) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

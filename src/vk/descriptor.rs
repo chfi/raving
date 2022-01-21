@@ -16,54 +16,45 @@ use anyhow::{anyhow, bail, Result};
 
 use thunderdome::{Arena, Index};
 
-use super::{context::VkContext, ImageIx, ImageViewIx};
+use super::{context::VkContext, ImageIx, ImageViewIx, SamplerIx};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BindingDesc {
     StorageImage { binding: u32 },
+    SampledImage { binding: u32 },
     // StorageImage { binding: u32, readonly: bool, writeonly: bool },
-    // SampledImage { binding: u32 },
     // Uniform { binding: u32 },
     // Buffer { binding: u32 },
     // VertexBuffer { },
     // IndexBuffer { },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum BindingInput {
-    Image { binding: u32, image: ImageIx },
-    ImageView { binding: u32, view: ImageViewIx },
-    // Buffer { binding: u32, buffer: BufferIx }
-    // VertexBuffer { binding: u32, buffer: BufferIx }
-    // IndexBuffer { binding: u32, buffer: BufferIx }
-    // SampledImage
-    // Buffer
-}
-
-impl BindingInput {
-    pub fn binding(&self) -> u32 {
-        match *self {
-            Self::Image { binding, .. } => binding,
-            Self::ImageView { binding, .. } => binding,
-        }
-    }
-}
-
 impl BindingDesc {
     pub fn binding(&self) -> u32 {
         match self {
             BindingDesc::StorageImage { binding } => *binding,
+            BindingDesc::SampledImage { binding } => *binding,
         }
     }
 
-    pub fn builder(&self) -> vk::DescriptorSetLayoutBindingBuilder<'_> {
+    pub fn builder(
+        &self,
+        stage_flags: vk::ShaderStageFlags,
+    ) -> vk::DescriptorSetLayoutBindingBuilder<'_> {
         match self {
             BindingDesc::StorageImage { binding } => {
                 vk::DescriptorSetLayoutBinding::builder()
                     .binding(*binding)
                     .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
                     .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                    .stage_flags(stage_flags)
+            }
+            BindingDesc::SampledImage { binding } => {
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(*binding)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(stage_flags)
             }
         }
     }
@@ -90,20 +81,58 @@ impl BindingDesc {
                 }
             }
 
-            let b = bind.builder().binding(i);
+            let b = bind.builder(stage_flags).binding(i);
 
             let b = match bind {
                 BindingDesc::StorageImage { .. } => b
                     .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
                     .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::COMPUTE)
                     .build(),
+
+                BindingDesc::SampledImage { .. } => {
+                    //
+                    todo!();
+                }
             };
+
+            prev_binding_i = Some(i);
 
             layout_bindings.push(b);
         }
 
         Ok(layout_bindings)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BindingInput {
+    Image {
+        binding: u32,
+        image: ImageIx,
+    },
+    ImageView {
+        binding: u32,
+        view: ImageViewIx,
+    },
+    SampledImage {
+        binding: u32,
+        view: ImageViewIx,
+        sampler: SamplerIx,
+    },
+    // Buffer { binding: u32, buffer: BufferIx }
+    // VertexBuffer { binding: u32, buffer: BufferIx }
+    // IndexBuffer { binding: u32, buffer: BufferIx }
+    // SampledImage
+    // Buffer
+}
+
+impl BindingInput {
+    pub fn binding(&self) -> u32 {
+        match *self {
+            Self::Image { binding, .. } => binding,
+            Self::ImageView { binding, .. } => binding,
+            Self::SampledImage { binding, .. } => binding,
+        }
     }
 }
 

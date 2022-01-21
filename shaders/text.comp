@@ -2,9 +2,11 @@
 
 layout (set = 0, binding = 0) uniform sampler2D font_sampler;
 
+/*
 layout (set = 0, binding = 1) readonly buffer Line {
   uint chars[];
 } line;
+*/
 
 layout (rgba8, set = 0, binding = 2) writeonly uniform image2D image;
 // layout (rgba8, set = 1, binding = 0) writeonly uniform image2D image;
@@ -58,9 +60,10 @@ void main() {
 
   uint pixel_offset = byte_offset * 8;
 
-  uint char = line.chars[inputs.index + byte_offset];
+  // uint char = line.chars[inputs.index + byte_offset];
+  // draw_char_at(char, start + ivec2(pixel_offset, 0));
 
-  draw_char_at(char, start + ivec2(pixel_offset, 0));
+  draw_char_at(70, start + ivec2(pixel_offset, 0));
 
 
 }

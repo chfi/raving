@@ -20,16 +20,22 @@ pub mod index;
 use graph::*;
 pub use index::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PipelineType {
+    Compute,
+}
+
 pub struct GpuResources {
     descriptor_allocator: DescriptorAllocator,
     layout_cache: DescriptorLayoutCache,
-    pub descriptor_sets: Arena<vk::DescriptorSet>,
+    descriptor_sets: Arena<vk::DescriptorSet>,
 
     pipelines: Arena<(vk::Pipeline, vk::PipelineLayout)>,
 
-    pub(super) images: Arena<ImageRes>,
-
+    images: Arena<ImageRes>,
     image_views: Arena<(vk::ImageView, ImageIx)>,
+    samplers: Arena<vk::Sampler>,
+
     semaphores: Arena<vk::Semaphore>,
     fences: Arena<vk::Fence>,
 }
@@ -49,6 +55,8 @@ impl GpuResources {
 
             images: Arena::new(),
             image_views: Arena::new(),
+            samplers: Arena::new(),
+
             semaphores: Arena::new(),
             fences: Arena::new(),
         };
@@ -212,51 +220,89 @@ impl GpuResources {
                               input.binding());
                     }
 
-                    match input {
-                        In::ImageView { view, .. } => {
-                            let (view, _image_ix) = *self
-                                .image_views
-                                .get(view.0)
-                                .ok_or(anyhow!(
-                "tried to create descriptor set using nonexistent image view"
-            ))?;
+                    if let In::ImageView { view, .. } = input {
+                        let (view, _image) = self.image_views[view.0];
 
-                            let img_info = vk::DescriptorImageInfo::builder()
-                                .image_layout(vk::ImageLayout::GENERAL)
-                                .image_view(view)
-                                .build();
+                        let img_info = vk::DescriptorImageInfo::builder()
+                            .image_layout(vk::ImageLayout::GENERAL)
+                            .image_view(view)
+                            .build();
 
-                            let image_info = vec![img_info];
+                        let image_info = vec![img_info];
 
-                            let (image_info, len) = {
-                                let mut infos = img_infos.lock();
-                                let ix = infos.len();
+                        let (image_info, len) = {
+                            let mut infos = img_infos.lock();
+                            let ix = infos.len();
 
-                                let len = image_info.len();
+                            let len = image_info.len();
 
-                                infos.push(image_info);
+                            infos.push(image_info);
 
-                                let lol = infos[ix].as_ptr();
-                                (lol, len)
-                            };
+                            let lol = infos[ix].as_ptr();
+                            (lol, len)
+                        };
 
-                            unsafe {
-                                let lmao: &[vk::DescriptorImageInfo] =
-                                    std::slice::from_raw_parts(image_info, len);
+                        unsafe {
+                            let lmao: &[vk::DescriptorImageInfo] =
+                                std::slice::from_raw_parts(image_info, len);
 
-                                builder.bind_image(
-                                    binding,
-                                    lmao,
-                                    vk::DescriptorType::STORAGE_IMAGE,
-                                    stage_flags,
-                                );
-                            }
+                            builder.bind_image(
+                                binding,
+                                lmao,
+                                vk::DescriptorType::STORAGE_IMAGE,
+                                stage_flags,
+                            );
                         }
-                        _ => bail!(
+                    } else {
+                        bail!(
                             "Incompatible binding: {:?} vs {:?}",
                             desc,
                             input
-                        ),
+                        );
+                    }
+                }
+                Desc::SampledImage { binding } => {
+                    if let In::ImageView { view, .. } = input {
+                        let (view, _image) = self.image_views[view.0];
+
+                        let img_info = vk::DescriptorImageInfo::builder()
+                            .image_layout(
+                                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                            )
+                            .image_view(view)
+                            .build();
+
+                        let image_info = vec![img_info];
+
+                        let (image_info, len) = {
+                            let mut infos = img_infos.lock();
+                            let ix = infos.len();
+
+                            let len = image_info.len();
+
+                            infos.push(image_info);
+
+                            let lol = infos[ix].as_ptr();
+                            (lol, len)
+                        };
+
+                        unsafe {
+                            let lmao: &[vk::DescriptorImageInfo] =
+                                std::slice::from_raw_parts(image_info, len);
+
+                            builder.bind_image(
+                                binding,
+                                lmao,
+                                vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                                stage_flags,
+                            );
+                        }
+                    } else {
+                        bail!(
+                            "Incompatible binding: {:?} vs {:?}",
+                            desc,
+                            input
+                        );
                     }
                 }
             }
