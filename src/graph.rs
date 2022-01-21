@@ -93,7 +93,8 @@ pub fn test_graph() -> GraphDsl {
     g[compute].graph_inputs.extend([color, window_size]);
     g[compute].vertex_inputs.push(comp_image);
 
-    let swapchain_available = g.add_vertex("swapchain_available", VxKind::Semaphore);
+    let swapchain_available =
+        g.add_vertex("swapchain_available", VxKind::Semaphore);
     let swapchain_image = g.add_vertex("swapchain_image", VxKind::Image);
 
     let copy = g.add_vertex("copy_image", VxKind::Command);
@@ -189,23 +190,23 @@ pub struct GraphFn {
 }
 */
 
-pub enum BindingDesc {
-    Image {
-        binding: u32,
-        read: bool,
-        write: bool,
-    },
-    Buffer {
-        binding: u32,
-        read: bool,
-        write: bool,
-    },
-    // SampledImage { binding: u32, sampler: () },
-}
+// pub enum BindingDesc {
+//     Image {
+//         binding: u32,
+//         read: bool,
+//         write: bool,
+//     },
+//     Buffer {
+//         binding: u32,
+//         read: bool,
+//         write: bool,
+//     },
+//     // SampledImage { binding: u32, sampler: () },
+// }
 
-pub struct LayoutDesc {
-    bindings: Vec<BindingDesc>,
-}
+// pub struct LayoutDesc {
+//     bindings: Vec<BindingDesc>,
+// }
 
 pub enum ShaderSlot {
     Image {

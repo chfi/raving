@@ -16,7 +16,96 @@ use anyhow::{anyhow, bail, Result};
 
 use thunderdome::{Arena, Index};
 
-use super::context::VkContext;
+use super::{context::VkContext, ImageIx, ImageViewIx};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BindingDesc {
+    StorageImage { binding: u32 },
+    // StorageImage { binding: u32, readonly: bool, writeonly: bool },
+    // SampledImage { binding: u32 },
+    // Uniform { binding: u32 },
+    // Buffer { binding: u32 },
+    // VertexBuffer { },
+    // IndexBuffer { },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BindingInput {
+    Image { binding: u32, image: ImageIx },
+    ImageView { binding: u32, view: ImageViewIx },
+    // Buffer { binding: u32, buffer: BufferIx }
+    // VertexBuffer { binding: u32, buffer: BufferIx }
+    // IndexBuffer { binding: u32, buffer: BufferIx }
+    // SampledImage
+    // Buffer
+}
+
+impl BindingInput {
+    pub fn binding(&self) -> u32 {
+        match *self {
+            Self::Image { binding, .. } => binding,
+            Self::ImageView { binding, .. } => binding,
+        }
+    }
+}
+
+impl BindingDesc {
+    pub fn binding(&self) -> u32 {
+        match self {
+            BindingDesc::StorageImage { binding } => *binding,
+        }
+    }
+
+    pub fn builder(&self) -> vk::DescriptorSetLayoutBindingBuilder<'_> {
+        match self {
+            BindingDesc::StorageImage { binding } => {
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(*binding)
+                    .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::COMPUTE)
+            }
+        }
+    }
+
+    /// returns an error if the bindings are not already in binding index order
+    pub fn layout_bindings(
+        in_bindings: &[BindingDesc],
+        stage_flags: vk::ShaderStageFlags,
+    ) -> Result<Vec<vk::DescriptorSetLayoutBinding>> {
+        let mut prev_binding_i = None;
+
+        let mut layout_bindings = Vec::new();
+
+        for bind in in_bindings.iter() {
+            let i = bind.binding();
+
+            // prev_binding_i
+            //     .map(|p| i > p)
+            //     .ok_or(anyhow!("Bindings not sorted"))?;
+
+            if let Some(p) = prev_binding_i {
+                if i <= p {
+                    bail!("Bindings not sorted");
+                }
+            }
+
+            let b = bind.builder().binding(i);
+
+            let b = match bind {
+                BindingDesc::StorageImage { .. } => b
+                    .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                    .build(),
+            };
+
+            layout_bindings.push(b);
+        }
+
+        Ok(layout_bindings)
+    }
+}
 
 pub struct DescriptorAllocator {
     device: Device,
@@ -133,7 +222,8 @@ impl DescriptorAllocator {
             .pool_sizes(sizes.as_slice())
             .build();
 
-        let pool = unsafe { device.create_descriptor_pool(&create_info, None)? };
+        let pool =
+            unsafe { device.create_descriptor_pool(&create_info, None)? };
 
         Ok(pool)
     }
@@ -141,8 +231,10 @@ impl DescriptorAllocator {
     pub(super) fn reset_pools(&mut self) -> Result<()> {
         for &pool in &self.used_pools {
             unsafe {
-                self.device
-                    .reset_descriptor_pool(pool, vk::DescriptorPoolResetFlags::empty())?
+                self.device.reset_descriptor_pool(
+                    pool,
+                    vk::DescriptorPoolResetFlags::empty(),
+                )?
             };
         }
 
@@ -175,7 +267,8 @@ impl DescriptorAllocator {
             .descriptor_pool(current_pool)
             .build();
 
-        let alloc_result = unsafe { self.device.allocate_descriptor_sets(&alloc_info) };
+        let alloc_result =
+            unsafe { self.device.allocate_descriptor_sets(&alloc_info) };
 
         let desc_sets = match alloc_result {
             Ok(sets) => Some(sets),
@@ -193,7 +286,8 @@ impl DescriptorAllocator {
         self.current_pool = Some(new_pool);
         self.used_pools.push_back(new_pool);
 
-        let alloc_result = unsafe { self.device.allocate_descriptor_sets(&alloc_info) };
+        let alloc_result =
+            unsafe { self.device.allocate_descriptor_sets(&alloc_info) };
 
         // if reallocation doesn't work, we're screwed
         match alloc_result {
@@ -213,11 +307,17 @@ impl DescriptorAllocator {
         Ok(())
     }
 
-    pub(super) fn grab_descriptor_pool(&mut self) -> Result<vk::DescriptorPool> {
+    pub(super) fn grab_descriptor_pool(
+        &mut self,
+    ) -> Result<vk::DescriptorPool> {
         if let Some(pool) = self.free_pools.pop_back() {
             Ok(pool)
         } else {
-            Self::create_pool(&self.device, 1000, vk::DescriptorPoolCreateFlags::empty())
+            Self::create_pool(
+                &self.device,
+                1000,
+                vk::DescriptorPoolCreateFlags::empty(),
+            )
         }
     }
 }
@@ -242,7 +342,8 @@ impl DescriptorLayoutCache {
         let mut is_sorted = true;
         let mut prev = None;
 
-        let bindings = unsafe { std::slice::from_raw_parts::<_>(info.p_bindings, count) };
+        let bindings =
+            unsafe { std::slice::from_raw_parts::<_>(info.p_bindings, count) };
 
         for &b in bindings {
             if let Some(p) = prev {
@@ -260,7 +361,8 @@ impl DescriptorLayoutCache {
             return Ok(*v);
         }
 
-        let layout = unsafe { self.device.create_descriptor_set_layout(info, None)? };
+        let layout =
+            unsafe { self.device.create_descriptor_set_layout(info, None)? };
 
         self.layout_cache.insert(layout_info, layout);
 

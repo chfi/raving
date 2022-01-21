@@ -9,7 +9,8 @@ use thunderdome::Arena;
 use super::{
     context::VkContext,
     descriptor::{
-        DescriptorAllocator, DescriptorBuilder, DescriptorLayoutCache,
+        BindingDesc, BindingInput, DescriptorAllocator, DescriptorBuilder,
+        DescriptorLayoutCache,
     },
 };
 
@@ -43,7 +44,7 @@ impl GpuResources {
         height: u32,
         color: [f32; 4],
     ) -> Result<()> {
-        let (pipeline, pipeline_layout) = self
+        let (pipeline, pipeline_layout) = *self
             .pipelines
             .get(pipeline_ix.0)
             .ok_or(anyhow!("tried to dispatch with nonexistent pipeline"))?;
@@ -252,6 +253,70 @@ impl GpuResources {
         Ok(ImageViewIx(ix))
     }
 
+    pub fn allocate_desc_set(
+        &mut self,
+        bind_descs: &[BindingDesc],
+        bind_inputs: &[BindingInput],
+        stage_flags: vk::ShaderStageFlags,
+    ) -> Result<DescSetIx> {
+        if bind_descs.is_empty() || bind_descs.len() != bind_inputs.len() {
+            bail!(
+                "Binding descriptions did not match inputs in length: {} vs {}",
+                bind_descs.len(),
+                bind_inputs.len()
+            );
+        }
+
+        let mut builder = DescriptorBuilder::begin(
+            &mut self.layout_cache,
+            &mut self.descriptor_allocator,
+        );
+
+        use BindingDesc as Desc;
+        use BindingInput as In;
+
+        for (desc, input) in bind_descs.iter().zip(bind_inputs) {
+            match *desc {
+                Desc::StorageImage { binding } => {
+                    if input.binding() != binding {
+                        bail!("Binding descriptions and input order do not match: {} vs {}",
+                              binding,
+                              input.binding());
+                    }
+
+                    match input {
+                        In::ImageView { view, .. } => {
+                            let (view, _image) = self.image_views[view.0];
+                            let img_info = vk::DescriptorImageInfo::builder()
+                                .image_layout(vk::ImageLayout::GENERAL)
+                                .image_view(view)
+                                .build();
+
+                            let image_info = [img_info];
+                            builder.bind_image(
+                                binding,
+                                &image_info,
+                                vk::DescriptorType::STORAGE_IMAGE,
+                                stage_flags,
+                            );
+                        }
+                        _ => bail!(
+                            "Incompatible binding: {:?} vs {:?}",
+                            desc,
+                            input
+                        ),
+                    }
+                }
+            }
+        }
+
+        let set = builder.build()?;
+
+        let ix = self.descriptor_sets.insert(set);
+
+        Ok(DescSetIx(ix))
+    }
+
     pub fn create_compute_desc_set(
         &mut self,
         view_ix: ImageViewIx,
@@ -286,6 +351,7 @@ impl GpuResources {
         Ok(DescSetIx(ix))
     }
 
+    /*
     fn storage_image_layout_info() -> vk::DescriptorSetLayoutCreateInfo {
         let output_image_binding = vk::DescriptorSetLayoutBinding::builder()
             .binding(0)
@@ -301,12 +367,14 @@ impl GpuResources {
 
         layout_info
     }
+    */
 
     // TODO this is completely temporary and will be handled in a
     // generic way that uses reflection to find the pipeline layout
     pub fn load_compute_shader(
         &mut self,
         context: &VkContext,
+        bindings: &[BindingDesc],
         shader: &[u8],
     ) -> Result<PipelineIx> {
         let comp_src = {
@@ -334,7 +402,14 @@ impl GpuResources {
 
             let pc_ranges = [pc_range];
 
-            let layout_info = Self::storage_image_layout_info();
+            let bindings = BindingDesc::layout_bindings(
+                bindings,
+                vk::ShaderStageFlags::COMPUTE,
+            )?;
+
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings)
+                .build();
 
             let layout =
                 self.layout_cache.get_descriptor_layout(&layout_info)?;

@@ -3,6 +3,7 @@ use engine::vk::VkEngine;
 
 use ash::vk;
 
+use engine::vk::descriptor::{BindingDesc, BindingInput};
 use flexi_logger::{Duplicate, FileSpec, Logger};
 use winit::event::{Event, WindowEvent};
 // use winit::platform::unix::*;
@@ -66,7 +67,11 @@ fn main() -> Result<()> {
     let (pipeline, image, desc_set) =
         engine.with_allocators(|ctx, res, alloc| {
             let shader_code = engine::include_shader!("fill_color.comp.spv");
-            let pipeline = res.load_compute_shader(ctx, shader_code)?;
+
+            let bindings = [BindingDesc::StorageImage { binding: 0 }];
+
+            let pipeline =
+                res.load_compute_shader(ctx, &bindings, shader_code)?;
 
             let image = res.allocate_image(
                 ctx,
@@ -84,9 +89,17 @@ fn main() -> Result<()> {
 
             let view = res.create_image_view_for_image(ctx, image)?;
 
-            let desc_set = res.create_compute_desc_set(view)?;
+            let bind_inputs = [BindingInput::ImageView { binding: 0, view }];
 
-            Ok((pipeline, image, desc_set))
+            // let set = res.allocate_desc_set(
+            //     &bindings,
+            //     &bind_inputs,
+            //     vk::ShaderStageFlags::COMPUTE,
+            // )?;
+
+            let set = res.create_compute_desc_set(view)?;
+
+            Ok((pipeline, image, set))
         })?;
 
     std::thread::sleep(std::time::Duration::from_millis(100));

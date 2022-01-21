@@ -259,7 +259,7 @@ impl VkEngine {
 
             unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
 
-            let src_img = self.resources.images.get(image_ix.0).unwrap();
+            let src_img = &self.resources[image_ix];
             let dst_img = swapchain_img;
 
             // transition swapchain image UNDEFINED -> GENERAL
