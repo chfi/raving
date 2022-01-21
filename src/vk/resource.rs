@@ -1,6 +1,9 @@
 use ash::{vk, Device};
 
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, Allocator};
+use gpu_allocator::{
+    vulkan::{Allocation, AllocationCreateDesc, Allocator},
+    MemoryLocation,
+};
 
 #[allow(unused_imports)]
 use anyhow::{anyhow, bail, Result};
@@ -497,6 +500,91 @@ pub struct BufferRes {
 }
 
 impl BufferRes {
+    pub fn gpu_readable(&self) -> bool {
+        use gpu_allocator::MemoryLocation::*;
+        match self.location {
+            Unknown => false,
+            GpuOnly => true,
+            CpuToGpu => true,
+            GpuToCpu => false,
+        }
+    }
+    pub fn gpu_writable(&self) -> bool {
+        use gpu_allocator::MemoryLocation::*;
+        match self.location {
+            Unknown => false,
+            GpuOnly => true,
+            CpuToGpu => false,
+            GpuToCpu => true,
+        }
+    }
+
+    pub fn host_readable(&self) -> bool {
+        use gpu_allocator::MemoryLocation::*;
+        match self.location {
+            Unknown => false,
+            GpuOnly => false,
+            CpuToGpu => true,
+            GpuToCpu => true,
+        }
+    }
+
+    pub fn host_writable(&self) -> bool {
+        use gpu_allocator::MemoryLocation::*;
+        match self.location {
+            Unknown => false,
+            GpuOnly => false,
+            CpuToGpu => true,
+            GpuToCpu => false,
+        }
+    }
+
+    // pub fn upload_to_self<T: Copy + Eq>(
+    pub fn upload_to_self_bytes(
+        &mut self,
+        ctx: &VkContext,
+        allocator: &mut Allocator,
+        src: &[u8],
+    ) -> Result<()> {
+        assert!(!self.host_writable());
+
+        let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
+        let location = MemoryLocation::CpuToGpu;
+
+        let mut staging = Self::allocate_for_type::<u8>(
+            ctx,
+            allocator,
+            location,
+            staging_usage,
+            src.len(),
+            Some("tmp staging buffer"),
+        )?;
+
+        if let Some(stg) = staging.alloc.mapped_slice_mut() {
+            log::warn!("in mapped slice!");
+            stg.clone_from_slice(src);
+        } else {
+            bail!("couldn't map staging buffer memory");
+        }
+
+        todo!();
+
+        Ok(())
+    }
+
+    pub fn cleanup(
+        self,
+        ctx: &VkContext,
+        allocator: &mut Allocator,
+    ) -> Result<()> {
+        unsafe {
+            ctx.device().destroy_buffer(self.buffer, None);
+        }
+
+        allocator.free(self.alloc)?;
+        Ok(())
+    }
+
     pub fn allocate(
         ctx: &VkContext,
         allocator: &mut Allocator,
