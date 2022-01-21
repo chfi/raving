@@ -33,7 +33,7 @@ fn main() -> Result<()> {
 
     let mut engine = VkEngine::new(&window)?;
 
-    let (pipeline, image, desc_set) =
+    let (pipeline, flipline, image, desc_set) =
         engine.with_allocators(|ctx, res, alloc| {
             let shader_code = engine::include_shader!("fill_color.comp.spv");
 
@@ -41,6 +41,13 @@ fn main() -> Result<()> {
 
             let pipeline =
                 res.load_compute_shader(ctx, &bindings, shader_code)?;
+
+            let shader_code_2 = engine::include_shader!("circle_flip.comp.spv");
+
+            // let bindings = [BindingDesc::StorageImage { binding: 0 }];
+
+            let flipline =
+                res.load_compute_shader(ctx, &bindings, shader_code_2)?;
 
             let image = res.allocate_image(
                 ctx,
@@ -66,7 +73,7 @@ fn main() -> Result<()> {
                 vk::ShaderStageFlags::COMPUTE,
             )?;
 
-            Ok((pipeline, image, set))
+            Ok((pipeline, flipline, image, set))
         })?;
 
     std::thread::sleep(std::time::Duration::from_millis(100));
