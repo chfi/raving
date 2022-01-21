@@ -32,6 +32,8 @@ pub struct GpuResources {
 
     pipelines: Arena<(vk::Pipeline, vk::PipelineLayout)>,
 
+    buffers: Arena<BufferRes>,
+
     images: Arena<ImageRes>,
     image_views: Arena<(vk::ImageView, ImageIx)>,
     samplers: Arena<vk::Sampler>,
@@ -52,6 +54,8 @@ impl GpuResources {
             descriptor_sets: Arena::new(),
 
             pipelines: Arena::new(),
+
+            buffers: Arena::new(),
 
             images: Arena::new(),
             image_views: Arena::new(),
@@ -160,8 +164,10 @@ impl GpuResources {
         format: vk::Format,
         usage: vk::ImageUsageFlags,
     ) -> Result<ImageIx> {
+        let name = None;
+
         let image = ImageRes::allocate_2d(
-            allocator, ctx, width, height, format, usage,
+            ctx, allocator, width, height, format, usage, name,
         )?;
         let ix = self.images.insert(image);
         Ok(ImageIx(ix))
@@ -478,7 +484,86 @@ impl GpuResources {
 }
 
 #[allow(dead_code)]
+pub struct BufferRes {
+    name: Option<String>,
+    pub(super) buffer: vk::Buffer,
+
+    elem_size: usize,
+    len: usize,
+
+    location: gpu_allocator::MemoryLocation,
+
+    alloc: Allocation,
+}
+
+impl BufferRes {
+    pub fn allocate(
+        ctx: &VkContext,
+        allocator: &mut Allocator,
+        location: gpu_allocator::MemoryLocation,
+        usage: vk::BufferUsageFlags,
+        elem_size: usize,
+        len: usize,
+        name: Option<&str>,
+    ) -> Result<Self> {
+        let size = elem_size * len;
+
+        let buf_info = vk::BufferCreateInfo::builder()
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .usage(usage)
+            .size(size as _)
+            .build();
+
+        let device = ctx.device();
+
+        let (buffer, reqs) = unsafe {
+            let buffer = device.create_buffer(&buf_info, None)?;
+            let reqs = device.get_buffer_memory_requirements(buffer);
+            (buffer, reqs)
+        };
+
+        let alloc_desc = AllocationCreateDesc {
+            name: name.unwrap_or("tmp"),
+            requirements: reqs,
+            location,
+            linear: true,
+        };
+
+        let alloc = allocator.allocate(&alloc_desc)?;
+
+        unsafe {
+            device.bind_buffer_memory(buffer, alloc.memory(), alloc.offset())
+        }?;
+
+        Ok(Self {
+            name: name.map(|n| n.to_string()),
+            buffer,
+
+            elem_size,
+            len,
+
+            location,
+
+            alloc,
+        })
+    }
+
+    pub fn allocate_for_type<T: Copy>(
+        ctx: &VkContext,
+        allocator: &mut Allocator,
+        location: gpu_allocator::MemoryLocation,
+        usage: vk::BufferUsageFlags,
+        len: usize,
+        name: Option<&str>,
+    ) -> Result<Self> {
+        let elem_size = std::mem::size_of::<T>();
+        Self::allocate(ctx, allocator, location, usage, elem_size, len, name)
+    }
+}
+
+#[allow(dead_code)]
 pub struct ImageRes {
+    name: Option<String>,
     pub(super) image: vk::Image,
     pub(super) format: vk::Format,
 
@@ -511,12 +596,13 @@ impl ImageRes {
     }
 
     pub fn allocate_2d(
-        allocator: &mut Allocator,
         ctx: &VkContext,
+        allocator: &mut Allocator,
         width: u32,
         height: u32,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
+        name: Option<&str>,
     ) -> Result<Self> {
         let extent = vk::Extent3D {
             width,
@@ -553,7 +639,7 @@ impl ImageRes {
         };
 
         let alloc_desc = AllocationCreateDesc {
-            name: "tmp",
+            name: name.unwrap_or("tmp"),
             requirements,
             location: gpu_allocator::MemoryLocation::GpuOnly,
             linear: false,
@@ -566,6 +652,7 @@ impl ImageRes {
         }?;
 
         Ok(Self {
+            name: name.map(|n| n.to_string()),
             image,
             format,
             alloc,
