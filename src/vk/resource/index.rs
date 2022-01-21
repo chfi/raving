@@ -25,6 +25,9 @@ pub struct BufferIx(pub(super) Index);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SemaphoreIx(pub(super) Index);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FenceIx(pub(super) Index);
+
 impl std::ops::Index<PipelineIx> for GpuResources {
     type Output = (vk::Pipeline, vk::PipelineLayout);
 
@@ -72,5 +75,13 @@ impl std::ops::Index<SemaphoreIx> for GpuResources {
 
     fn index(&self, i: SemaphoreIx) -> &Self::Output {
         &self.semaphores[i.0]
+    }
+}
+
+impl std::ops::Index<FenceIx> for GpuResources {
+    type Output = vk::Fence;
+
+    fn index(&self, i: FenceIx) -> &Self::Output {
+        &self.fences[i.0]
     }
 }

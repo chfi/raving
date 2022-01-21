@@ -31,6 +31,8 @@ pub struct GpuResources {
 
     image_views: Arena<(vk::ImageView, ImageIx)>,
     semaphores: Arena<vk::Semaphore>,
+    fences: Arena<vk::Fence>,
+
     pub(super) semaphores_old: Vec<vk::Semaphore>,
 }
 
@@ -50,6 +52,7 @@ impl GpuResources {
             images: Arena::new(),
             image_views: Arena::new(),
             semaphores: Arena::new(),
+            fences: Arena::new(),
 
             semaphores_old: Vec::new(),
         };
@@ -168,8 +171,14 @@ impl GpuResources {
         let semaphore =
             unsafe { ctx.device().create_semaphore(&semaphore_info, None) }?;
         let ix = self.semaphores.insert(semaphore);
-
         Ok(SemaphoreIx(ix))
+    }
+
+    pub fn allocate_fence(&mut self, ctx: &VkContext) -> Result<FenceIx> {
+        let fence_info = vk::FenceCreateInfo::builder().build();
+        let fence = unsafe { ctx.device().create_fence(&fence_info, None) }?;
+        let ix = self.fences.insert(fence);
+        Ok(FenceIx(ix))
     }
 
     pub fn allocate_desc_set(
