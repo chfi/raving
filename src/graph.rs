@@ -1,8 +1,147 @@
 use ash::vk;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use thunderdome::{Arena, Index};
 
 use anyhow::{anyhow, bail, Result};
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Vx(Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct GraphInIx(Index);
+
+pub enum VxKind {
+    GraphInput,    // gets scalars
+    GraphConstant, // produces scalars
+    Image,         // any kind, including swapchain
+    Compute,       // might become "Pipeline" later
+    Command,       // copy images, etc.
+    Semaphore,     // kind of an odd one
+}
+
+pub struct VertexInfo {
+    name: String,
+    kind: VxKind,
+
+    graph_inputs: Vec<GraphInIx>,
+    vertex_inputs: Vec<Vx>,
+}
+
+pub struct GraphDsl {
+    graph_inputs: Arena<(String, ScalarType)>,
+    vertices: Arena<VertexInfo>,
+
+    orders: Vec<Vec<Vx>>,
+
+    batches: Vec<usize>,
+    // edges: Arena<EdgeInfo>,
+}
+
+impl GraphDsl {
+    pub fn add_vertex(&mut self, name: &str, kind: VxKind) -> Vx {
+        let info = VertexInfo {
+            name: name.to_string(),
+            kind,
+            graph_inputs: Vec::new(),
+            vertex_inputs: Vec::new(),
+        };
+
+        let vx = self.vertices.insert(info);
+        Vx(vx)
+    }
+
+    pub fn add_graph_input(&mut self, name: &str, ty: ScalarType) -> GraphInIx {
+        let gx = self.graph_inputs.insert((name.to_string(), ty));
+        GraphInIx(gx)
+    }
+
+    // pub fn vx(&self, v: Vx) -> &VertexInfo {
+    //     &self.vertices[v
+    // }
+}
+
+impl std::ops::Index<Vx> for GraphDsl {
+    type Output = VertexInfo;
+
+    fn index(&self, vx: Vx) -> &VertexInfo {
+        &self.vertices[vx.0]
+    }
+}
+
+impl std::ops::IndexMut<Vx> for GraphDsl {
+    fn index_mut(&mut self, vx: Vx) -> &mut VertexInfo {
+        &mut self.vertices[vx.0]
+    }
+}
+
+pub fn test_graph() -> GraphDsl {
+    let mut g = GraphDsl {
+        graph_inputs: Arena::new(),
+        vertices: Arena::new(),
+
+        orders: Vec::new(),
+        batches: Vec::new(),
+    };
+
+    let window_size = g.add_graph_input("window_size", ScalarType::Dims);
+    let color = g.add_graph_input("color", ScalarType::Color);
+
+    let comp_image = g.add_vertex("comp_image", VxKind::Image);
+    g[comp_image].graph_inputs.push(window_size);
+
+    let compute = g.add_vertex("compute", VxKind::Compute);
+    g[compute].graph_inputs.extend([color, window_size]);
+    g[compute].vertex_inputs.push(comp_image);
+
+    let swapchain_available = g.add_vertex("swapchain_available", VxKind::Semaphore);
+    let swapchain_image = g.add_vertex("swapchain_image", VxKind::Image);
+
+    let copy = g.add_vertex("copy_image", VxKind::Command);
+    g[copy].vertex_inputs.extend([comp_image, swapchain_image]);
+
+    // one alternative
+    let order_0 = [compute];
+    let order_1 = [swapchain_available, copy];
+
+    // another could be
+    // let order_0 = [swapchain_available, compute, copy];
+
+    // these are batch 0 and 1 respectively
+    g.orders.push(Vec::from(order_0));
+    g.orders.push(Vec::from(order_1));
+
+    g.batches.extend([0, 1]);
+
+    g
+}
+
+// pub enum VxInputSlot {
+//     Scalar {
+//         name: Option<String>,
+//         ty: ScalarType,
+//     },
+//     Image {
+//         name: String,
+//         binding: u32,
+//         read: bool,
+//         write: bool,
+//         ty: vk::DescriptorType,
+//     },
+//     Buffer {
+//         name: String,
+//         binding: u32,
+//         read: bool,
+//         write: bool,
+//         ty: vk::DescriptorType,
+//     },
+// }
+
+// pub struct VxImage {
+//     name: String,
+//     format: vk::Format,
+//     initial_layout: vk::ImageLayout,
+//     inputs: VxInputSlot,
+// }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ScalarType {
@@ -36,6 +175,7 @@ pub enum Scalar {
     Color { rgba: [u8; 4] },
 }
 
+/*
 pub struct GraphInput {
     name: String,
     input_type: ScalarType,
@@ -47,6 +187,7 @@ pub struct GraphFn {
     resource_type: (),
     vertex_index: Index,
 }
+*/
 
 pub enum BindingDesc {
     Image {
