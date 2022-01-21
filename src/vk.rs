@@ -238,8 +238,8 @@ impl VkEngine {
             unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
 
             self.resources.dispatch_compute(
-                device,
                 cmd,
+                device,
                 pipeline_ix,
                 image_ix,
                 desc_set_ix,

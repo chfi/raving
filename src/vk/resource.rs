@@ -35,8 +35,8 @@ pub struct GpuResources {
 impl GpuResources {
     pub fn dispatch_compute(
         &self,
-        device: &Device,
         cmd: vk::CommandBuffer,
+        device: &Device,
         pipeline_ix: PipelineIx,
         image_ix: ImageIx,
         desc_set_ix: DescSetIx,
@@ -44,63 +44,24 @@ impl GpuResources {
         height: u32,
         color: [f32; 4],
     ) -> Result<()> {
-        let (pipeline, pipeline_layout) = *self
-            .pipelines
-            .get(pipeline_ix.0)
-            .ok_or(anyhow!("tried to dispatch with nonexistent pipeline"))?;
-
-        let image = self.images.get(image_ix.0).ok_or(anyhow!(
-            "tried to use nonexistent image in compute dispatch"
-        ))?;
-
-        let desc_set = *self
-            .descriptor_sets
-            .get(desc_set_ix.0)
-            .ok_or(anyhow!("descriptor set missing for compute dispatch"))?;
+        let (pipeline, pipeline_layout) = self[pipeline_ix];
 
         // transition image TRANSFER_SRC_OPTIMAL -> GENERAL
-
-        use vk::AccessFlags as Access;
-        use vk::PipelineStageFlags as Stage;
-
-        let memory_barriers = [];
-        let buffer_barriers = [];
-
-        let from_transfer_barrier = vk::ImageMemoryBarrier::builder()
-            .src_access_mask(Access::TRANSFER_READ)
-            .dst_access_mask(Access::SHADER_WRITE)
-            .old_layout(vk::ImageLayout::UNDEFINED)
-            .new_layout(vk::ImageLayout::GENERAL)
-            .image(image.image)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            })
-            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .build();
-
-        let src_stage_mask = Stage::TRANSFER;
-        let dst_stage_mask = Stage::COMPUTE_SHADER;
-
-        let image_barriers = [from_transfer_barrier];
-
-        unsafe {
-            device.cmd_pipeline_barrier(
-                cmd,
-                src_stage_mask,
-                dst_stage_mask,
-                vk::DependencyFlags::BY_REGION,
-                &memory_barriers,
-                &buffer_barriers,
-                &image_barriers,
-            );
-        };
+        self.transition_image(
+            cmd,
+            device,
+            image_ix,
+            vk::AccessFlags::TRANSFER_READ,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::GENERAL,
+        );
 
         // dispatch
+
+        let desc_set = self[desc_set_ix];
 
         unsafe {
             let bind_point = vk::PipelineBindPoint::COMPUTE;
@@ -118,14 +79,7 @@ impl GpuResources {
                 &null,
             );
 
-            // let float_consts = [1f32, 0f32, 0f32, 1f32];
-
-            let push_constants = [
-                width as u32,
-                height as u32,
-                // 0u32,
-                // 0u32,
-            ];
+            let push_constants = [width as u32, height as u32];
 
             let mut bytes: Vec<u8> = Vec::with_capacity(24);
             bytes.extend_from_slice(bytemuck::cast_slice(&color));
@@ -151,39 +105,17 @@ impl GpuResources {
         };
 
         // transition image GENERAL -> TRANSFER_SRC_OPTIMAL
-        let from_general_barrier = vk::ImageMemoryBarrier::builder()
-            .src_access_mask(Access::SHADER_WRITE)
-            .dst_access_mask(Access::TRANSFER_READ)
-            .old_layout(vk::ImageLayout::GENERAL)
-            .new_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
-            .image(image.image)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            })
-            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .build();
-
-        let dst_stage_mask = Stage::TRANSFER;
-        let src_stage_mask = Stage::COMPUTE_SHADER;
-
-        let image_barriers = [from_general_barrier];
-
-        unsafe {
-            device.cmd_pipeline_barrier(
-                cmd,
-                src_stage_mask,
-                dst_stage_mask,
-                vk::DependencyFlags::BY_REGION,
-                &memory_barriers,
-                &buffer_barriers,
-                &image_barriers,
-            );
-        };
+        self.transition_image(
+            cmd,
+            device,
+            image_ix,
+            vk::AccessFlags::SHADER_WRITE,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::AccessFlags::TRANSFER_READ,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        );
 
         Ok(())
     }
@@ -286,10 +218,6 @@ impl GpuResources {
                                 .image_layout(vk::ImageLayout::GENERAL)
                                 .image_view(view)
                                 .build();
-                            log::warn!(
-                                "allocate_desc_set, img_info: {:?}",
-                                img_info
-                            );
 
                             let image_info = vec![img_info];
 
@@ -445,6 +373,54 @@ impl GpuResources {
         }
 
         Ok(PipelineIx(ix))
+    }
+
+    pub fn transition_image(
+        &self,
+        cmd: vk::CommandBuffer,
+        device: &Device,
+        image: ImageIx,
+        src_access_mask: vk::AccessFlags,
+        src_stage_mask: vk::PipelineStageFlags,
+        dst_access_mask: vk::AccessFlags,
+        dst_stage_mask: vk::PipelineStageFlags,
+        old_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+    ) {
+        let image = &self[image];
+
+        let image_barrier = vk::ImageMemoryBarrier::builder()
+            .src_access_mask(src_access_mask)
+            .dst_access_mask(dst_access_mask)
+            .old_layout(old_layout)
+            .new_layout(new_layout)
+            .image(image.image)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .build();
+
+        let memory_barriers = [];
+        let buffer_barriers = [];
+        let image_barriers = [image_barrier];
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                cmd,
+                src_stage_mask,
+                dst_stage_mask,
+                vk::DependencyFlags::BY_REGION,
+                &memory_barriers,
+                &buffer_barriers,
+                &image_barriers,
+            );
+        };
     }
 }
 
