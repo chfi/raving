@@ -238,21 +238,6 @@ impl GpuResources {
         Ok(SemaphoreIx(ix))
     }
 
-    pub fn create_image_view_for_image(
-        &mut self,
-        ctx: &VkContext,
-        image_ix: ImageIx,
-    ) -> Result<ImageViewIx> {
-        let img = self.images.get(image_ix.0).ok_or(anyhow!(
-            "tried to create image view for nonexistent image"
-        ))?;
-
-        let view = img.create_image_view(ctx)?;
-        let ix = self.image_views.insert((view, image_ix));
-
-        Ok(ImageViewIx(ix))
-    }
-
     pub fn allocate_desc_set(
         &mut self,
         bind_descs: &[BindingDesc],
@@ -275,6 +260,10 @@ impl GpuResources {
         use BindingDesc as Desc;
         use BindingInput as In;
 
+        use parking_lot::Mutex;
+
+        let img_infos = Mutex::new(Vec::new());
+
         for (desc, input) in bind_descs.iter().zip(bind_inputs) {
             match *desc {
                 Desc::StorageImage { binding } => {
@@ -286,19 +275,47 @@ impl GpuResources {
 
                     match input {
                         In::ImageView { view, .. } => {
-                            let (view, _image) = self.image_views[view.0];
+                            let (view, _image_ix) = *self
+                                .image_views
+                                .get(view.0)
+                                .ok_or(anyhow!(
+                "tried to create descriptor set using nonexistent image view"
+            ))?;
+
                             let img_info = vk::DescriptorImageInfo::builder()
                                 .image_layout(vk::ImageLayout::GENERAL)
                                 .image_view(view)
                                 .build();
-
-                            let image_info = [img_info];
-                            builder.bind_image(
-                                binding,
-                                &image_info,
-                                vk::DescriptorType::STORAGE_IMAGE,
-                                stage_flags,
+                            log::warn!(
+                                "allocate_desc_set, img_info: {:?}",
+                                img_info
                             );
+
+                            let image_info = vec![img_info];
+
+                            let (image_info, len) = {
+                                let mut infos = img_infos.lock();
+                                let ix = infos.len();
+
+                                let len = image_info.len();
+
+                                infos.push(image_info);
+
+                                let lol = infos[ix].as_ptr();
+                                (lol, len)
+                            };
+
+                            unsafe {
+                                let lmao: &[vk::DescriptorImageInfo] =
+                                    std::slice::from_raw_parts(image_info, len);
+
+                                builder.bind_image(
+                                    binding,
+                                    lmao,
+                                    vk::DescriptorType::STORAGE_IMAGE,
+                                    stage_flags,
+                                );
+                            }
                         }
                         _ => bail!(
                             "Incompatible binding: {:?} vs {:?}",
@@ -317,57 +334,20 @@ impl GpuResources {
         Ok(DescSetIx(ix))
     }
 
-    pub fn create_compute_desc_set(
+    pub fn create_image_view_for_image(
         &mut self,
-        view_ix: ImageViewIx,
-    ) -> Result<DescSetIx> {
-        let (view, _image_ix) =
-            *self.image_views.get(view_ix.0).ok_or(anyhow!(
-                "tried to create descriptor set using nonexistent image view"
-            ))?;
+        ctx: &VkContext,
+        image_ix: ImageIx,
+    ) -> Result<ImageViewIx> {
+        let img = self.images.get(image_ix.0).ok_or(anyhow!(
+            "tried to create image view for nonexistent image"
+        ))?;
 
-        let mut builder = DescriptorBuilder::begin(
-            &mut self.layout_cache,
-            &mut self.descriptor_allocator,
-        );
+        let view = img.create_image_view(ctx)?;
+        let ix = self.image_views.insert((view, image_ix));
 
-        let img_info = vk::DescriptorImageInfo::builder()
-            .image_layout(vk::ImageLayout::GENERAL)
-            .image_view(view)
-            .build();
-
-        let image_info = [img_info];
-        builder.bind_image(
-            0,
-            &image_info,
-            vk::DescriptorType::STORAGE_IMAGE,
-            vk::ShaderStageFlags::COMPUTE,
-        );
-
-        let set = builder.build()?;
-
-        let ix = self.descriptor_sets.insert(set);
-
-        Ok(DescSetIx(ix))
+        Ok(ImageViewIx(ix))
     }
-
-    /*
-    fn storage_image_layout_info() -> vk::DescriptorSetLayoutCreateInfo {
-        let output_image_binding = vk::DescriptorSetLayoutBinding::builder()
-            .binding(0)
-            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::COMPUTE)
-            .build();
-
-        let bindings = [output_image_binding];
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
-            .bindings(&bindings)
-            .build();
-
-        layout_info
-    }
-    */
 
     // TODO this is completely temporary and will be handled in a
     // generic way that uses reflection to find the pipeline layout

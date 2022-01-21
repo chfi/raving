@@ -33,37 +33,6 @@ fn main() -> Result<()> {
 
     let mut engine = VkEngine::new(&window)?;
 
-    /*
-
-
-    let mut dsl = engine::graph::test_graph();
-
-    // graph inputs
-    let window_size = [width, height];
-    let color = [1.0, 0.0, 0.0, 1.0];
-
-    let mut comp_image = None;
-    let mut swapchain_available = None;
-
-    engine.with_allocators(|ctx, res, alloc| {
-        let img = res.allocate_image(
-            ctx,
-            alloc,
-            width,
-            height,
-            vk::Format::B8G8R8A8_UNORM,
-            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
-        )?;
-        comp_image = Some(img);
-
-        let semaphore = res.allocate_semaphore(ctx)?;
-        swapchain_available = Some(semaphore);
-
-        Ok(())
-    })?;
-
-    */
-
     let (pipeline, image, desc_set) =
         engine.with_allocators(|ctx, res, alloc| {
             let shader_code = engine::include_shader!("fill_color.comp.spv");
@@ -91,13 +60,11 @@ fn main() -> Result<()> {
 
             let bind_inputs = [BindingInput::ImageView { binding: 0, view }];
 
-            // let set = res.allocate_desc_set(
-            //     &bindings,
-            //     &bind_inputs,
-            //     vk::ShaderStageFlags::COMPUTE,
-            // )?;
-
-            let set = res.create_compute_desc_set(view)?;
+            let set = res.allocate_desc_set(
+                &bindings,
+                &bind_inputs,
+                vk::ShaderStageFlags::COMPUTE,
+            )?;
 
             Ok((pipeline, image, set))
         })?;

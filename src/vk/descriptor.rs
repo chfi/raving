@@ -163,7 +163,7 @@ pub struct DescriptorBuilder<'a> {
     allocator: &'a mut DescriptorAllocator,
 
     bindings: Vec<vk::DescriptorSetLayoutBinding>,
-    writes: Vec<vk::WriteDescriptorSet>,
+    writes: Vec<vk::WriteDescriptorSetBuilder<'a>>,
 }
 
 impl DescriptorAllocator {
@@ -399,7 +399,7 @@ impl<'a> DescriptorBuilder<'a> {
     pub(super) fn bind_buffer(
         &mut self,
         binding: u32,
-        buffer_info: &[vk::DescriptorBufferInfo],
+        buffer_info: &'a [vk::DescriptorBufferInfo],
         ty: vk::DescriptorType,
         stage_flags: vk::ShaderStageFlags,
     ) -> &mut Self {
@@ -415,8 +415,7 @@ impl<'a> DescriptorBuilder<'a> {
         let write = vk::WriteDescriptorSet::builder()
             .descriptor_type(ty)
             .buffer_info(buffer_info)
-            .dst_binding(binding)
-            .build();
+            .dst_binding(binding);
 
         self.writes.push(write);
 
@@ -426,7 +425,8 @@ impl<'a> DescriptorBuilder<'a> {
     pub(super) fn bind_image(
         &mut self,
         binding: u32,
-        image_info: &[vk::DescriptorImageInfo],
+        // image_info: std::sync::Arc<[vk::DescriptorImageInfo]>,
+        image_info: &'a [vk::DescriptorImageInfo],
         ty: vk::DescriptorType,
         stage_flags: vk::ShaderStageFlags,
     ) -> &mut Self {
@@ -439,12 +439,12 @@ impl<'a> DescriptorBuilder<'a> {
 
         self.bindings.push(layout_binding);
 
-        let write = vk::WriteDescriptorSet::builder()
-            .descriptor_type(ty)
-            .image_info(image_info)
-            .dst_binding(binding);
-
-        let write = write.build();
+        let write = unsafe {
+            vk::WriteDescriptorSet::builder()
+                .descriptor_type(ty)
+                .image_info(image_info)
+                .dst_binding(binding)
+        };
 
         self.writes.push(write);
 
@@ -460,14 +460,20 @@ impl<'a> DescriptorBuilder<'a> {
 
         let set = self.allocator.allocate(layout)?;
 
-        for write in self.writes.iter_mut() {
-            write.dst_set = set;
-        }
+        let writes = self
+            .writes
+            .into_iter()
+            .map(|w| w.dst_set(set).build())
+            .collect::<Vec<_>>();
+
+        // for write in self.writes.iter_mut() {
+        //     write.dst_set = set;
+        // }
 
         unsafe {
             self.allocator
                 .device
-                .update_descriptor_sets(self.writes.as_slice(), &[]);
+                .update_descriptor_sets(writes.as_slice(), &[]);
         }
 
         Ok(set)
