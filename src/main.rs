@@ -35,19 +35,26 @@ fn main() -> Result<()> {
 
     let (pipeline, flipline, image, desc_set) =
         engine.with_allocators(|ctx, res, alloc| {
-            let shader_code = engine::include_shader!("fill_color.comp.spv");
-
             let bindings = [BindingDesc::StorageImage { binding: 0 }];
 
-            let pipeline =
-                res.load_compute_shader(ctx, &bindings, shader_code)?;
+            let pc_size_1 = std::mem::size_of::<[i32; 2]>()
+                + std::mem::size_of::<[f32; 4]>();
 
-            let shader_code_2 = engine::include_shader!("circle_flip.comp.spv");
+            let pipeline = res.load_compute_shader_runtime(
+                ctx,
+                "shaders/fill_color.comp.spv",
+                &bindings,
+                pc_size_1,
+            )?;
 
-            // let bindings = [BindingDesc::StorageImage { binding: 0 }];
+            let pc_size_2 = std::mem::size_of::<[i32; 2]>();
 
-            let flipline =
-                res.load_compute_shader(ctx, &bindings, shader_code_2)?;
+            let flipline = res.load_compute_shader_runtime(
+                ctx,
+                "shaders/circle_flip.comp.spv",
+                &bindings,
+                pc_size_2,
+            )?;
 
             let image = res.allocate_image(
                 ctx,

@@ -93,10 +93,10 @@ impl BindingDesc {
                     .descriptor_count(1)
                     .build(),
 
-                BindingDesc::SampledImage { .. } => {
-                    //
-                    todo!();
-                }
+                BindingDesc::SampledImage { .. } => b
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .build(),
             };
 
             prev_binding_i = Some(i);

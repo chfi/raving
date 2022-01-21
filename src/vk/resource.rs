@@ -28,6 +28,13 @@ pub enum PipelineType {
     Compute,
 }
 
+pub struct Pipeline {
+    pipeline: vk::Pipeline,
+    layout: vk::PipelineLayout,
+
+    bindings: Vec<BindingDesc>,
+}
+
 pub struct GpuResources {
     descriptor_allocator: DescriptorAllocator,
     layout_cache: DescriptorLayoutCache,
@@ -337,6 +344,100 @@ impl GpuResources {
         let ix = self.image_views.insert((view, image_ix));
 
         Ok(ImageViewIx(ix))
+    }
+
+    pub fn load_compute_shader_runtime(
+        &mut self,
+        context: &VkContext,
+        shader_path: &str,
+        bindings: &[BindingDesc],
+        push_constants_len: usize,
+    ) -> Result<PipelineIx> {
+        let comp_src = {
+            let mut file = std::fs::File::open(shader_path)?;
+            ash::util::read_spv(&mut file)
+        }?;
+
+        let create_info = vk::ShaderModuleCreateInfo::builder()
+            .code(&comp_src)
+            .build();
+
+        let shader_module = unsafe {
+            context.device().create_shader_module(&create_info, None)
+        }?;
+
+        let pipeline_layout = {
+            let pc_range = vk::PushConstantRange::builder()
+                .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                .offset(0)
+                .size(push_constants_len as u32)
+                .build();
+
+            let pc_ranges = [pc_range];
+
+            let bindings = BindingDesc::layout_bindings(
+                bindings,
+                vk::ShaderStageFlags::COMPUTE,
+            )?;
+
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings)
+                .build();
+
+            let layout =
+                self.layout_cache.get_descriptor_layout(&layout_info)?;
+            let layouts = [layout];
+
+            let layout_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(&layouts)
+                .push_constant_ranges(&pc_ranges)
+                .build();
+
+            unsafe {
+                context.device().create_pipeline_layout(&layout_info, None)
+            }
+        }?;
+
+        let entry_point = std::ffi::CString::new("main").unwrap();
+
+        let comp_state_info = vk::PipelineShaderStageCreateInfo::builder()
+            .stage(vk::ShaderStageFlags::COMPUTE)
+            .module(shader_module)
+            .name(&entry_point)
+            .build();
+
+        let pipeline_info = vk::ComputePipelineCreateInfo::builder()
+            .layout(pipeline_layout)
+            .stage(comp_state_info)
+            .build();
+
+        let pipeline_infos = [pipeline_info];
+
+        let result = unsafe {
+            context.device().create_compute_pipelines(
+                vk::PipelineCache::null(),
+                &pipeline_infos,
+                None,
+            )
+        };
+
+        let pipelines = match result {
+            Ok(pipelines) => pipelines,
+            Err((pipelines, err)) => {
+                log::warn!("{:?}", err);
+                pipelines
+            }
+        };
+
+        let pipeline = pipelines[0];
+
+        let ix = self.pipelines.insert((pipeline, pipeline_layout));
+
+        unsafe {
+            context.device().destroy_shader_module(shader_module, None);
+        }
+
+        Ok(PipelineIx(ix))
     }
 
     // TODO this is completely temporary and will be handled in a

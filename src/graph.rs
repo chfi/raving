@@ -4,6 +4,8 @@ use thunderdome::{Arena, Index};
 
 use anyhow::{anyhow, bail, Result};
 
+use crate::vk::SemaphoreIx;
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Vx(Index);
 
@@ -17,6 +19,21 @@ pub enum VxKind {
     Compute,       // might become "Pipeline" later
     Command,       // copy images, etc.
     Semaphore,     // kind of an odd one
+}
+
+pub enum Edge {
+    PipelineBarrier {
+        src: Vx,
+        dst: Vx,
+        layout: Option<(vk::ImageLayout, vk::ImageLayout)>,
+    },
+    Semaphore {
+        wait: Vec<Vx>,
+        signal: Vec<Vx>,
+        // wait: FxHashSet<SemaphoreIx>,
+        // signal: FxHashSet<SemaphoreIx>,
+    },
+    Identity,
 }
 
 pub struct VertexInfo {
@@ -89,16 +106,44 @@ pub fn test_graph() -> GraphDsl {
     let comp_image = g.add_vertex("comp_image", VxKind::Image);
     g[comp_image].graph_inputs.push(window_size);
 
+    let edge_dims_img = Edge::Identity;
+
     let compute = g.add_vertex("compute", VxKind::Compute);
     g[compute].graph_inputs.extend([color, window_size]);
     g[compute].vertex_inputs.push(comp_image);
+
+    let edge_color_comp = Edge::Identity;
+    let edge_dims_comp = Edge::Identity;
+
+    let edge_img_comp = Edge::PipelineBarrier {
+        src: comp_image,
+        dst: compute,
+        layout: Some((
+            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            vk::ImageLayout::GENERAL,
+        )),
+    };
 
     let swapchain_available =
         g.add_vertex("swapchain_available", VxKind::Semaphore);
     let swapchain_image = g.add_vertex("swapchain_image", VxKind::Image);
 
+    let mut edge_swapchain_avail_img = Edge::Semaphore {
+        wait: vec![swapchain_available],
+        signal: Vec::new(),
+    };
+
     let copy = g.add_vertex("copy_image", VxKind::Command);
     g[copy].vertex_inputs.extend([comp_image, swapchain_image]);
+
+    let edge_swap_img_copy = Edge::PipelineBarrier {
+        src: comp_image,
+        dst: swapchain_image,
+        layout: Some((
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        )),
+    };
 
     // one alternative
     let order_0 = [compute];
