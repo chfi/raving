@@ -15,6 +15,7 @@ use super::{
         BindingDesc, BindingInput, DescriptorAllocator, DescriptorBuilder,
         DescriptorLayoutCache,
     },
+    VkEngine,
 };
 
 pub mod graph;
@@ -552,38 +553,17 @@ impl GpuResources {
     ) {
         let image = &self[image];
 
-        let image_barrier = vk::ImageMemoryBarrier::builder()
-            .src_access_mask(src_access_mask)
-            .dst_access_mask(dst_access_mask)
-            .old_layout(old_layout)
-            .new_layout(new_layout)
-            .image(image.image)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            })
-            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-            .build();
-
-        let memory_barriers = [];
-        let buffer_barriers = [];
-        let image_barriers = [image_barrier];
-
-        unsafe {
-            device.cmd_pipeline_barrier(
-                cmd,
-                src_stage_mask,
-                dst_stage_mask,
-                vk::DependencyFlags::BY_REGION,
-                &memory_barriers,
-                &buffer_barriers,
-                &image_barriers,
-            );
-        };
+        VkEngine::transition_image(
+            cmd,
+            device,
+            image.image,
+            src_access_mask,
+            src_stage_mask,
+            dst_access_mask,
+            dst_stage_mask,
+            old_layout,
+            new_layout,
+        )
     }
 }
 

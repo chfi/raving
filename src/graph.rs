@@ -1,10 +1,158 @@
-use ash::vk;
+use ash::{vk, Device};
+use crossbeam::atomic::AtomicCell;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thunderdome::{Arena, Index};
 
+use std::sync::Arc;
+
 use anyhow::{anyhow, bail, Result};
 
-use crate::vk::SemaphoreIx;
+use crate::vk::{
+    DescSetIx, GpuResources, ImageIx, PipelineIx, SemaphoreIx, VkEngine,
+};
+
+// pub struct Batch<'a> {
+pub struct Batch {
+    batch: Vec<
+        // Arc<AtomicCell<bool>>,
+        // Box<dyn FnOnce(vk::CommandBuffer) -> vk::CommandBuffer + 'a>,
+        Box<dyn FnOnce(vk::CommandBuffer) -> vk::CommandBuffer>,
+        // usize
+    >,
+}
+
+pub fn transition_01(
+    res: &GpuResources,
+    device: &Device,
+    image_ix: ImageIx,
+    cmd: vk::CommandBuffer,
+) -> vk::CommandBuffer {
+    res.transition_image(
+        cmd,
+        device,
+        image_ix,
+        vk::AccessFlags::TRANSFER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::GENERAL,
+    );
+
+    cmd
+}
+
+pub fn compute_1(
+    res: &GpuResources,
+    device: &Device,
+    pipeline_ix: PipelineIx,
+    image_ix: ImageIx,
+    desc_set_ix: DescSetIx,
+    width: u32,
+    height: u32,
+    color: [f32; 4],
+    cmd: vk::CommandBuffer,
+) -> vk::CommandBuffer {
+    let (pipeline, pipeline_layout) = res[pipeline_ix];
+
+    let desc_set = res[desc_set_ix];
+
+    unsafe {
+        let bind_point = vk::PipelineBindPoint::COMPUTE;
+        device.cmd_bind_pipeline(cmd, bind_point, pipeline);
+
+        let desc_sets = [desc_set];
+        let null = [];
+
+        device.cmd_bind_descriptor_sets(
+            cmd,
+            bind_point,
+            pipeline_layout,
+            0,
+            &desc_sets,
+            &null,
+        );
+
+        let push_constants = [width as u32, height as u32];
+
+        let mut bytes: Vec<u8> = Vec::with_capacity(24);
+        bytes.extend_from_slice(bytemuck::cast_slice(&color));
+        bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
+
+        device.cmd_push_constants(
+            cmd,
+            pipeline_layout,
+            vk::ShaderStageFlags::COMPUTE,
+            0,
+            &bytes,
+        );
+    };
+
+    let x_size = 16;
+    let y_size = 16;
+
+    let x_groups = (width / x_size) + width % x_size;
+    let y_groups = (height / y_size) + height % y_size;
+
+    unsafe {
+        device.cmd_dispatch(cmd, x_groups, y_groups, 1);
+    };
+
+    cmd
+}
+
+pub fn transition_12(
+    res: &GpuResources,
+    device: &Device,
+    image_ix: ImageIx,
+    cmd: vk::CommandBuffer,
+) -> vk::CommandBuffer {
+    res.transition_image(
+        cmd,
+        device,
+        image_ix,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::TRANSFER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    );
+
+    cmd
+}
+
+pub fn transition_02(
+    device: &Device,
+    // image_ix: ImageIx,
+    swapchain_img: vk::Image,
+    cmd: vk::CommandBuffer,
+) -> vk::CommandBuffer {
+    VkEngine::transition_image(
+        cmd,
+        device,
+        swapchain_img,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::TRANSFER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    );
+    cmd
+}
+
+// pub fn copy_2(
+//     res: &GpuResources,
+//     device: &Device,
+//     image_ix: ImageIx,
+//     swapchain_img: ImageIx,
+//     cmd: vk::CommandBuffer,
+// ) -> vk::CommandBuffer {
+
+pub struct RenderGraph {
+    batches: Arena<Batch>,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Vx(Index);
