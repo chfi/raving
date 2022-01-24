@@ -1,5 +1,7 @@
 use engine::graph::GraphDsl;
-use engine::vk::{BatchInput, VkEngine};
+use engine::vk::{
+    BatchInput, DescSetIx, GpuResources, ImageIx, PipelineIx, VkEngine,
+};
 
 use ash::vk;
 
@@ -11,7 +13,124 @@ use winit::{event_loop::EventLoop, window::WindowBuilder};
 
 use anyhow::Result;
 
-fn compute_batch(input: &BatchInput,
+#[derive(Clone, Copy)]
+struct ExampleState {
+    fill_color_pipeline: PipelineIx,
+    fill_color_desc: DescSetIx,
+    image: ImageIx,
+}
+
+fn compute_batch(
+    engine: &VkEngine,
+    state: ExampleState,
+    input: &BatchInput,
+    cmd: vk::CommandBuffer,
+) {
+    let device = engine.ctx().device();
+    let image = &engine.resources[state.image];
+
+    let width = image.extent.width;
+    let height = image.extent.height;
+
+    VkEngine::transition_image(
+        cmd,
+        device,
+        image.image,
+        vk::AccessFlags::empty(),
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::GENERAL,
+    );
+
+    let push_constants = [width as u32, height as u32];
+
+    let color = [1f32, 0.0, 0.0, 1.0];
+
+    let mut bytes: Vec<u8> = Vec::with_capacity(24);
+    bytes.extend_from_slice(bytemuck::cast_slice(&color));
+    bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
+
+    let x_size = 16;
+    let y_size = 16;
+
+    let x_groups = (width / x_size) + width % x_size;
+    let y_groups = (height / y_size) + height % y_size;
+
+    let groups = (x_groups, y_groups, 1);
+
+    engine.dispatch_compute(
+        device,
+        cmd,
+        state.fill_color_pipeline,
+        state.fill_color_desc,
+        bytes.as_slice(),
+        groups,
+    );
+
+    VkEngine::transition_image(
+        cmd,
+        device,
+        image.image,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::TRANSFER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    );
+}
+
+fn copy_batch(
+    engine: &VkEngine,
+    state: ExampleState,
+    input: &BatchInput,
+    cmd: vk::CommandBuffer,
+) {
+    let device = engine.ctx().device();
+    let image = &engine.resources[state.image];
+
+    let src_img = image.image;
+
+    let ix = input.swapchain_image_ix.unwrap() as usize;
+
+    let dst_img = engine.swapchain_images[ix];
+
+    VkEngine::transition_image(
+        cmd,
+        device,
+        dst_img,
+        vk::AccessFlags::NONE_KHR,
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        vk::AccessFlags::NONE_KHR,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+    );
+
+    VkEngine::copy_image(
+        device,
+        cmd,
+        src_img,
+        dst_img,
+        image.extent,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+    );
+
+    VkEngine::transition_image(
+        cmd,
+        device,
+        dst_img,
+        vk::AccessFlags::TRANSFER_WRITE,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::AccessFlags::MEMORY_READ,
+        vk::PipelineStageFlags::HOST,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::ImageLayout::PRESENT_SRC_KHR,
+    );
+}
 
 fn main() -> Result<()> {
     // let args: Args = argh::from_env();
@@ -35,7 +154,7 @@ fn main() -> Result<()> {
 
     let mut engine = VkEngine::new(&window)?;
 
-    let (pipeline, flipline, image, desc_set) =
+    let (pipeline, image, desc_set) =
         engine.with_allocators(|ctx, res, alloc| {
             let bindings = [BindingDesc::StorageImage { binding: 0 }];
 
@@ -49,6 +168,7 @@ fn main() -> Result<()> {
                 pc_size_1,
             )?;
 
+            /*
             let pc_size_2 = std::mem::size_of::<[i32; 2]>();
 
             let flipline = res.load_compute_shader_runtime(
@@ -57,6 +177,7 @@ fn main() -> Result<()> {
                 &bindings,
                 pc_size_2,
             )?;
+            */
 
             let image = res.allocate_image(
                 ctx,
@@ -82,8 +203,14 @@ fn main() -> Result<()> {
                 vk::ShaderStageFlags::COMPUTE,
             )?;
 
-            Ok((pipeline, flipline, image, set))
+            Ok((pipeline, image, set))
         })?;
+
+    let ex_state = ExampleState {
+        fill_color_pipeline: pipeline,
+        fill_color_desc: desc_set,
+        image,
+    };
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 

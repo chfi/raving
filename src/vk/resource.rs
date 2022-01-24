@@ -733,14 +733,14 @@ impl BufferRes {
 #[allow(dead_code)]
 pub struct ImageRes {
     name: Option<String>,
-    pub(super) image: vk::Image,
-    pub(super) format: vk::Format,
+    pub image: vk::Image,
+    pub format: vk::Format,
 
     alloc: Allocation,
-    pub(super) layout: vk::ImageLayout,
+    pub layout: vk::ImageLayout,
     img_type: vk::ImageType,
 
-    pub(super) extent: vk::Extent3D,
+    pub extent: vk::Extent3D,
 }
 
 impl ImageRes {

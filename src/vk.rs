@@ -37,9 +37,9 @@ pub struct VkEngine {
     pub swapchain_khr: vk::SwapchainKHR,
     pub swapchain_props: SwapchainProperties,
 
-    swapchain_images: Vec<vk::Image>,
+    pub swapchain_images: Vec<vk::Image>,
     #[allow(dead_code)]
-    swapchain_image_views: Vec<vk::ImageView>,
+    pub swapchain_image_views: Vec<vk::ImageView>,
 
     frames: [FrameData; FRAME_OVERLAP],
 
