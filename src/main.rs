@@ -102,7 +102,7 @@ fn main() -> Result<()> {
                 let color = [r, 1.0, b, 1.0];
 
                 let render_success = engine
-                    .draw_from_compute_(
+                    .draw_from_compute(
                         pipeline, image, desc_set, width, height, color,
                     )
                     .unwrap();
