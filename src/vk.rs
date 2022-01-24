@@ -3,6 +3,7 @@ use ash::{
     vk, Device, Entry,
 };
 
+use crossbeam::atomic::AtomicCell;
 use gpu_allocator::vulkan::Allocator;
 use rustc_hash::FxHashMap;
 use winit::window::Window;
@@ -53,9 +54,11 @@ pub struct BatchInput {
 
 pub struct FrameResources {
     semaphores: Vec<SemaphoreIx>,
-
+    // semaphore_map: FxHashMap<(usize, usize), SemaphoreIx>,
     fence: FenceIx,
-    command_buffers: Vec<[vk::CommandBuffer; FRAME_OVERLAP]>,
+    command_buffers: Vec<vk::CommandBuffer>,
+
+    executing: AtomicCell<bool>,
 }
 
 impl FrameResources {
@@ -87,29 +90,21 @@ impl FrameResources {
             let alloc_info = vk::CommandBufferAllocateInfo::builder()
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_pool(command_pool)
-                .command_buffer_count((cmd_buf_count * FRAME_OVERLAP) as u32)
+                .command_buffer_count(cmd_buf_count as u32)
                 .build();
 
             let bufs =
                 unsafe { ctx.device().allocate_command_buffers(&alloc_info) }?;
 
-            bufs.chunks_exact(2)
-                .filter_map(
-                    |c| {
-                        if let [a, b] = c {
-                            Some([*a, *b])
-                        } else {
-                            None
-                        }
-                    },
-                )
-                .collect()
+            bufs
         };
 
         Ok(Self {
             semaphores,
             fence,
             command_buffers,
+
+            executing: false.into(),
         })
     }
 }
@@ -454,28 +449,30 @@ impl VkEngine {
 
     pub fn draw_from_batches(
         &mut self,
-        batches: &[Vec<Box<dyn Fn(&BatchInput, vk::CommandBuffer)>>],
-        batch_dependencies: &[(usize, usize)],
+        frame: &mut FrameResources,
+        batches: &[Box<dyn Fn(&BatchInput, vk::CommandBuffer)>],
+        batch_dependencies: &[Option<Vec<(usize, vk::PipelineStageFlags)>>],
         acquire_image_batch: usize,
     ) -> Result<bool> {
         let ctx = &self.context;
         let device = self.context.device();
 
-        let frame_n = self.frame_number;
-        let f_ix = frame_n % FRAME_OVERLAP;
+        // let frame_n = self.frame_number;
+        // let f_ix = frame_n % FRAME_OVERLAP;
 
-        let frame = &self.frames[f_ix];
-
-        if frame_n != f_ix {
-            let fences = [self.resources[frame.render_fence]];
+        if frame.executing.load() {
+            let fences = [self.resources[frame.fence]];
 
             unsafe {
                 device.wait_for_fences(&fences, true, 1_000_000_000)?;
                 device.reset_fences(&fences)?;
             };
+            frame.executing.store(false);
         }
 
-        let img_available = self.resources[frame.present_semaphore];
+        // TODO hackyyyyyyy
+        let present_ix = frame.semaphores.len() - 1;
+        let img_available = self.resources[frame.semaphores[present_ix]];
 
         let swapchain_img_ix = unsafe {
             let result = self.swapchain.acquire_next_image(
@@ -495,13 +492,123 @@ impl VkEngine {
             }
         };
 
-        let batch_semaphores = (0..batch_dependencies.len())
-            .filter_map(|_| {
-                self.resources.allocate_semaphore(&self.context).ok()
-            })
-            .collect::<Vec<_>>();
+        for (ix, &cmd) in frame.command_buffers.iter().enumerate() {
+            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            unsafe {
+                device.reset_command_buffer(
+                    cmd,
+                    vk::CommandBufferResetFlags::empty(),
+                )?;
+
+                device.begin_command_buffer(cmd, &cmd_begin_info)?;
+            }
+
+            let batch_input = BatchInput {
+                swapchain_image_ix: (ix == acquire_image_batch)
+                    .then(|| swapchain_img_ix),
+            };
+
+            (&batches[ix])(&batch_input, cmd);
+
+            unsafe { device.end_command_buffer(cmd) }?;
+        }
 
         todo!();
+
+        let mut batch_dep_info: Vec<(Vec<usize>, Vec<vk::PipelineStageFlags>)> =
+            Vec::new();
+
+        let mut batch_rev_deps: Vec<Vec<usize>> =
+            vec![Vec::new(); frame.command_buffers.len()];
+
+        let mut get_semaphore = {
+            let mut semaphore_map: FxHashMap<(usize, usize), SemaphoreIx> =
+                FxHashMap::default();
+            let mut sem_ix = 0usize;
+
+            |a: usize, b: usize| {
+                if let Some(s) = semaphore_map.get(&(a, b)) {
+                    *s
+                } else {
+                    let s = frame.semaphores[sem_ix];
+                    sem_ix += 1;
+                    s
+                }
+            }
+        };
+
+        for (ix, deps) in batch_dependencies.iter().enumerate() {
+            let mut wait = Vec::new();
+            let mut wait_mask = Vec::new();
+
+            if let Some(deps) = deps {
+                for (dep_ix, mask) in deps {
+                    wait.push(*dep_ix);
+                    wait_mask.push(*mask);
+
+                    let _ = get_semaphore(*dep_ix, ix);
+
+                    let rev = &mut batch_rev_deps[ix];
+                    rev.push(ix);
+                }
+            }
+
+            batch_dep_info.push((wait, wait_mask));
+        }
+
+        let mut batches = Vec::new();
+
+        for (ix, ((deps_ix, stages), revs_ix)) in
+            batch_dep_info.into_iter().zip(batch_rev_deps).enumerate()
+        {
+            let mut wait_semaphores = deps_ix
+                .into_iter()
+                .map(|prev| {
+                    let s = get_semaphore(prev, ix);
+                    self.resources[s]
+                })
+                .collect::<Vec<_>>();
+            let mut wait_mask =
+                stages.into_iter().map(|s| s).collect::<Vec<_>>();
+
+            if ix == acquire_image_batch {
+                wait_semaphores.push(img_available);
+                wait_mask.push(vk::PipelineStageFlags::NONE_KHR);
+            }
+
+            let signal_semaphores = revs_ix
+                .into_iter()
+                .map(|prev| {
+                    let s = get_semaphore(prev, ix);
+                    self.resources[s]
+                })
+                .collect::<Vec<_>>();
+
+            let cmd_bufs = [frame.command_buffers[ix]];
+
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(&cmd_bufs)
+                .wait_semaphores(&wait_semaphores)
+                .wait_dst_stage_mask(&wait_mask)
+                .signal_semaphores(&signal_semaphores)
+                .build();
+
+            batches.push(submit_info);
+        }
+
+        let queue = self.queues.thread.queue;
+
+        unsafe {
+            device.queue_submit(
+                queue,
+                &batches,
+                self.resources[frame.fence],
+            )?;
+        }
+
+        frame.executing.store(true);
 
         Ok(true)
     }
