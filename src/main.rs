@@ -1,9 +1,10 @@
 use engine::graph::GraphDsl;
 use engine::vk::{
-    BatchInput, DescSetIx, GpuResources, ImageIx, PipelineIx, VkEngine,
+    BatchInput, DescSetIx, FrameResources, GpuResources, ImageIx, PipelineIx,
+    VkEngine,
 };
 
-use ash::vk;
+use ash::{vk, Device};
 
 use engine::vk::descriptor::{BindingDesc, BindingInput};
 use flexi_logger::{Duplicate, FileSpec, Logger};
@@ -21,20 +22,20 @@ struct ExampleState {
 }
 
 fn compute_batch(
-    engine: &VkEngine,
     state: ExampleState,
+    device: &Device,
+    resources: &GpuResources,
     input: &BatchInput,
     cmd: vk::CommandBuffer,
 ) {
-    let device = engine.ctx().device();
-    let image = &engine.resources[state.image];
+    let image = &resources[state.image];
 
     let width = image.extent.width;
     let height = image.extent.height;
 
     VkEngine::transition_image(
         cmd,
-        device,
+        &device,
         image.image,
         vk::AccessFlags::empty(),
         vk::PipelineStageFlags::TOP_OF_PIPE,
@@ -60,8 +61,9 @@ fn compute_batch(
 
     let groups = (x_groups, y_groups, 1);
 
-    engine.dispatch_compute(
-        device,
+    VkEngine::dispatch_compute(
+        resources,
+        &device,
         cmd,
         state.fill_color_pipeline,
         state.fill_color_desc,
@@ -71,7 +73,7 @@ fn compute_batch(
 
     VkEngine::transition_image(
         cmd,
-        device,
+        &device,
         image.image,
         vk::AccessFlags::SHADER_WRITE,
         vk::PipelineStageFlags::COMPUTE_SHADER,
@@ -83,23 +85,21 @@ fn compute_batch(
 }
 
 fn copy_batch(
-    engine: &VkEngine,
     state: ExampleState,
+    device: &Device,
+    resources: &GpuResources,
     input: &BatchInput,
     cmd: vk::CommandBuffer,
 ) {
-    let device = engine.ctx().device();
-    let image = &engine.resources[state.image];
+    let image = &resources[state.image];
 
     let src_img = image.image;
 
-    let ix = input.swapchain_image_ix.unwrap() as usize;
-
-    let dst_img = engine.swapchain_images[ix];
+    let dst_img = input.swapchain_image.unwrap();
 
     VkEngine::transition_image(
         cmd,
-        device,
+        &device,
         dst_img,
         vk::AccessFlags::NONE_KHR,
         vk::PipelineStageFlags::TOP_OF_PIPE,
@@ -110,7 +110,7 @@ fn copy_batch(
     );
 
     VkEngine::copy_image(
-        device,
+        &device,
         cmd,
         src_img,
         dst_img,
@@ -121,7 +121,7 @@ fn copy_batch(
 
     VkEngine::transition_image(
         cmd,
-        device,
+        &device,
         dst_img,
         vk::AccessFlags::TRANSFER_WRITE,
         vk::PipelineStageFlags::TRANSFER,
@@ -212,6 +212,54 @@ fn main() -> Result<()> {
         image,
     };
 
+    let mut frames = {
+        let queue_ix = engine.queues.thread.queue_family_index;
+
+        let semaphore_count = 32;
+        let cmd_buf_count = 2;
+
+        let mut new_frame = || {
+            engine
+                .with_allocators(|ctx, res, _alloc| {
+                    FrameResources::new(
+                        ctx,
+                        res,
+                        queue_ix,
+                        semaphore_count,
+                        cmd_buf_count,
+                    )
+                })
+                .unwrap()
+        };
+        [new_frame(), new_frame()]
+    };
+
+    let main_batch = Box::new(
+        move |dev: &Device,
+              res: &GpuResources,
+              input: &BatchInput,
+              cmd: vk::CommandBuffer| {
+            compute_batch(ex_state, dev, res, input, cmd)
+        },
+    ) as Box<_>;
+
+    let copy_batch = Box::new(
+        move |dev: &Device,
+              res: &GpuResources,
+              input: &BatchInput,
+              cmd: vk::CommandBuffer| {
+            copy_batch(ex_state, dev, res, input, cmd)
+        },
+    ) as Box<_>;
+
+    let batches = [main_batch, copy_batch];
+
+    let deps = vec![
+        None,
+        Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
+    ];
+    // let deps = vec![(0, 1)];
+
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     let start = std::time::Instant::now();
@@ -230,11 +278,20 @@ fn main() -> Result<()> {
 
                 let color = [r, 1.0, b, 1.0];
 
+                let f_ix = engine.current_frame_number();
+                let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
+
+                let render_success = engine
+                    .draw_from_batches(frame, &batches, deps.as_slice(), 1)
+                    .unwrap();
+
+                /*
                 let render_success = engine
                     .draw_from_compute(
                         pipeline, image, desc_set, width, height, color,
                     )
                     .unwrap();
+                */
 
                 if !render_success {
                     _dirty_swapchain = true;

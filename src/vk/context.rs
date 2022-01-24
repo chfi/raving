@@ -27,7 +27,7 @@ pub struct GpuTask {
 
 pub struct VkQueueThread {
     pub(super) queue: vk::Queue,
-    pub(super) queue_family_index: u32,
+    pub queue_family_index: u32,
     // queue_index: u32,
     tasks_rx: Receiver<GpuTask>,
     tasks_tx: Sender<GpuTask>,
@@ -44,7 +44,7 @@ pub struct VkQueueThread {
 
 pub struct Queues {
     // queues: Vec<VkQueueThread>,
-    pub(super) thread: VkQueueThread,
+    pub thread: VkQueueThread,
     // task_tx: Sender<GpuTask>,
     // task_rx: Receiver<GpuTask>,
     // queue: VkQueueThread,
@@ -132,11 +132,15 @@ impl VkContext {
         physical_device: vk::PhysicalDevice,
         device: Device,
     ) -> anyhow::Result<Self> {
-        let get_physical_device_features2 = unsafe {
-            KhrGetPhysicalDeviceProperties2Fn::load(|name| {
-                std::mem::transmute(entry.get_instance_proc_addr(instance.handle(), name.as_ptr()))
-            })
-        };
+        let get_physical_device_features2 =
+            unsafe {
+                KhrGetPhysicalDeviceProperties2Fn::load(|name| {
+                    std::mem::transmute(entry.get_instance_proc_addr(
+                        instance.handle(),
+                        name.as_ptr(),
+                    ))
+                })
+            };
 
         Ok(VkContext {
             _entry: entry,
@@ -169,10 +173,13 @@ impl VkContext {
     ) -> Option<vk::Format> {
         candidates.iter().cloned().find(|candidate| {
             let props = unsafe {
-                self.instance
-                    .get_physical_device_format_properties(self.physical_device, *candidate)
+                self.instance.get_physical_device_format_properties(
+                    self.physical_device,
+                    *candidate,
+                )
             };
-            (tiling == vk::ImageTiling::LINEAR && props.linear_tiling_features.contains(features))
+            (tiling == vk::ImageTiling::LINEAR
+                && props.linear_tiling_features.contains(features))
                 || (tiling == vk::ImageTiling::OPTIMAL
                     && props.optimal_tiling_features.contains(features))
         })

@@ -32,7 +32,7 @@ pub struct VkEngine {
     pub resources: GpuResources,
     pub context: VkContext,
 
-    queues: Queues,
+    pub queues: Queues,
 
     pub swapchain: Swapchain,
     pub swapchain_khr: vk::SwapchainKHR,
@@ -49,7 +49,7 @@ pub struct VkEngine {
 
 #[derive(Default, Clone)]
 pub struct BatchInput {
-    pub swapchain_image_ix: Option<u32>,
+    pub swapchain_image: Option<vk::Image>,
 }
 
 pub struct FrameResources {
@@ -311,12 +311,16 @@ impl VkEngine {
         self.context.device()
     }
 
+    pub fn current_frame_number(&self) -> usize {
+        self.frame_number
+    }
+
     pub fn current_frame(&self) -> &FrameData {
         &self.frames[self.frame_number % FRAME_OVERLAP]
     }
 
     pub fn dispatch_compute(
-        &self,
+        resources: &GpuResources,
         device: &Device,
         cmd: vk::CommandBuffer,
         pipeline_ix: PipelineIx,
@@ -324,9 +328,9 @@ impl VkEngine {
         push_constants: &[u8],
         groups: (u32, u32, u32),
     ) -> vk::CommandBuffer {
-        let (pipeline, pipeline_layout) = self.resources[pipeline_ix];
+        let (pipeline, pipeline_layout) = resources[pipeline_ix];
 
-        let desc_set = self.resources[desc_set_ix];
+        let desc_set = resources[desc_set_ix];
 
         unsafe {
             let bind_point = vk::PipelineBindPoint::COMPUTE;
@@ -450,7 +454,9 @@ impl VkEngine {
     pub fn draw_from_batches(
         &mut self,
         frame: &mut FrameResources,
-        batches: &[Box<dyn Fn(&BatchInput, vk::CommandBuffer)>],
+        batches: &[Box<
+            dyn Fn(&Device, &GpuResources, &BatchInput, vk::CommandBuffer),
+        >],
         batch_dependencies: &[Option<Vec<(usize, vk::PipelineStageFlags)>>],
         acquire_image_batch: usize,
     ) -> Result<bool> {
@@ -492,6 +498,8 @@ impl VkEngine {
             }
         };
 
+        let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
+
         for (ix, &cmd) in frame.command_buffers.iter().enumerate() {
             let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
@@ -506,16 +514,14 @@ impl VkEngine {
             }
 
             let batch_input = BatchInput {
-                swapchain_image_ix: (ix == acquire_image_batch)
-                    .then(|| swapchain_img_ix),
+                swapchain_image: (ix == acquire_image_batch)
+                    .then(|| swapchain_img),
             };
 
-            (&batches[ix])(&batch_input, cmd);
+            (&batches[ix])(device, &self.resources, &batch_input, cmd);
 
             unsafe { device.end_command_buffer(cmd) }?;
         }
-
-        todo!();
 
         let mut batch_dep_info: Vec<(Vec<usize>, Vec<vk::PipelineStageFlags>)> =
             Vec::new();
@@ -523,11 +529,11 @@ impl VkEngine {
         let mut batch_rev_deps: Vec<Vec<usize>> =
             vec![Vec::new(); frame.command_buffers.len()];
 
-        let mut get_semaphore = {
-            let mut semaphore_map: FxHashMap<(usize, usize), SemaphoreIx> =
-                FxHashMap::default();
-            let mut sem_ix = 0usize;
+        let mut semaphore_map: FxHashMap<(usize, usize), SemaphoreIx> =
+            FxHashMap::default();
+        let mut sem_ix = 0usize;
 
+        let mut get_semaphore = {
             |a: usize, b: usize| {
                 if let Some(s) = semaphore_map.get(&(a, b)) {
                     *s
@@ -609,6 +615,7 @@ impl VkEngine {
         }
 
         frame.executing.store(true);
+        self.frame_number += 1;
 
         Ok(true)
     }
@@ -711,7 +718,8 @@ impl VkEngine {
 
             let groups = (x_groups, y_groups, 1);
 
-            self.dispatch_compute(
+            Self::dispatch_compute(
+                &self.resources,
                 device,
                 cmd,
                 pipeline_ix,
