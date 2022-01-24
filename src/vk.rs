@@ -46,6 +46,74 @@ pub struct VkEngine {
     frame_number: usize,
 }
 
+#[derive(Default, Clone)]
+pub struct BatchInput {
+    pub swapchain_image_ix: Option<u32>,
+}
+
+pub struct FrameResources {
+    semaphores: Vec<SemaphoreIx>,
+
+    fence: FenceIx,
+    command_buffers: Vec<[vk::CommandBuffer; FRAME_OVERLAP]>,
+}
+
+impl FrameResources {
+    pub fn new(
+        ctx: &VkContext,
+        res: &mut GpuResources,
+        queue_ix: u32,
+        semaphore_count: usize,
+        cmd_buf_count: usize,
+    ) -> Result<Self> {
+        let semaphores = (0..semaphore_count)
+            .filter_map(|_| res.allocate_semaphore(ctx).ok())
+            .collect();
+
+        let fence = res.allocate_fence(ctx)?;
+
+        let create_flags = vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER;
+
+        let command_pool_info = vk::CommandPoolCreateInfo::builder()
+            .queue_family_index(queue_ix)
+            .flags(create_flags)
+            .build();
+
+        let command_pool = unsafe {
+            ctx.device().create_command_pool(&command_pool_info, None)
+        }?;
+
+        let command_buffers = {
+            let alloc_info = vk::CommandBufferAllocateInfo::builder()
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_pool(command_pool)
+                .command_buffer_count((cmd_buf_count * FRAME_OVERLAP) as u32)
+                .build();
+
+            let bufs =
+                unsafe { ctx.device().allocate_command_buffers(&alloc_info) }?;
+
+            bufs.chunks_exact(2)
+                .filter_map(
+                    |c| {
+                        if let [a, b] = c {
+                            Some([*a, *b])
+                        } else {
+                            None
+                        }
+                    },
+                )
+                .collect()
+        };
+
+        Ok(Self {
+            semaphores,
+            fence,
+            command_buffers,
+        })
+    }
+}
+
 pub struct FrameData {
     present_semaphore: SemaphoreIx,
     copy_semaphore: SemaphoreIx,
@@ -386,7 +454,7 @@ impl VkEngine {
 
     pub fn draw_from_batches(
         &mut self,
-        batches: &[Vec<vk::CommandBuffer>],
+        batches: &[Vec<Box<dyn Fn(&BatchInput, vk::CommandBuffer)>>],
         batch_dependencies: &[(usize, usize)],
         acquire_image_batch: usize,
     ) -> Result<bool> {
@@ -426,6 +494,12 @@ impl VkEngine {
                 ),
             }
         };
+
+        let batch_semaphores = (0..batch_dependencies.len())
+            .filter_map(|_| {
+                self.resources.allocate_semaphore(&self.context).ok()
+            })
+            .collect::<Vec<_>>();
 
         todo!();
 

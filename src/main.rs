@@ -1,5 +1,5 @@
 use engine::graph::GraphDsl;
-use engine::vk::VkEngine;
+use engine::vk::{BatchInput, VkEngine};
 
 use ash::vk;
 
@@ -10,6 +10,8 @@ use winit::event::{Event, WindowEvent};
 use winit::{event_loop::EventLoop, window::WindowBuilder};
 
 use anyhow::Result;
+
+fn compute_batch(input: &BatchInput,
 
 fn main() -> Result<()> {
     // let args: Args = argh::from_env();
