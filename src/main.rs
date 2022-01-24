@@ -16,9 +16,86 @@ use anyhow::Result;
 
 #[derive(Clone, Copy)]
 struct ExampleState {
-    fill_color_pipeline: PipelineIx,
-    fill_color_desc: DescSetIx,
-    image: ImageIx,
+    fill_pipeline: PipelineIx,
+    fill_set: DescSetIx,
+    fill_image: ImageIx,
+
+    flip_pipeline: PipelineIx,
+    flip_set: DescSetIx,
+    flip_image: ImageIx,
+}
+
+fn flip_batch(
+    state: ExampleState,
+    device: &Device,
+    resources: &GpuResources,
+    input: &BatchInput,
+    cmd: vk::CommandBuffer,
+) {
+    let src = &resources[state.fill_image];
+    let dst = &resources[state.flip_image];
+
+    let width = src.extent.width;
+    let height = src.extent.height;
+
+    VkEngine::transition_image(
+        cmd,
+        &device,
+        src.image,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::GENERAL,
+    );
+
+    VkEngine::transition_image(
+        cmd,
+        &device,
+        dst.image,
+        vk::AccessFlags::empty(),
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::GENERAL,
+    );
+
+    let push_constants = [width as u32, height as u32];
+
+    let mut bytes: Vec<u8> = Vec::with_capacity(8);
+    bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
+
+    let x_size = 16;
+    let y_size = 16;
+
+    let x_groups = (width / x_size) + width % x_size;
+    let y_groups = (height / y_size) + height % y_size;
+
+    let groups = (x_groups, y_groups, 1);
+
+    VkEngine::dispatch_compute(
+        resources,
+        &device,
+        cmd,
+        state.flip_pipeline,
+        state.flip_set,
+        bytes.as_slice(),
+        groups,
+    );
+
+    VkEngine::transition_image(
+        cmd,
+        &device,
+        dst.image,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::TRANSFER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    );
 }
 
 fn compute_batch(
@@ -28,7 +105,7 @@ fn compute_batch(
     input: &BatchInput,
     cmd: vk::CommandBuffer,
 ) {
-    let image = &resources[state.image];
+    let image = &resources[state.fill_image];
 
     let width = image.extent.width;
     let height = image.extent.height;
@@ -65,8 +142,8 @@ fn compute_batch(
         resources,
         &device,
         cmd,
-        state.fill_color_pipeline,
-        state.fill_color_desc,
+        state.fill_pipeline,
+        state.fill_set,
         bytes.as_slice(),
         groups,
     );
@@ -91,7 +168,7 @@ fn copy_batch(
     input: &BatchInput,
     cmd: vk::CommandBuffer,
 ) {
-    let image = &resources[state.image];
+    let image = &resources[state.fill_image];
 
     let src_img = image.image;
 
@@ -154,16 +231,108 @@ fn main() -> Result<()> {
 
     let mut engine = VkEngine::new(&window)?;
 
+    let example_state = engine.with_allocators(|ctx, res, alloc| {
+        let fill_bindings = [BindingDesc::StorageImage { binding: 0 }];
+
+        let fill_pc_size =
+            std::mem::size_of::<[i32; 2]>() + std::mem::size_of::<[f32; 4]>();
+
+        let fill_pipeline = res.load_compute_shader_runtime(
+            ctx,
+            "shaders/fill_color.comp.spv",
+            &fill_bindings,
+            fill_pc_size,
+        )?;
+
+        let flip_bindings = [
+            BindingDesc::StorageImage { binding: 0 },
+            BindingDesc::StorageImage { binding: 1 },
+        ];
+        let flip_pc_size = std::mem::size_of::<[i32; 2]>();
+
+        let flip_pipeline = res.load_compute_shader_runtime(
+            ctx,
+            "shaders/trig_color.comp.spv",
+            &flip_bindings,
+            flip_pc_size,
+        )?;
+
+        let fill_image = res.allocate_image(
+            ctx,
+            alloc,
+            width,
+            height,
+            vk::Format::R8G8B8A8_UNORM,
+            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+        )?;
+
+        let flip_image = res.allocate_image(
+            ctx,
+            alloc,
+            width,
+            height,
+            vk::Format::R8G8B8A8_UNORM,
+            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+        )?;
+
+        let fill_view = res.create_image_view_for_image(ctx, fill_image)?;
+        let flip_view = res.create_image_view_for_image(ctx, flip_image)?;
+
+        let fill_inputs = [BindingInput::ImageView {
+            binding: 0,
+            view: fill_view,
+        }];
+
+        let fill_set = res.allocate_desc_set(
+            &fill_bindings,
+            &fill_inputs,
+            vk::ShaderStageFlags::COMPUTE,
+        )?;
+
+        let flip_inputs = [
+            BindingInput::ImageView {
+                binding: 0,
+                view: fill_view,
+            },
+            BindingInput::ImageView {
+                binding: 1,
+                view: flip_view,
+            },
+        ];
+        let flip_set = res.allocate_desc_set(
+            &flip_bindings,
+            &flip_inputs,
+            vk::ShaderStageFlags::COMPUTE,
+        )?;
+
+        Ok(ExampleState {
+            fill_pipeline,
+            fill_set,
+            fill_image,
+            flip_pipeline,
+            flip_set,
+            flip_image,
+        })
+    })?;
+
+    /*
     let (pipeline, image, desc_set) =
         engine.with_allocators(|ctx, res, alloc| {
             let bindings = [BindingDesc::StorageImage { binding: 0 }];
 
-            let pc_size_1 = std::mem::size_of::<[i32; 2]>()
-                + std::mem::size_of::<[f32; 4]>();
+            // let pc_size_1 = std::mem::size_of::<[i32; 2]>()
+            //     + std::mem::size_of::<[f32; 4]>();
+            let pc_size_1 = std::mem::size_of::<[i32; 2]>();
 
+            // let pipeline = res.load_compute_shader_runtime(
+            //     ctx,
+            //     "shaders/fill_color.comp.spv",
+            //     &bindings,
+            //     pc_size_1,
+            // )?;
             let pipeline = res.load_compute_shader_runtime(
                 ctx,
-                "shaders/fill_color.comp.spv",
+                "shaders/trig_color.comp.spv",
                 &bindings,
                 pc_size_1,
             )?;
@@ -176,8 +345,8 @@ fn main() -> Result<()> {
                 // right now this image is copied to the swapchain, which on
                 // my system uses BGRA rather than RGBA, so this is just a
                 // temporary fix
-                vk::Format::B8G8R8A8_UNORM,
-                // vk::Format::R8G8B8A8_UNORM,
+                // vk::Format::B8G8R8A8_UNORM,
+                vk::Format::R8G8B8A8_UNORM,
                 vk::ImageUsageFlags::STORAGE
                     | vk::ImageUsageFlags::TRANSFER_SRC,
             )?;
@@ -194,12 +363,7 @@ fn main() -> Result<()> {
 
             Ok((pipeline, image, set))
         })?;
-
-    let ex_state = ExampleState {
-        fill_color_pipeline: pipeline,
-        fill_color_desc: desc_set,
-        image,
-    };
+    */
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
@@ -228,7 +392,7 @@ fn main() -> Result<()> {
               res: &GpuResources,
               input: &BatchInput,
               cmd: vk::CommandBuffer| {
-            compute_batch(ex_state, dev, res, input, cmd)
+            compute_batch(example_state, dev, res, input, cmd)
         },
     ) as Box<_>;
 
@@ -237,7 +401,7 @@ fn main() -> Result<()> {
               res: &GpuResources,
               input: &BatchInput,
               cmd: vk::CommandBuffer| {
-            copy_batch(ex_state, dev, res, input, cmd)
+            copy_batch(example_state, dev, res, input, cmd)
         },
     ) as Box<_>;
 
