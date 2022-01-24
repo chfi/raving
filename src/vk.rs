@@ -370,6 +370,99 @@ impl VkEngine {
         cmd
     }
 
+    pub fn copy_buffer(
+        device: &Device,
+        cmd: vk::CommandBuffer,
+        src: vk::Buffer,
+        dst: vk::Buffer,
+        len: usize,
+        src_offset: Option<u64>,
+        dst_offset: Option<u64>,
+    ) {
+        let region = vk::BufferCopy {
+            src_offset: src_offset.unwrap_or_default(),
+            dst_offset: dst_offset.unwrap_or_default(),
+            size: len as u64,
+        };
+        let regions = [region];
+
+        unsafe { device.cmd_copy_buffer(cmd, src, dst, &regions) };
+    }
+
+    pub fn copy_buffer_to_image(
+        device: &Device,
+        cmd: vk::CommandBuffer,
+        src: vk::Buffer,
+        dst: vk::Image,
+        extent: vk::Extent3D,
+        src_offset: Option<u64>,
+    ) {
+        let region = vk::BufferImageCopy::builder()
+            .buffer_offset(src_offset.unwrap_or_default())
+            .buffer_row_length(0)
+            .buffer_image_height(0)
+            .image_subresource(vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+            .image_extent(extent)
+            .build();
+
+        let regions = [region];
+
+        unsafe {
+            device.cmd_copy_buffer_to_image(
+                cmd,
+                src,
+                dst,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &regions,
+            )
+        }
+    }
+
+    pub fn copy_image_to_buffer(
+        device: &Device,
+        cmd: vk::CommandBuffer,
+        src: vk::Image,
+        dst: vk::Buffer,
+        extent: vk::Extent3D,
+        dst_offset: Option<u64>,
+    ) {
+        let region = vk::BufferImageCopy::builder()
+            .buffer_offset(dst_offset.unwrap_or_default())
+            .buffer_row_length(0)
+            .buffer_image_height(0)
+            .image_subresource(vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+            .image_extent(vk::Extent3D {
+                width: extent.width,
+                height: extent.height,
+                depth: 1,
+            })
+            .build();
+
+        let regions = [region];
+
+        unsafe {
+            device.cmd_copy_image_to_buffer(
+                cmd,
+                src,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                dst,
+                &regions,
+            )
+        }
+    }
+
     pub fn copy_image(
         device: &Device,
         cmd: vk::CommandBuffer,
@@ -378,7 +471,7 @@ impl VkEngine {
         extent: vk::Extent3D,
         src_layout: vk::ImageLayout,
         dst_layout: vk::ImageLayout,
-    ) -> vk::CommandBuffer {
+    ) {
         let src_subres = vk::ImageSubresourceLayers {
             aspect_mask: vk::ImageAspectFlags::COLOR,
             mip_level: 0,
@@ -400,8 +493,6 @@ impl VkEngine {
             device
                 .cmd_copy_image(cmd, src, src_layout, dst, dst_layout, &regions)
         };
-
-        cmd
     }
 
     pub fn transition_image(
@@ -414,7 +505,7 @@ impl VkEngine {
         dst_stage_mask: vk::PipelineStageFlags,
         old_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
-    ) -> vk::CommandBuffer {
+    ) {
         let image_barrier = vk::ImageMemoryBarrier::builder()
             .src_access_mask(src_access_mask)
             .dst_access_mask(dst_access_mask)
@@ -447,8 +538,6 @@ impl VkEngine {
                 &image_barriers,
             );
         };
-
-        cmd
     }
 
     pub fn draw_from_batches(
