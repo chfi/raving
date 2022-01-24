@@ -44,7 +44,7 @@ fn flip_batch(
         src.image,
         vk::AccessFlags::SHADER_WRITE,
         vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::AccessFlags::SHADER_WRITE,
+        vk::AccessFlags::SHADER_READ,
         vk::PipelineStageFlags::COMPUTE_SHADER,
         vk::ImageLayout::GENERAL,
         vk::ImageLayout::GENERAL,
@@ -124,10 +124,11 @@ fn compute_batch(
 
     let push_constants = [width as u32, height as u32];
 
-    let color = [1f32, 0.0, 0.0, 1.0];
+    // let color = [1f32, 0.0, 0.0, 1.0];
+    // let mut bytes: Vec<u8> = Vec::with_capacity(24);
+    // bytes.extend_from_slice(bytemuck::cast_slice(&color));
 
-    let mut bytes: Vec<u8> = Vec::with_capacity(24);
-    bytes.extend_from_slice(bytemuck::cast_slice(&color));
+    let mut bytes: Vec<u8> = Vec::with_capacity(8);
     bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
 
     let x_size = 16;
@@ -148,17 +149,17 @@ fn compute_batch(
         groups,
     );
 
-    VkEngine::transition_image(
-        cmd,
-        &device,
-        image.image,
-        vk::AccessFlags::SHADER_WRITE,
-        vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::AccessFlags::TRANSFER_READ,
-        vk::PipelineStageFlags::TRANSFER,
-        vk::ImageLayout::GENERAL,
-        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-    );
+    // VkEngine::transition_image(
+    //     cmd,
+    //     &device,
+    //     image.image,
+    //     vk::AccessFlags::SHADER_WRITE,
+    //     vk::PipelineStageFlags::COMPUTE_SHADER,
+    //     vk::AccessFlags::TRANSFER_READ,
+    //     vk::PipelineStageFlags::TRANSFER,
+    //     vk::ImageLayout::GENERAL,
+    //     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    // );
 }
 
 fn copy_batch(
@@ -168,7 +169,7 @@ fn copy_batch(
     input: &BatchInput,
     cmd: vk::CommandBuffer,
 ) {
-    let image = &resources[state.fill_image];
+    let image = &resources[state.flip_image];
 
     let src_img = image.image;
 
@@ -234,12 +235,13 @@ fn main() -> Result<()> {
     let example_state = engine.with_allocators(|ctx, res, alloc| {
         let fill_bindings = [BindingDesc::StorageImage { binding: 0 }];
 
-        let fill_pc_size =
-            std::mem::size_of::<[i32; 2]>() + std::mem::size_of::<[f32; 4]>();
+        // let fill_pc_size =
+        //     std::mem::size_of::<[i32; 2]>() + std::mem::size_of::<[f32; 4]>();
+        let fill_pc_size = std::mem::size_of::<[i32; 2]>();
 
         let fill_pipeline = res.load_compute_shader_runtime(
             ctx,
-            "shaders/fill_color.comp.spv",
+            "shaders/trig_color.comp.spv",
             &fill_bindings,
             fill_pc_size,
         )?;
@@ -252,7 +254,7 @@ fn main() -> Result<()> {
 
         let flip_pipeline = res.load_compute_shader_runtime(
             ctx,
-            "shaders/trig_color.comp.spv",
+            "shaders/flip.comp.spv",
             &flip_bindings,
             flip_pc_size,
         )?;
@@ -369,7 +371,7 @@ fn main() -> Result<()> {
         let queue_ix = engine.queues.thread.queue_family_index;
 
         let semaphore_count = 32;
-        let cmd_buf_count = 2;
+        let cmd_buf_count = 3;
 
         let mut new_frame = || {
             engine
@@ -405,11 +407,21 @@ fn main() -> Result<()> {
         },
     ) as Box<_>;
 
-    let batches = [main_batch, copy_batch];
+    let flip_batch = Box::new(
+        move |dev: &Device,
+              res: &GpuResources,
+              input: &BatchInput,
+              cmd: vk::CommandBuffer| {
+            flip_batch(example_state, dev, res, input, cmd)
+        },
+    ) as Box<_>;
+
+    let batches = [main_batch, flip_batch, copy_batch];
 
     let deps = vec![
         None,
         Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
+        Some(vec![(1, vk::PipelineStageFlags::COMPUTE_SHADER)]),
     ];
 
     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -434,7 +446,7 @@ fn main() -> Result<()> {
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
 
                 let render_success = engine
-                    .draw_from_batches(frame, &batches, deps.as_slice(), 1)
+                    .draw_from_batches(frame, &batches, deps.as_slice(), 2)
                     .unwrap();
 
                 /*
