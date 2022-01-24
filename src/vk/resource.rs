@@ -24,18 +24,6 @@ pub mod index;
 use graph::*;
 pub use index::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum PipelineType {
-    Compute,
-}
-
-pub struct Pipeline {
-    pipeline: vk::Pipeline,
-    layout: vk::PipelineLayout,
-
-    bindings: Vec<BindingDesc>,
-}
-
 pub struct GpuResources {
     descriptor_allocator: DescriptorAllocator,
     layout_cache: DescriptorLayoutCache,
@@ -77,93 +65,6 @@ impl GpuResources {
         };
 
         Ok(result)
-    }
-
-    pub fn dispatch_compute(
-        &self,
-        cmd: vk::CommandBuffer,
-        device: &Device,
-        pipeline_ix: PipelineIx,
-        image_ix: ImageIx,
-        desc_set_ix: DescSetIx,
-        width: u32,
-        height: u32,
-        color: [f32; 4],
-    ) -> Result<()> {
-        let (pipeline, pipeline_layout) = self[pipeline_ix];
-
-        // transition image TRANSFER_SRC_OPTIMAL -> GENERAL
-        self.transition_image(
-            cmd,
-            device,
-            image_ix,
-            vk::AccessFlags::TRANSFER_READ,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::AccessFlags::SHADER_WRITE,
-            vk::PipelineStageFlags::COMPUTE_SHADER,
-            vk::ImageLayout::UNDEFINED,
-            vk::ImageLayout::GENERAL,
-        );
-
-        // dispatch
-
-        let desc_set = self[desc_set_ix];
-
-        unsafe {
-            let bind_point = vk::PipelineBindPoint::COMPUTE;
-            device.cmd_bind_pipeline(cmd, bind_point, pipeline);
-
-            let desc_sets = [desc_set];
-            let null = [];
-
-            device.cmd_bind_descriptor_sets(
-                cmd,
-                bind_point,
-                pipeline_layout,
-                0,
-                &desc_sets,
-                &null,
-            );
-
-            let push_constants = [width as u32, height as u32];
-
-            let mut bytes: Vec<u8> = Vec::with_capacity(24);
-            bytes.extend_from_slice(bytemuck::cast_slice(&color));
-            bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
-
-            device.cmd_push_constants(
-                cmd,
-                pipeline_layout,
-                vk::ShaderStageFlags::COMPUTE,
-                0,
-                &bytes,
-            );
-        };
-
-        let x_size = 16;
-        let y_size = 16;
-
-        let x_groups = (width / x_size) + width % x_size;
-        let y_groups = (height / y_size) + height % y_size;
-
-        unsafe {
-            device.cmd_dispatch(cmd, x_groups, y_groups, 1);
-        };
-
-        // transition image GENERAL -> TRANSFER_SRC_OPTIMAL
-        self.transition_image(
-            cmd,
-            device,
-            image_ix,
-            vk::AccessFlags::SHADER_WRITE,
-            vk::PipelineStageFlags::COMPUTE_SHADER,
-            vk::AccessFlags::TRANSFER_READ,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::ImageLayout::GENERAL,
-            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-        );
-
-        Ok(())
     }
 
     pub fn allocate_image(

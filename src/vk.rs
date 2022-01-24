@@ -558,15 +558,12 @@ impl VkEngine {
                     let _ = get_semaphore(*dep_ix, ix);
 
                     let rev = &mut batch_rev_deps[*dep_ix];
-                    log::warn!("pushing {} to {} rev deps", ix, dep_ix);
                     rev.push(ix);
                 }
             }
 
             batch_dep_info.push((wait, wait_mask));
         }
-
-        log::warn!("{:?}", batch_rev_deps);
 
         let mut batch_data = Vec::new();
 
@@ -575,13 +572,10 @@ impl VkEngine {
         for (ix, ((deps_ix, stages), revs_ix)) in
             batch_dep_info.into_iter().zip(batch_rev_deps).enumerate()
         {
-            log::warn!("batch {}, revs {:?}", ix, revs_ix);
-
             let mut wait_semaphores = deps_ix
                 .into_iter()
                 .map(|prev| {
                     let s = get_semaphore(prev, ix);
-                    log::warn!("wait: ({}, {}) -> {:?}", prev, ix, s);
                     self.resources[s]
                 })
                 .collect::<Vec<_>>();
@@ -593,18 +587,10 @@ impl VkEngine {
                 wait_mask.push(vk::PipelineStageFlags::BOTTOM_OF_PIPE);
             }
 
-            log::warn!("------------------");
-            for m in wait_mask.iter() {
-                log::warn!("{:?}", m);
-            }
-
-            log::warn!("wait_semaphores.len(): {}", wait_semaphores.len());
-
             let mut signal_semaphores = revs_ix
                 .into_iter()
                 .map(|next| {
                     let s = get_semaphore(ix, next);
-                    log::warn!("signal: ({}, {}) -> {:?}", ix, next, s);
                     self.resources[s]
                 })
                 .collect::<Vec<_>>();
@@ -614,8 +600,6 @@ impl VkEngine {
                 signal_semaphores.push(self.resources[s]);
                 last_semaphore = Some(s);
             }
-
-            log::warn!("signal_semaphores.len(): {}", signal_semaphores.len());
 
             let cmd_bufs = [frame.command_buffers[ix]];
 

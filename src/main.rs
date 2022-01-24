@@ -168,17 +168,6 @@ fn main() -> Result<()> {
                 pc_size_1,
             )?;
 
-            /*
-            let pc_size_2 = std::mem::size_of::<[i32; 2]>();
-
-            let flipline = res.load_compute_shader_runtime(
-                ctx,
-                "shaders/circle_flip.comp.spv",
-                &bindings,
-                pc_size_2,
-            )?;
-            */
-
             let image = res.allocate_image(
                 ctx,
                 alloc,
@@ -256,11 +245,8 @@ fn main() -> Result<()> {
 
     let deps = vec![
         None,
-        // Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
-        Some(vec![(0, vk::PipelineStageFlags::TRANSFER)]),
-        // Some(vec![(0, vk::PipelineStageFlags::empty())]),
+        Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
     ];
-    // let deps = vec![(0, 1)];
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
