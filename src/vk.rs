@@ -22,6 +22,8 @@ pub use resource::*;
 
 use context::{Queues, VkContext};
 
+use crate::graph::Batch;
+
 pub const FRAME_OVERLAP: usize = 2;
 
 pub struct VkEngine {
@@ -217,6 +219,20 @@ impl VkEngine {
         Ok(engine)
     }
 
+    pub fn with_resources<T, F>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce(&VkContext, &GpuResources) -> Result<T>,
+    {
+        f(&self.context, &self.resources)
+    }
+
+    pub fn with_allocators_ref<T, F>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce(&VkContext, &GpuResources, &Allocator) -> Result<T>,
+    {
+        f(&self.context, &self.resources, &self.allocator)
+    }
+
     pub fn with_allocators<T, F>(&mut self, f: F) -> Result<T>
     where
         F: FnOnce(&VkContext, &mut GpuResources, &mut Allocator) -> Result<T>,
@@ -236,6 +252,91 @@ impl VkEngine {
         &self.frames[self.frame_number % FRAME_OVERLAP]
     }
 
+    pub fn dispatch_compute(
+        &self,
+        device: &Device,
+        cmd: vk::CommandBuffer,
+        pipeline_ix: PipelineIx,
+        desc_set_ix: DescSetIx,
+        push_constants: &[u8],
+        groups: (u32, u32, u32),
+    ) -> vk::CommandBuffer {
+        let (pipeline, pipeline_layout) = self.resources[pipeline_ix];
+
+        let desc_set = self.resources[desc_set_ix];
+
+        unsafe {
+            let bind_point = vk::PipelineBindPoint::COMPUTE;
+            device.cmd_bind_pipeline(cmd, bind_point, pipeline);
+
+            let desc_sets = [desc_set];
+            let null = [];
+
+            device.cmd_bind_descriptor_sets(
+                cmd,
+                bind_point,
+                pipeline_layout,
+                0,
+                &desc_sets,
+                &null,
+            );
+
+            if !push_constants.is_empty() {
+                device.cmd_push_constants(
+                    cmd,
+                    pipeline_layout,
+                    vk::ShaderStageFlags::COMPUTE,
+                    0,
+                    push_constants,
+                );
+            }
+        };
+
+        // let x_size = 16;
+        // let y_size = 16;
+
+        // let x_groups = (width / x_size) + width % x_size;
+        // let y_groups = (height / y_size) + height % y_size;
+
+        unsafe { device.cmd_dispatch(cmd, groups.0, groups.1, groups.0) };
+
+        cmd
+    }
+
+    pub fn copy_image(
+        device: &Device,
+        cmd: vk::CommandBuffer,
+        src: vk::Image,
+        dst: vk::Image,
+        extent: vk::Extent3D,
+        src_layout: vk::ImageLayout,
+        dst_layout: vk::ImageLayout,
+    ) -> vk::CommandBuffer {
+        let src_subres = vk::ImageSubresourceLayers {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            mip_level: 0,
+            base_array_layer: 0,
+            layer_count: 1,
+        };
+
+        let region = vk::ImageCopy::builder()
+            .src_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+            .dst_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+            .src_subresource(src_subres)
+            .dst_subresource(src_subres)
+            .extent(extent)
+            .build();
+
+        let regions = [region];
+
+        unsafe {
+            device
+                .cmd_copy_image(cmd, src, src_layout, dst, dst_layout, &regions)
+        };
+
+        cmd
+    }
+
     pub fn transition_image(
         cmd: vk::CommandBuffer,
         device: &Device,
@@ -246,7 +347,7 @@ impl VkEngine {
         dst_stage_mask: vk::PipelineStageFlags,
         old_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
-    ) {
+    ) -> vk::CommandBuffer {
         let image_barrier = vk::ImageMemoryBarrier::builder()
             .src_access_mask(src_access_mask)
             .dst_access_mask(dst_access_mask)
@@ -279,6 +380,300 @@ impl VkEngine {
                 &image_barriers,
             );
         };
+
+        cmd
+    }
+
+    pub fn draw_from_batches(
+        &mut self,
+        batches: &[Vec<vk::CommandBuffer>],
+        batch_dependencies: &[(usize, usize)],
+        acquire_image_batch: usize,
+    ) -> Result<bool> {
+        let ctx = &self.context;
+        let device = self.context.device();
+
+        let frame_n = self.frame_number;
+        let f_ix = frame_n % FRAME_OVERLAP;
+
+        let frame = &self.frames[f_ix];
+
+        if frame_n != f_ix {
+            let fences = [self.resources[frame.render_fence]];
+
+            unsafe {
+                device.wait_for_fences(&fences, true, 1_000_000_000)?;
+                device.reset_fences(&fences)?;
+            };
+        }
+
+        let img_available = self.resources[frame.present_semaphore];
+
+        let swapchain_img_ix = unsafe {
+            let result = self.swapchain.acquire_next_image(
+                self.swapchain_khr,
+                std::u64::MAX,
+                img_available,
+                vk::Fence::null(),
+            );
+
+            match result {
+                Ok((img_index, _)) => img_index,
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(false),
+                Err(error) => bail!(
+                    "Error while acquiring next swapchain image: {}",
+                    error
+                ),
+            }
+        };
+
+        todo!();
+
+        Ok(true)
+    }
+
+    pub fn draw_from_compute_(
+        &mut self,
+        pipeline_ix: PipelineIx,
+        image_ix: ImageIx,
+        desc_set_ix: DescSetIx,
+        width: u32,
+        height: u32,
+        color: [f32; 4],
+    ) -> Result<bool> {
+        let ctx = &self.context;
+        let device = self.context.device();
+
+        let frame_n = self.frame_number;
+        let f_ix = frame_n % FRAME_OVERLAP;
+
+        let frame = &self.frames[f_ix];
+
+        if frame_n != f_ix {
+            let fences = [self.resources[frame.render_fence]];
+
+            unsafe {
+                device.wait_for_fences(&fences, true, 1_000_000_000)?;
+                device.reset_fences(&fences)?;
+            };
+        }
+
+        let img_available = self.resources[frame.present_semaphore];
+
+        let swapchain_img_ix = unsafe {
+            let result = self.swapchain.acquire_next_image(
+                self.swapchain_khr,
+                std::u64::MAX,
+                img_available,
+                vk::Fence::null(),
+            );
+
+            match result {
+                Ok((img_index, _)) => img_index,
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(false),
+                Err(error) => bail!(
+                    "Error while acquiring next swapchain image: {}",
+                    error
+                ),
+            }
+        };
+
+        let main_cmd = frame.main_command_buffers[f_ix];
+        let copy_cmd = frame.copy_command_buffers[f_ix];
+
+        unsafe {
+            device.reset_command_buffer(
+                main_cmd,
+                vk::CommandBufferResetFlags::empty(),
+            )?;
+            device.reset_command_buffer(
+                copy_cmd,
+                vk::CommandBufferResetFlags::empty(),
+            )?;
+        };
+
+        let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
+
+        {
+            let cmd = main_cmd;
+
+            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
+
+            let image = &self.resources[image_ix];
+
+            Self::transition_image(
+                cmd,
+                device,
+                image.image,
+                // vk::AccessFlags::TRANSFER_READ,
+                // vk::PipelineStageFlags::TRANSFER,
+                vk::AccessFlags::empty(),
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::AccessFlags::SHADER_WRITE,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::ImageLayout::UNDEFINED,
+                vk::ImageLayout::GENERAL,
+            );
+
+            let push_constants = [width as u32, height as u32];
+
+            let mut bytes: Vec<u8> = Vec::with_capacity(24);
+            bytes.extend_from_slice(bytemuck::cast_slice(&color));
+            bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
+
+            let x_size = 16;
+            let y_size = 16;
+
+            let x_groups = (width / x_size) + width % x_size;
+            let y_groups = (height / y_size) + height % y_size;
+
+            let groups = (x_groups, y_groups, 1);
+
+            self.dispatch_compute(
+                device,
+                cmd,
+                pipeline_ix,
+                desc_set_ix,
+                bytes.as_slice(),
+                groups,
+            );
+
+            Self::transition_image(
+                cmd,
+                device,
+                image.image,
+                vk::AccessFlags::SHADER_WRITE,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::AccessFlags::TRANSFER_READ,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::ImageLayout::GENERAL,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            );
+
+            unsafe { device.end_command_buffer(cmd) }?;
+        }
+
+        {
+            let cmd = copy_cmd;
+
+            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
+
+            let src_img = &self.resources[image_ix];
+            let dst_img = swapchain_img;
+
+            Self::transition_image(
+                cmd,
+                device,
+                dst_img,
+                vk::AccessFlags::NONE_KHR,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::AccessFlags::NONE_KHR,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::ImageLayout::UNDEFINED,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
+
+            Self::copy_image(
+                device,
+                cmd,
+                src_img.image,
+                dst_img,
+                src_img.extent,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
+
+            Self::transition_image(
+                cmd,
+                device,
+                dst_img,
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::AccessFlags::MEMORY_READ,
+                vk::PipelineStageFlags::HOST,
+                vk::ImageLayout::UNDEFINED,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
+
+            unsafe { device.end_command_buffer(cmd) }?;
+        }
+
+        let main_bufs = [main_cmd];
+
+        let main_wait = [];
+        let main_signal = [self.resources[frame.render_semaphore]];
+        let main_wait_stages = [];
+
+        let main_batch = vk::SubmitInfo::builder()
+            .wait_semaphores(&main_wait)
+            .wait_dst_stage_mask(&main_wait_stages)
+            .signal_semaphores(&main_signal)
+            .command_buffers(&main_bufs)
+            .build();
+
+        let copy_semaphore = self.resources[frame.copy_semaphore];
+
+        let copy_bufs = [copy_cmd];
+
+        let copy_wait = [self.resources[frame.render_semaphore], img_available];
+        let copy_signal = [copy_semaphore];
+        let copy_wait_stages = [
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+        ];
+
+        let copy_batch = vk::SubmitInfo::builder()
+            .wait_semaphores(&copy_wait)
+            .wait_dst_stage_mask(&copy_wait_stages)
+            .signal_semaphores(&copy_signal)
+            .command_buffers(&copy_bufs)
+            .build();
+
+        let queue = self.queues.thread.queue;
+
+        unsafe {
+            let batches = [main_batch, copy_batch];
+
+            device.queue_submit(
+                queue,
+                &batches,
+                self.resources[frame.render_fence],
+            )?;
+        }
+
+        let swapchains = [self.swapchain_khr];
+        let img_indices = [swapchain_img_ix];
+
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&copy_signal)
+            .swapchains(&swapchains)
+            .image_indices(&img_indices)
+            .build();
+
+        let result =
+            unsafe { self.swapchain.queue_present(queue, &present_info) };
+
+        match result {
+            Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                return Ok(true);
+            }
+            Err(error) => panic!("Failed to present queue: {}", error),
+            _ => {}
+        }
+
+        unsafe {
+            device.queue_wait_idle(queue)?;
+        };
+
+        self.frame_number += 1;
+
+        Ok(true)
     }
 
     pub fn draw_from_compute(
@@ -319,7 +714,7 @@ impl VkEngine {
 
             match result {
                 Ok((img_index, _)) => img_index,
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(true),
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(false),
                 Err(error) => bail!(
                     "Error while acquiring next swapchain image: {}",
                     error

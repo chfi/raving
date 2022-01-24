@@ -563,7 +563,7 @@ impl GpuResources {
             dst_stage_mask,
             old_layout,
             new_layout,
-        )
+        );
     }
 }
 

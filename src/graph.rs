@@ -11,9 +11,22 @@ use crate::vk::{
     DescSetIx, GpuResources, ImageIx, PipelineIx, SemaphoreIx, VkEngine,
 };
 
+// pub struct BatchOp {
+//     f: BatchFn,
+//     img_reqs: Vec<(ImageIx, vk::ImageLayout)>,
+//     stage: vk::PipelineStageFlags,
+//     access: vk::AccessFlags,
+// }
+
+pub type BatchFn = Box<dyn FnOnce(vk::CommandBuffer) -> vk::CommandBuffer>;
+
+// pub fn copy_image(
+
 // pub struct Batch<'a> {
 pub struct Batch {
-    batch: Vec<
+    pub wait: Vec<SemaphoreIx>,
+    pub signal: Vec<SemaphoreIx>,
+    pub batch: Vec<
         // Arc<AtomicCell<bool>>,
         // Box<dyn FnOnce(vk::CommandBuffer) -> vk::CommandBuffer + 'a>,
         Box<dyn FnOnce(vk::CommandBuffer) -> vk::CommandBuffer>,
@@ -132,12 +145,52 @@ pub fn transition_02(
         cmd,
         device,
         swapchain_img,
-        vk::AccessFlags::SHADER_WRITE,
-        vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::AccessFlags::TRANSFER_READ,
+        vk::AccessFlags::NONE_KHR,
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        vk::AccessFlags::TRANSFER_WRITE,
         vk::PipelineStageFlags::TRANSFER,
         vk::ImageLayout::GENERAL,
         vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    );
+    cmd
+}
+
+pub fn transition_23(
+    device: &Device,
+    // image_ix: ImageIx,
+    swapchain_img: vk::Image,
+    cmd: vk::CommandBuffer,
+) -> vk::CommandBuffer {
+    VkEngine::transition_image(
+        cmd,
+        device,
+        swapchain_img,
+        vk::AccessFlags::TRANSFER_WRITE,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::AccessFlags::empty(),
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::ImageLayout::PRESENT_SRC_KHR,
+    );
+    cmd
+}
+
+pub fn transition_3copy0(
+    device: &Device,
+    // image_ix: ImageIx,
+    swapchain_img: vk::Image,
+    cmd: vk::CommandBuffer,
+) -> vk::CommandBuffer {
+    VkEngine::transition_image(
+        cmd,
+        device,
+        swapchain_img,
+        vk::AccessFlags::TRANSFER_WRITE,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::AccessFlags::empty(),
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        vk::ImageLayout::PRESENT_SRC_KHR,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
     );
     cmd
 }
