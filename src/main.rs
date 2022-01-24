@@ -256,7 +256,9 @@ fn main() -> Result<()> {
 
     let deps = vec![
         None,
-        Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
+        // Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
+        Some(vec![(0, vk::PipelineStageFlags::TRANSFER)]),
+        // Some(vec![(0, vk::PipelineStageFlags::empty())]),
     ];
     // let deps = vec![(0, 1)];
 

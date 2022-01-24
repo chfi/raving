@@ -539,6 +539,7 @@ impl VkEngine {
                     *s
                 } else {
                     let s = frame.semaphores[sem_ix];
+                    semaphore_map.insert((a, b), s);
                     sem_ix += 1;
                     s
                 }
@@ -556,7 +557,8 @@ impl VkEngine {
 
                     let _ = get_semaphore(*dep_ix, ix);
 
-                    let rev = &mut batch_rev_deps[ix];
+                    let rev = &mut batch_rev_deps[*dep_ix];
+                    log::warn!("pushing {} to {} rev deps", ix, dep_ix);
                     rev.push(ix);
                 }
             }
@@ -564,15 +566,22 @@ impl VkEngine {
             batch_dep_info.push((wait, wait_mask));
         }
 
-        let mut batches = Vec::new();
+        log::warn!("{:?}", batch_rev_deps);
+
+        let mut batch_data = Vec::new();
+
+        let mut last_semaphore = None;
 
         for (ix, ((deps_ix, stages), revs_ix)) in
             batch_dep_info.into_iter().zip(batch_rev_deps).enumerate()
         {
+            log::warn!("batch {}, revs {:?}", ix, revs_ix);
+
             let mut wait_semaphores = deps_ix
                 .into_iter()
                 .map(|prev| {
                     let s = get_semaphore(prev, ix);
+                    log::warn!("wait: ({}, {}) -> {:?}", prev, ix, s);
                     self.resources[s]
                 })
                 .collect::<Vec<_>>();
@@ -581,40 +590,96 @@ impl VkEngine {
 
             if ix == acquire_image_batch {
                 wait_semaphores.push(img_available);
-                wait_mask.push(vk::PipelineStageFlags::NONE_KHR);
+                wait_mask.push(vk::PipelineStageFlags::BOTTOM_OF_PIPE);
             }
 
-            let signal_semaphores = revs_ix
+            log::warn!("------------------");
+            for m in wait_mask.iter() {
+                log::warn!("{:?}", m);
+            }
+
+            log::warn!("wait_semaphores.len(): {}", wait_semaphores.len());
+
+            let mut signal_semaphores = revs_ix
                 .into_iter()
-                .map(|prev| {
-                    let s = get_semaphore(prev, ix);
+                .map(|next| {
+                    let s = get_semaphore(ix, next);
+                    log::warn!("signal: ({}, {}) -> {:?}", ix, next, s);
                     self.resources[s]
                 })
                 .collect::<Vec<_>>();
 
+            if ix == batches.len() - 1 {
+                let s = get_semaphore(ix, std::usize::MAX);
+                signal_semaphores.push(self.resources[s]);
+                last_semaphore = Some(s);
+            }
+
+            log::warn!("signal_semaphores.len(): {}", signal_semaphores.len());
+
             let cmd_bufs = [frame.command_buffers[ix]];
 
-            let submit_info = vk::SubmitInfo::builder()
-                .command_buffers(&cmd_bufs)
-                .wait_semaphores(&wait_semaphores)
-                .wait_dst_stage_mask(&wait_mask)
-                .signal_semaphores(&signal_semaphores)
-                .build();
-
-            batches.push(submit_info);
+            batch_data.push((
+                cmd_bufs,
+                wait_semaphores,
+                wait_mask,
+                signal_semaphores,
+            ));
         }
 
         let queue = self.queues.thread.queue;
 
+        let submit_infos = batch_data
+            .iter()
+            .map(|(cmd_bufs, wait, wmask, signal)| {
+                let submit_info = vk::SubmitInfo::builder()
+                    .command_buffers(cmd_bufs)
+                    .wait_semaphores(wait)
+                    .wait_dst_stage_mask(wmask)
+                    .signal_semaphores(signal)
+                    .build();
+
+                submit_info
+            })
+            .collect::<Vec<_>>();
+
         unsafe {
             device.queue_submit(
                 queue,
-                &batches,
+                &submit_infos,
                 self.resources[frame.fence],
             )?;
         }
 
         frame.executing.store(true);
+
+        let copy_done_semaphore = self.resources[last_semaphore.unwrap()];
+
+        let present_wait = [copy_done_semaphore];
+        let swapchains = [self.swapchain_khr];
+        let img_indices = [swapchain_img_ix];
+
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&present_wait)
+            .swapchains(&swapchains)
+            .image_indices(&img_indices)
+            .build();
+
+        let result =
+            unsafe { self.swapchain.queue_present(queue, &present_info) };
+
+        match result {
+            Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                return Ok(true);
+            }
+            Err(error) => panic!("Failed to present queue: {}", error),
+            _ => {}
+        }
+
+        unsafe {
+            device.queue_wait_idle(queue)?;
+        };
+
         self.frame_number += 1;
 
         Ok(true)
