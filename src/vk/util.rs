@@ -1,16 +1,11 @@
-use crate::graph::GraphDsl;
 use crate::vk::descriptor::{BindingDesc, BindingInput};
-use crate::vk::{BatchInput, FrameResources, GpuResources, VkEngine};
+use crate::vk::{BatchInput, GpuResources, VkEngine};
 
 use super::resource::index::*;
 use ash::{vk, Device};
 
-use gpu_allocator::vulkan::Allocator;
-// use png::Decoder;
-
+#[allow(unused_imports)]
 use anyhow::{anyhow, bail, Result};
-
-use super::context::VkContext;
 
 #[derive(Clone, Copy)]
 pub struct TextRenderer {
@@ -72,18 +67,6 @@ impl TextRenderer {
 
         let width = image.extent.width;
         let height = image.extent.height;
-
-        // VkEngine::transition_image(
-        //     cmd,
-        //     &device,
-        //     image.image,
-        //     vk::AccessFlags::empty(),
-        //     vk::PipelineStageFlags::TOP_OF_PIPE,
-        //     vk::AccessFlags::SHADER_WRITE,
-        //     vk::PipelineStageFlags::COMPUTE_SHADER,
-        //     input_layout,
-        //     vk::ImageLayout::GENERAL,
-        // );
 
         let push_constants = [pos.0, pos.1, width as u32, height as u32];
 
@@ -325,87 +308,6 @@ pub struct ExampleState {
     pub flip_set: DescSetIx,
     pub flip_image: ImageIx,
 }
-
-/*
-pub fn text_batch(
-    state: ExampleState,
-    device: &Device,
-    resources: &GpuResources,
-    input: &BatchInput,
-    cmd: vk::CommandBuffer,
-    // pos: (usize, usize),
-) {
-    let text_src = &resources[state.text_image];
-    let dst = &resources[state.fill_image];
-
-    let width = dst.extent.width;
-    let height = dst.extent.height;
-
-    /*
-    VkEngine::transition_image(
-        cmd,
-        &device,
-        src.image,
-        vk::AccessFlags::SHADER_WRITE,
-        vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::AccessFlags::SHADER_READ,
-        vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::ImageLayout::GENERAL,
-        vk::ImageLayout::GENERAL,
-    );
-    */
-
-    VkEngine::transition_image(
-        cmd,
-        &device,
-        dst.image,
-        vk::AccessFlags::SHADER_WRITE,
-        vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::AccessFlags::SHADER_WRITE,
-        vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-        // vk::ImageLayout::GENERAL,
-        vk::ImageLayout::GENERAL,
-    );
-
-    let push_constants = [width as u32, height as u32, 0, 0];
-
-    let mut bytes: Vec<u8> = Vec::with_capacity(16);
-    bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
-
-    let x_size = 16;
-    let y_size = 16;
-
-    let x_groups = (width / x_size) + width % x_size;
-    let y_groups = (height / y_size) + height % y_size;
-
-    let groups = (x_groups, y_groups, 1);
-
-    VkEngine::dispatch_compute(
-        resources,
-        &device,
-        cmd,
-        state.text_pipeline,
-        state.text_set,
-        bytes.as_slice(),
-        groups,
-    );
-
-    VkEngine::transition_image(
-        cmd,
-        &device,
-        dst.image,
-        vk::AccessFlags::SHADER_WRITE,
-        vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::AccessFlags::TRANSFER_READ,
-        vk::PipelineStageFlags::TRANSFER,
-        // vk::AccessFlags::SHADER_WRITE,
-        // vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::ImageLayout::GENERAL,
-        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-    );
-}
-*/
 
 pub fn flip_batch(
     state: ExampleState,

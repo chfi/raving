@@ -19,7 +19,7 @@ layout (push_constant) uniform Inputs {
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 void main() {
-  uint char_offset = gl_GlobalInvocationID.x;
+  uint char_offset = gl_WorkGroupID.x;
 
   if (char_offset >= text.len) {
     return;
@@ -30,14 +30,19 @@ void main() {
   int x_offset = inputs.x + int(char_offset) * 8 + local.x;
   int y_offset = inputs.y + local.y;
 
-  uint char = min(text.chars[char_offset], 255);
+  uint char = min(text.chars[char_offset], 127);
 
   ivec2 char_px = ivec2(char * 8 + local.x, local.y);
 
   vec4 font_col = imageLoad(font_img, char_px);
 
-  if (x_offset <= inputs.img_width && y_offset <= inputs.img_height) {
+  // vec4 out_col = font_col.r == 0.0 ? vec4(1.0) : vec4(0.0);
+
+  if (font_col.r == 0.0 && x_offset <= inputs.img_width && y_offset <= inputs.img_height) {
     ivec2 dst_px = ivec2(x_offset, y_offset);
-    imageStore(image_out, dst_px, font_col);
+
+    vec4 out_col = vec4(1.0);
+
+    imageStore(image_out, dst_px, out_col);
   }
 }

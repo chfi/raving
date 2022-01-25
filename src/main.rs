@@ -131,7 +131,12 @@ fn main() -> Result<()> {
         example_state.fill_view,
     )?;
 
+    // text_renderer.update_text_buffer(&mut engine.resources, "F")?;
     text_renderer.update_text_buffer(&mut engine.resources, "hello world!")?;
+    // text_renderer.update_text_buffer(
+    //     &mut engine.resources,
+    //     "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    // )?;
 
     dbg!();
 
