@@ -71,13 +71,12 @@ impl GpuResources {
         &mut self,
         ctx: &VkContext,
         allocator: &mut Allocator,
+        location: gpu_allocator::MemoryLocation,
         elem_size: usize,
         len: usize,
         usage: vk::BufferUsageFlags,
         name: Option<&str>,
     ) -> Result<BufferIx> {
-        let location = gpu_allocator::MemoryLocation::CpuToGpu;
-
         let buffer = BufferRes::allocate(
             ctx, allocator, location, usage, elem_size, len, name,
         )?;
@@ -576,7 +575,7 @@ pub struct BufferRes {
 
     pub location: gpu_allocator::MemoryLocation,
 
-    alloc: Allocation,
+    pub alloc: Allocation,
 }
 
 impl BufferRes {

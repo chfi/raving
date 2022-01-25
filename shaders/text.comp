@@ -2,8 +2,7 @@
 
 layout (rgba8, set = 0, binding = 0) readonly uniform image2D font_img;
 
-
-layout (set = 0, binding = 1) uniform TextData {
+layout (set = 0, binding = 1) buffer TextData {
   int len;
   uint chars[];
 } text;
@@ -17,33 +16,28 @@ layout (push_constant) uniform Inputs {
   int img_height;
 } inputs;
 
-layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 void main() {
+  uint char_offset = gl_GlobalInvocationID.x;
 
-  ivec2 xy = ivec2(gl_GlobalInvocationID.xy);
+  if (char_offset >= text.len) {
+    return;
+  }
 
-  int dst_x = xy.x % inputs.img_width;
-  int dst_y = xy.y % inputs.img_height;
+  ivec2 local = ivec2(gl_LocalInvocationID.xy);
 
-  int src_x = dst_x % 1024;
-  int src_y = dst_y % 8;
+  int x_offset = inputs.x + int(char_offset) * 8 + local.x;
+  int y_offset = inputs.y + local.y;
 
-  ivec2 dst_xy = ivec2(dst_x, dst_y);
-  ivec2 src_xy = ivec2(src_x, src_y);
+  uint char = min(text.chars[char_offset], 255);
 
-  vec4 src_color = imageLoad(font_img, src_xy);
-  vec4 dst_color = imageLoad(image_out, dst_xy);
+  ivec2 char_px = ivec2(char * 8 + local.x, local.y);
 
-  float v = src_color.r / 25.0;
+  vec4 font_col = imageLoad(font_img, char_px);
 
-  // vec4 crgb = (1.0 - v) * dst_color + vec4(1.0, 1.0, 1.0, v);
-  vec4 crgb = dst_color + vec4(v);
-  crgb = normalize(crgb);
-
-  vec4 color = crgb;
-
-  imageStore(image_out, dst_xy, color);
-  // imageStore(image_out, dst_xy, dst_color.gbra);
+  if (x_offset <= inputs.img_width && y_offset <= inputs.img_height) {
+    ivec2 dst_px = ivec2(x_offset, y_offset);
+    imageStore(image_out, dst_px, font_col);
+  }
 }

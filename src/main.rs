@@ -124,28 +124,12 @@ fn main() -> Result<()> {
         })
     })?;
 
-    let text_renderer =
-        TextRenderer::new(&mut engine, "8x8font.png", example_state.fill_view)?;
-
-    dbg!();
-
-    let text_buffer = engine.with_allocators(|ctx, res, alloc| {
-        let elem_size = std::mem::size_of::<u32>();
-        let len = 1024 * 8;
-        let usage = vk::BufferUsageFlags::TRANSFER_SRC
-            | vk::BufferUsageFlags::TRANSFER_DST;
-
-        let buf = res.allocate_buffer(
-            ctx,
-            alloc,
-            elem_size,
-            len,
-            usage,
-            Some("text_buffer"),
-        )?;
-
-        Ok(buf)
-    })?;
+    let mut text_renderer = TextRenderer::new(
+        &mut engine,
+        "8x8font.png",
+        example_state.fill_image,
+        example_state.fill_view,
+    )?;
 
     dbg!();
 
@@ -155,7 +139,6 @@ fn main() -> Result<()> {
 
         engine.set_debug_object_name(res[e.fill_image].image, "fill_image")?;
         engine.set_debug_object_name(res[e.flip_image].image, "flip_image")?;
-        engine.set_debug_object_name(res[text_buffer].buffer, "text_buffer")?;
     }
 
     let mut frames = {

@@ -8,34 +8,123 @@ use ash::{vk, Device};
 use gpu_allocator::vulkan::Allocator;
 // use png::Decoder;
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 
 use super::context::VkContext;
 
 #[derive(Clone, Copy)]
 pub struct TextRenderer {
     pub pipeline: PipelineIx,
+
+    pub out_image: ImageIx,
+    pub out_view: ImageViewIx,
     pub set: DescSetIx,
 
     pub font_image: ImageIx,
     pub font_view: ImageViewIx,
     pub text_buffer: BufferIx,
-    // text_len: usize,
+    text_len: usize,
 }
 
 impl TextRenderer {
+    pub fn update_text_buffer(
+        &mut self,
+        res: &mut GpuResources,
+        text: &str,
+    ) -> Result<()> {
+        let len = text.len().min(255);
+        let slice = &text[..len];
+
+        let text_buffer = &mut res[self.text_buffer];
+
+        let mapped = text_buffer
+            .alloc
+            .mapped_slice_mut()
+            .ok_or(anyhow!("couldn't map text buffer memory!"))?;
+
+        let mut ix = 0;
+        let mut write_u32 = |u: u32| {
+            for (i, b) in u.to_le_bytes().into_iter().enumerate() {
+                mapped[ix + i] = b;
+            }
+            ix += 4;
+        };
+
+        write_u32(len as u32);
+
+        for &b in slice.as_bytes() {
+            write_u32(b as u32);
+        }
+
+        self.text_len = len;
+
+        Ok(())
+    }
+
+    pub fn draw_at(
+        &self,
+        pos: (u32, u32),
+        device: &Device,
+        resources: &GpuResources,
+        input: &BatchInput,
+        input_layout: vk::ImageLayout,
+        cmd: vk::CommandBuffer,
+    ) {
+        let image = &resources[self.out_image];
+
+        let width = image.extent.width;
+        let height = image.extent.height;
+
+        // VkEngine::transition_image(
+        //     cmd,
+        //     &device,
+        //     image.image,
+        //     vk::AccessFlags::empty(),
+        //     vk::PipelineStageFlags::TOP_OF_PIPE,
+        //     vk::AccessFlags::SHADER_WRITE,
+        //     vk::PipelineStageFlags::COMPUTE_SHADER,
+        //     input_layout,
+        //     vk::ImageLayout::GENERAL,
+        // );
+
+        let push_constants = [pos.0, pos.1, width as u32, height as u32];
+
+        let mut bytes: Vec<u8> = Vec::with_capacity(8);
+        bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
+
+        let x_groups = self.text_len as u32;
+
+        let x_size = 8;
+        let y_size = 8;
+
+        let groups = (x_groups, 1, 1);
+
+        VkEngine::dispatch_compute(
+            resources,
+            &device,
+            cmd,
+            self.pipeline,
+            self.set,
+            bytes.as_slice(),
+            groups,
+        );
+
+        // vk::ImageLayout::GENERAL
+    }
+
     // font has to be 8x8 monospace, in a png, for now
     pub fn new(
         engine: &mut VkEngine,
         font_img_path: &str,
-        out_image: ImageViewIx,
+        out_image: ImageIx,
+        out_view: ImageViewIx,
     ) -> Result<Self> {
         // dst dims, start pos
         let pc_size = std::mem::size_of::<[i32; 4]>();
 
         let bindings = [
             BindingDesc::StorageImage { binding: 0 },
-            BindingDesc::UniformBuffer { binding: 1 },
+            BindingDesc::StorageBuffer { binding: 1 },
             BindingDesc::StorageImage { binding: 2 },
         ];
 
@@ -61,11 +150,12 @@ impl TextRenderer {
             let font_view = res.create_image_view_for_image(ctx, font_image)?;
 
             let usage = vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::UNIFORM_BUFFER;
+                | vk::BufferUsageFlags::STORAGE_BUFFER;
 
             let text_buffer = res.allocate_buffer(
                 ctx,
                 alloc,
+                gpu_allocator::MemoryLocation::CpuToGpu,
                 1,
                 256,
                 usage,
@@ -83,7 +173,7 @@ impl TextRenderer {
                 },
                 BindingInput::ImageView {
                     binding: 2,
-                    view: out_image,
+                    view: out_view,
                 },
             ];
 
@@ -96,9 +186,15 @@ impl TextRenderer {
             Ok(Self {
                 pipeline,
                 set,
+
+                out_image,
+                out_view,
+
                 font_image,
                 font_view,
+
                 text_buffer,
+                text_len: 0,
             })
         })?;
 
@@ -158,8 +254,6 @@ impl TextRenderer {
             use image::io::Reader as ImageReader;
 
             let font = ImageReader::open(font_img_path)?.decode()?;
-
-            log::warn!("{:?}", font);
 
             let font_rgba8 = font.to_rgba8();
 
