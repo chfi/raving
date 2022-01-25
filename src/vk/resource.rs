@@ -521,7 +521,6 @@ impl BufferRes {
         }
     }
 
-    // pub fn upload_to_self<T: Copy + Eq>(
     pub fn upload_to_self_bytes(
         &mut self,
         ctx: &VkContext,

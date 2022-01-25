@@ -42,8 +42,6 @@ pub struct VkEngine {
     #[allow(dead_code)]
     pub swapchain_image_views: Vec<vk::ImageView>,
 
-    frames: [FrameData; FRAME_OVERLAP],
-
     frame_number: usize,
 }
 
@@ -105,68 +103,6 @@ impl FrameResources {
             command_buffers,
 
             executing: false.into(),
-        })
-    }
-}
-
-pub struct FrameData {
-    present_semaphore: SemaphoreIx,
-    copy_semaphore: SemaphoreIx,
-    render_semaphore: SemaphoreIx,
-
-    render_fence: FenceIx,
-
-    command_pool: vk::CommandPool,
-    main_command_buffers: [vk::CommandBuffer; FRAME_OVERLAP],
-    copy_command_buffers: [vk::CommandBuffer; FRAME_OVERLAP],
-}
-
-impl FrameData {
-    pub fn new(
-        ctx: &VkContext,
-        res: &mut GpuResources,
-        alloc: &mut Allocator,
-        queue_ix: u32,
-    ) -> Result<Self> {
-        let present_semaphore = res.allocate_semaphore(ctx)?;
-        let copy_semaphore = res.allocate_semaphore(ctx)?;
-        let render_semaphore = res.allocate_semaphore(ctx)?;
-
-        let render_fence = res.allocate_fence(ctx)?;
-
-        let create_flags = vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER;
-
-        let command_pool_info = vk::CommandPoolCreateInfo::builder()
-            .queue_family_index(queue_ix)
-            .flags(create_flags)
-            .build();
-
-        let command_pool = unsafe {
-            ctx.device().create_command_pool(&command_pool_info, None)
-        }?;
-
-        let (main, copy) = {
-            let alloc_info = vk::CommandBufferAllocateInfo::builder()
-                .level(vk::CommandBufferLevel::PRIMARY)
-                .command_pool(command_pool)
-                .command_buffer_count(2 * FRAME_OVERLAP as u32)
-                .build();
-
-            let bufs =
-                unsafe { ctx.device().allocate_command_buffers(&alloc_info) }?;
-            ([bufs[0], bufs[1]], [bufs[2], bufs[3]])
-        };
-
-        Ok(Self {
-            present_semaphore,
-            copy_semaphore,
-            render_semaphore,
-
-            render_fence,
-
-            command_pool,
-            main_command_buffers: main,
-            copy_command_buffers: copy,
         })
     }
 }
@@ -248,21 +184,6 @@ impl VkEngine {
 
         let device = vk_context.device();
 
-        let frames = [
-            FrameData::new(
-                &vk_context,
-                &mut resources,
-                &mut allocator,
-                graphics_ix,
-            )?,
-            FrameData::new(
-                &vk_context,
-                &mut resources,
-                &mut allocator,
-                graphics_ix,
-            )?,
-        ];
-
         let engine = VkEngine {
             allocator,
             resources,
@@ -275,7 +196,6 @@ impl VkEngine {
             swapchain_images: images,
             swapchain_image_views,
 
-            frames,
             frame_number,
         };
 
@@ -313,10 +233,6 @@ impl VkEngine {
 
     pub fn current_frame_number(&self) -> usize {
         self.frame_number
-    }
-
-    pub fn current_frame(&self) -> &FrameData {
-        &self.frames[self.frame_number % FRAME_OVERLAP]
     }
 
     pub fn dispatch_compute(
@@ -756,266 +672,6 @@ impl VkEngine {
         self.frame_number += 1;
 
         Ok(true)
-    }
-
-    pub fn draw_from_compute(
-        &mut self,
-        pipeline_ix: PipelineIx,
-        image_ix: ImageIx,
-        desc_set_ix: DescSetIx,
-        width: u32,
-        height: u32,
-        color: [f32; 4],
-    ) -> Result<bool> {
-        let ctx = &self.context;
-        let device = self.context.device();
-
-        let frame_n = self.frame_number;
-        let f_ix = frame_n % FRAME_OVERLAP;
-
-        let frame = &self.frames[f_ix];
-
-        if frame_n != f_ix {
-            let fences = [self.resources[frame.render_fence]];
-
-            unsafe {
-                device.wait_for_fences(&fences, true, 1_000_000_000)?;
-                device.reset_fences(&fences)?;
-            };
-        }
-
-        let img_available = self.resources[frame.present_semaphore];
-
-        let swapchain_img_ix = unsafe {
-            let result = self.swapchain.acquire_next_image(
-                self.swapchain_khr,
-                std::u64::MAX,
-                img_available,
-                vk::Fence::null(),
-            );
-
-            match result {
-                Ok((img_index, _)) => img_index,
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(false),
-                Err(error) => bail!(
-                    "Error while acquiring next swapchain image: {}",
-                    error
-                ),
-            }
-        };
-
-        let main_cmd = frame.main_command_buffers[f_ix];
-        let copy_cmd = frame.copy_command_buffers[f_ix];
-
-        unsafe {
-            device.reset_command_buffer(
-                main_cmd,
-                vk::CommandBufferResetFlags::empty(),
-            )?;
-            device.reset_command_buffer(
-                copy_cmd,
-                vk::CommandBufferResetFlags::empty(),
-            )?;
-        };
-
-        let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
-
-        {
-            let cmd = main_cmd;
-
-            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
-                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-            unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
-
-            let image = &self.resources[image_ix];
-
-            Self::transition_image(
-                cmd,
-                device,
-                image.image,
-                vk::AccessFlags::empty(),
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::AccessFlags::SHADER_WRITE,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::ImageLayout::UNDEFINED,
-                vk::ImageLayout::GENERAL,
-            );
-
-            let push_constants = [width as u32, height as u32];
-
-            let mut bytes: Vec<u8> = Vec::with_capacity(24);
-            bytes.extend_from_slice(bytemuck::cast_slice(&color));
-            bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
-
-            let x_size = 16;
-            let y_size = 16;
-
-            let x_groups = (width / x_size) + width % x_size;
-            let y_groups = (height / y_size) + height % y_size;
-
-            let groups = (x_groups, y_groups, 1);
-
-            Self::dispatch_compute(
-                &self.resources,
-                device,
-                cmd,
-                pipeline_ix,
-                desc_set_ix,
-                bytes.as_slice(),
-                groups,
-            );
-
-            Self::transition_image(
-                cmd,
-                device,
-                image.image,
-                vk::AccessFlags::SHADER_WRITE,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::AccessFlags::TRANSFER_READ,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::ImageLayout::GENERAL,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            );
-
-            unsafe { device.end_command_buffer(cmd) }?;
-        }
-
-        {
-            let cmd = copy_cmd;
-
-            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
-                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-            unsafe { device.begin_command_buffer(cmd, &cmd_begin_info) }?;
-
-            let src_img = &self.resources[image_ix];
-            let dst_img = swapchain_img;
-
-            Self::transition_image(
-                cmd,
-                device,
-                dst_img,
-                vk::AccessFlags::NONE_KHR,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::AccessFlags::NONE_KHR,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::ImageLayout::UNDEFINED,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            );
-
-            Self::copy_image(
-                device,
-                cmd,
-                src_img.image,
-                dst_img,
-                src_img.extent,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            );
-
-            Self::transition_image(
-                cmd,
-                device,
-                dst_img,
-                vk::AccessFlags::TRANSFER_WRITE,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::AccessFlags::MEMORY_READ,
-                vk::PipelineStageFlags::HOST,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                vk::ImageLayout::PRESENT_SRC_KHR,
-            );
-
-            unsafe { device.end_command_buffer(cmd) }?;
-        }
-
-        let main_bufs = [main_cmd];
-
-        let main_wait = [];
-        let main_signal = [self.resources[frame.render_semaphore]];
-        let main_wait_stages = [];
-
-        let main_batch = vk::SubmitInfo::builder()
-            .wait_semaphores(&main_wait)
-            .wait_dst_stage_mask(&main_wait_stages)
-            .signal_semaphores(&main_signal)
-            .command_buffers(&main_bufs)
-            .build();
-
-        let copy_semaphore = self.resources[frame.copy_semaphore];
-
-        let copy_bufs = [copy_cmd];
-
-        let copy_wait = [self.resources[frame.render_semaphore], img_available];
-        let copy_signal = [copy_semaphore];
-        let copy_wait_stages = [
-            vk::PipelineStageFlags::COMPUTE_SHADER,
-            vk::PipelineStageFlags::TRANSFER,
-        ];
-
-        let copy_batch = vk::SubmitInfo::builder()
-            .wait_semaphores(&copy_wait)
-            .wait_dst_stage_mask(&copy_wait_stages)
-            .signal_semaphores(&copy_signal)
-            .command_buffers(&copy_bufs)
-            .build();
-
-        let queue = self.queues.thread.queue;
-
-        unsafe {
-            let batches = [main_batch, copy_batch];
-
-            device.queue_submit(
-                queue,
-                &batches,
-                self.resources[frame.render_fence],
-            )?;
-        }
-
-        let swapchains = [self.swapchain_khr];
-        let img_indices = [swapchain_img_ix];
-
-        let present_info = vk::PresentInfoKHR::builder()
-            .wait_semaphores(&copy_signal)
-            .swapchains(&swapchains)
-            .image_indices(&img_indices)
-            .build();
-
-        let result =
-            unsafe { self.swapchain.queue_present(queue, &present_info) };
-
-        match result {
-            Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                return Ok(true);
-            }
-            Err(error) => panic!("Failed to present queue: {}", error),
-            _ => {}
-        }
-
-        unsafe {
-            device.queue_wait_idle(queue)?;
-        };
-
-        self.frame_number += 1;
-
-        Ok(true)
-    }
-
-    pub fn allocate_image(
-        &mut self,
-        width: u32,
-        height: u32,
-        format: vk::Format,
-        usage: vk::ImageUsageFlags,
-    ) -> Result<ImageIx> {
-        self.resources.allocate_image(
-            &self.context,
-            &mut self.allocator,
-            width,
-            height,
-            format,
-            usage,
-        )
     }
 }
 
