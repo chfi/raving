@@ -65,7 +65,8 @@ fn text_batch(
         vk::PipelineStageFlags::COMPUTE_SHADER,
         vk::AccessFlags::SHADER_WRITE,
         vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        // vk::ImageLayout::GENERAL,
         vk::ImageLayout::GENERAL,
     );
 
@@ -90,6 +91,20 @@ fn text_batch(
         state.text_set,
         bytes.as_slice(),
         groups,
+    );
+
+    VkEngine::transition_image(
+        cmd,
+        &device,
+        dst.image,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::TRANSFER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        // vk::AccessFlags::SHADER_WRITE,
+        // vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
     );
 }
 
@@ -217,17 +232,17 @@ fn compute_batch(
         groups,
     );
 
-    // VkEngine::transition_image(
-    //     cmd,
-    //     &device,
-    //     image.image,
-    //     vk::AccessFlags::SHADER_WRITE,
-    //     vk::PipelineStageFlags::COMPUTE_SHADER,
-    //     vk::AccessFlags::TRANSFER_READ,
-    //     vk::PipelineStageFlags::TRANSFER,
-    //     vk::ImageLayout::GENERAL,
-    //     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-    // );
+    VkEngine::transition_image(
+        cmd,
+        &device,
+        image.image,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::TRANSFER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    );
 }
 
 fn copy_batch(
@@ -237,7 +252,7 @@ fn copy_batch(
     input: &BatchInput,
     cmd: vk::CommandBuffer,
 ) {
-    let image = &resources[state.flip_image];
+    let image = &resources[state.fill_image];
 
     let src_img = image.image;
 
@@ -330,7 +345,6 @@ fn main() -> Result<()> {
             &flip_bindings,
             flip_pc_size,
         )?;
-
         let text_pipeline = res.load_compute_shader_runtime(
             ctx,
             "shaders/text.comp.spv",
@@ -426,14 +440,7 @@ fn main() -> Result<()> {
         })
     })?;
 
-    {
-        let e = example_state;
-        let res = &engine.resources;
-
-        engine.set_debug_object_name(res[e.fill_image].image, "fill_image")?;
-        engine.set_debug_object_name(res[e.flip_image].image, "flip_image")?;
-        engine.set_debug_object_name(res[e.text_image].image, "text_image")?;
-    }
+    dbg!();
 
     let mut text_buffer = engine.with_allocators(|ctx, res, alloc| {
         let elem_size = std::mem::size_of::<u32>();
@@ -454,6 +461,18 @@ fn main() -> Result<()> {
 
         Ok(buf)
     })?;
+
+    dbg!();
+
+    {
+        let e = example_state;
+        let res = &engine.resources;
+
+        engine.set_debug_object_name(res[e.fill_image].image, "fill_image")?;
+        engine.set_debug_object_name(res[e.flip_image].image, "flip_image")?;
+        engine.set_debug_object_name(res[e.text_image].image, "text_image")?;
+        engine.set_debug_object_name(res[text_buffer].buffer, "text_buffer")?;
+    }
 
     {
         let cmd = engine.allocate_command_buffer()?;
@@ -507,7 +526,7 @@ fn main() -> Result<()> {
             vk::PipelineStageFlags::TOP_OF_PIPE,
             vk::AccessFlags::TRANSFER_WRITE,
             vk::PipelineStageFlags::TRANSFER,
-            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::GENERAL,
         );
 

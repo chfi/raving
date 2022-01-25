@@ -1,7 +1,7 @@
 #version 450
 
 layout (rgba8, set = 0, binding = 0) readonly uniform image2D font_img;
-layout (rgba8, set = 0, binding = 1) writeonly uniform image2D image_out;
+layout (rgba8, set = 0, binding = 1) uniform image2D image_out;
 
 layout (push_constant) uniform Inputs {
   int x;
@@ -26,6 +26,19 @@ void main() {
   ivec2 dst_xy = ivec2(dst_x, dst_y);
   ivec2 src_xy = ivec2(src_x, src_y);
 
-  vec4 color = imageLoad(font_img, src_xy);
+  vec4 src_color = imageLoad(font_img, src_xy);
+  vec4 dst_color = imageLoad(image_out, dst_xy);
+
+  float v = src_color.r / 25.0;
+
+  // vec4 crgb = (1.0 - v) * dst_color + vec4(1.0, 1.0, 1.0, v);
+  vec4 crgb = dst_color + vec4(v);
+  crgb = normalize(crgb);
+  // vec3 col_rgb = src_color.rgb + dst_color.rgb;
+  // vec4 color = mix(src_color, dst_color, 0.8);
+
+  vec4 color = crgb;
+
   imageStore(image_out, dst_xy, color);
+  // imageStore(image_out, dst_xy, dst_color.gbra);
 }
