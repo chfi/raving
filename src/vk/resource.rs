@@ -497,6 +497,73 @@ impl GpuResources {
             new_layout,
         );
     }
+
+    pub fn destroy_fence(
+        &mut self,
+        device: &Device,
+        fence: FenceIx,
+    ) -> Option<()> {
+        let f = self.fences.remove(fence.0)?;
+
+        unsafe {
+            device.destroy_fence(f, None);
+        };
+
+        Some(())
+    }
+
+    pub fn cleanup(
+        &mut self,
+        ctx: &VkContext,
+        alloc: &mut Allocator,
+    ) -> Result<()> {
+        let device = ctx.device();
+
+        self.descriptor_allocator.cleanup()?;
+
+        self.layout_cache.cleanup()?;
+
+        for (_ix, &sampler) in self.samplers.iter() {
+            unsafe {
+                device.destroy_sampler(sampler, None);
+            }
+        }
+
+        for (_ix, &(view, _)) in self.image_views.iter() {
+            unsafe {
+                device.destroy_image_view(view, None);
+            }
+        }
+
+        for (_, image) in self.images.drain() {
+            image.cleanup(ctx, alloc)?;
+        }
+
+        for (_, buffer) in self.buffers.drain() {
+            buffer.cleanup(ctx, alloc)?;
+        }
+
+        for (_ix, &semaphore) in self.semaphores.iter() {
+            unsafe {
+                device.destroy_semaphore(semaphore, None);
+            }
+        }
+
+        for (_ix, &fence) in self.fences.iter() {
+            unsafe {
+                device.destroy_fence(fence, None);
+            }
+        }
+
+        for (_ix, (pipeline, layout)) in self.pipelines.iter() {
+            unsafe {
+                device.destroy_pipeline_layout(*layout, None);
+                device.destroy_pipeline(*pipeline, None);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[allow(dead_code)]
@@ -728,6 +795,19 @@ impl ImageRes {
         );
 
         Ok(staging)
+    }
+
+    pub fn cleanup(
+        self,
+        ctx: &VkContext,
+        allocator: &mut Allocator,
+    ) -> Result<()> {
+        unsafe {
+            ctx.device().destroy_image(self.image, None);
+        }
+
+        allocator.free(self.alloc)?;
+        Ok(())
     }
 
     pub fn create_image_view(&self, ctx: &VkContext) -> Result<vk::ImageView> {

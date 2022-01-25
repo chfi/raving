@@ -27,9 +27,6 @@ impl TextRenderer {
     // font has to be 8x8 monospace, in a png, for now
     pub fn new(
         engine: &mut VkEngine,
-        // ctx: &VkContext,
-        // res: &mut GpuResources,
-        // allocator: &mut Allocator,
         font_img_path: &str,
         out_image: ImageViewIx,
     ) -> Result<Self> {
@@ -204,8 +201,12 @@ impl TextRenderer {
                     10_000_000_000,
                 )?;
                 engine.context.device().reset_fences(&fences)?;
-                engine.context.device().destroy_fence(fence, None);
             };
+
+            engine
+                .resources
+                .destroy_fence(engine.context.device(), fence_ix)
+                .unwrap();
 
             staging.cleanup(&engine.context, &mut engine.allocator)?;
 

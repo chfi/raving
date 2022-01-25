@@ -165,7 +165,7 @@ fn main() -> Result<()> {
 
     dbg!();
 
-    let mut text_buffer = engine.with_allocators(|ctx, res, alloc| {
+    let text_buffer = engine.with_allocators(|ctx, res, alloc| {
         let elem_size = std::mem::size_of::<u32>();
         let len = 1024 * 8;
         let usage = vk::BufferUsageFlags::TRANSFER_SRC
@@ -278,8 +278,12 @@ fn main() -> Result<()> {
                 10_000_000_000,
             )?;
             engine.context.device().reset_fences(&fences)?;
-            engine.context.device().destroy_fence(fence, None);
         };
+
+        engine
+            .resources
+            .destroy_fence(engine.context.device(), fence_ix)
+            .unwrap();
 
         staging.cleanup(&engine.context, &mut engine.allocator)?;
 
@@ -378,14 +382,6 @@ fn main() -> Result<()> {
                     .draw_from_batches(frame, &batches, deps.as_slice(), 2)
                     .unwrap();
 
-                /*
-                let render_success = engine
-                    .draw_from_compute(
-                        pipeline, image, desc_set, width, height, color,
-                    )
-                    .unwrap();
-                */
-
                 if !render_success {
                     _dirty_swapchain = true;
                 }
@@ -395,7 +391,7 @@ fn main() -> Result<()> {
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
-                    log::trace!("WindowEvent::CloseRequested");
+                    log::debug!("WindowEvent::CloseRequested");
                     *control_flow = winit::event_loop::ControlFlow::Exit;
                 }
                 WindowEvent::Resized { .. } => {
@@ -404,7 +400,18 @@ fn main() -> Result<()> {
                 _ => (),
             },
             Event::LoopDestroyed => {
-                log::trace!("Event::LoopDestroyed");
+                log::debug!("Event::LoopDestroyed");
+
+                unsafe {
+                    let queue = engine.queues.thread.queue;
+                    engine.context.device().queue_wait_idle(queue).unwrap();
+                };
+
+                let ctx = &engine.context;
+                let res = &mut engine.resources;
+                let alloc = &mut engine.allocator;
+
+                res.cleanup(ctx, alloc).unwrap();
             }
             _ => (),
         }
