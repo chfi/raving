@@ -15,4 +15,17 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 void main() {
 
+  ivec2 xy = ivec2(gl_GlobalInvocationID.xy);
+
+  int dst_x = xy.x % inputs.img_width;
+  int dst_y = xy.y % inputs.img_height;
+
+  int src_x = dst_x % 1024;
+  int src_y = dst_y % 8;
+
+  ivec2 dst_xy = ivec2(dst_x, dst_y);
+  ivec2 src_xy = ivec2(src_x, src_y);
+
+  vec4 color = imageLoad(font_img, src_xy);
+  imageStore(image_out, dst_xy, color);
 }

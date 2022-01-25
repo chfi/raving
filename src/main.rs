@@ -29,6 +29,70 @@ struct ExampleState {
     text_image: ImageIx,
 }
 
+fn text_batch(
+    state: ExampleState,
+    device: &Device,
+    resources: &GpuResources,
+    input: &BatchInput,
+    cmd: vk::CommandBuffer,
+    // pos: (usize, usize),
+) {
+    let text_src = &resources[state.text_image];
+    let dst = &resources[state.fill_image];
+
+    let width = dst.extent.width;
+    let height = dst.extent.height;
+
+    /*
+    VkEngine::transition_image(
+        cmd,
+        &device,
+        src.image,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::SHADER_READ,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::GENERAL,
+    );
+    */
+
+    VkEngine::transition_image(
+        cmd,
+        &device,
+        dst.image,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::GENERAL,
+    );
+
+    let push_constants = [width as u32, height as u32, 0, 0];
+
+    let mut bytes: Vec<u8> = Vec::with_capacity(16);
+    bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
+
+    let x_size = 16;
+    let y_size = 16;
+
+    let x_groups = (width / x_size) + width % x_size;
+    let y_groups = (height / y_size) + height % y_size;
+
+    let groups = (x_groups, y_groups, 1);
+
+    VkEngine::dispatch_compute(
+        resources,
+        &device,
+        cmd,
+        state.text_pipeline,
+        state.text_set,
+        bytes.as_slice(),
+        groups,
+    );
+}
+
 fn flip_batch(
     state: ExampleState,
     device: &Device,
@@ -337,16 +401,16 @@ fn main() -> Result<()> {
         let text_inputs = [
             BindingInput::ImageView {
                 binding: 0,
-                view: fill_view,
+                view: text_view,
             },
             BindingInput::ImageView {
                 binding: 1,
-                view: flip_view,
+                view: fill_view,
             },
         ];
         let text_set = res.allocate_desc_set(
-            &flip_bindings,
-            &flip_inputs,
+            &text_bindings,
+            &text_inputs,
             vk::ShaderStageFlags::COMPUTE,
         )?;
 
@@ -478,7 +542,7 @@ fn main() -> Result<()> {
             engine.context.device().wait_for_fences(
                 &fences,
                 true,
-                1_000_000_000,
+                10_000_000_000,
             )?;
             engine.context.device().reset_fences(&fences)?;
         };
@@ -636,7 +700,17 @@ fn main() -> Result<()> {
         },
     ) as Box<_>;
 
-    let batches = [main_batch, flip_batch, copy_batch];
+    let text_batch = Box::new(
+        move |dev: &Device,
+              res: &GpuResources,
+              input: &BatchInput,
+              cmd: vk::CommandBuffer| {
+            text_batch(example_state, dev, res, input, cmd)
+        },
+    ) as Box<_>;
+
+    // let batches = [main_batch, flip_batch, copy_batch];
+    let batches = [main_batch, text_batch, copy_batch];
 
     let deps = vec![
         None,
