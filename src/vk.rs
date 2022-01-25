@@ -517,7 +517,7 @@ impl VkEngine {
     pub fn draw_from_batches(
         &mut self,
         frame: &mut FrameResources,
-        batches: &[Box<
+        batches: &[&Box<
             dyn Fn(&Device, &GpuResources, &BatchInput, vk::CommandBuffer),
         >],
         batch_dependencies: &[Option<Vec<(usize, vk::PipelineStageFlags)>>],

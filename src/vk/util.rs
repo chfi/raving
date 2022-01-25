@@ -66,8 +66,6 @@ impl TextRenderer {
         pos: (u32, u32),
         device: &Device,
         resources: &GpuResources,
-        input: &BatchInput,
-        input_layout: vk::ImageLayout,
         cmd: vk::CommandBuffer,
     ) {
         let image = &resources[self.out_image];
@@ -282,7 +280,7 @@ impl TextRenderer {
                 vk::AccessFlags::MEMORY_READ,
                 vk::PipelineStageFlags::BOTTOM_OF_PIPE,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::ImageLayout::GENERAL,
             );
 
             //////////////

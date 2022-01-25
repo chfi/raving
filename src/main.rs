@@ -131,6 +131,8 @@ fn main() -> Result<()> {
         example_state.fill_view,
     )?;
 
+    text_renderer.update_text_buffer(&mut engine.resources, "hello world!")?;
+
     dbg!();
 
     {
@@ -190,24 +192,6 @@ fn main() -> Result<()> {
         },
     ) as Box<_>;
 
-    // let text_batch = Box::new(
-    //     move |dev: &Device,
-    //           res: &GpuResources,
-    //           input: &BatchInput,
-    //           cmd: vk::CommandBuffer| {
-    //         text_batch(example_state, dev, res, input, cmd)
-    //     },
-    // ) as Box<_>;
-
-    let batches = [main_batch, flip_batch, copy_batch];
-    // let batches = [main_batch, text_batch, copy_batch];
-
-    let deps = vec![
-        None,
-        Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
-        Some(vec![(1, vk::PipelineStageFlags::COMPUTE_SHADER)]),
-    ];
-
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     let start = std::time::Instant::now();
@@ -228,6 +212,59 @@ fn main() -> Result<()> {
 
                 let f_ix = engine.current_frame_number();
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
+
+                let text_batch = Box::new(
+                    move |dev: &Device,
+                          res: &GpuResources,
+                          input: &BatchInput,
+                          cmd: vk::CommandBuffer| {
+                        let dst = &res[text_renderer.out_image];
+
+                        VkEngine::transition_image(
+                            cmd,
+                            dev,
+                            dst.image,
+                            vk::AccessFlags::SHADER_WRITE,
+                            vk::PipelineStageFlags::COMPUTE_SHADER,
+                            vk::AccessFlags::SHADER_WRITE,
+                            vk::PipelineStageFlags::COMPUTE_SHADER,
+                            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                            vk::ImageLayout::GENERAL,
+                        );
+
+                        text_renderer.draw_at((100, 100), dev, res, cmd);
+
+                        VkEngine::transition_image(
+                            cmd,
+                            dev,
+                            dst.image,
+                            vk::AccessFlags::SHADER_WRITE,
+                            vk::PipelineStageFlags::COMPUTE_SHADER,
+                            vk::AccessFlags::SHADER_READ,
+                            vk::PipelineStageFlags::COMPUTE_SHADER,
+                            vk::ImageLayout::GENERAL,
+                            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        );
+                    },
+                ) as Box<_>;
+
+                // let text_batch = Box::new(
+                //     move |dev: &Device,
+                //           res: &GpuResources,
+                //           input: &BatchInput,
+                //           cmd: vk::CommandBuffer| {
+                //         text_batch(example_state, dev, res, input, cmd)
+                //     },
+                // ) as Box<_>;
+
+                let batches = [&main_batch, &text_batch, &copy_batch];
+                // let batches = [main_batch, text_batch, copy_batch];
+
+                let deps = vec![
+                    None,
+                    Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
+                    Some(vec![(1, vk::PipelineStageFlags::COMPUTE_SHADER)]),
+                ];
 
                 let render_success = engine
                     .draw_from_batches(frame, &batches, deps.as_slice(), 2)
