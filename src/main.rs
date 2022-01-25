@@ -23,6 +23,10 @@ struct ExampleState {
     flip_pipeline: PipelineIx,
     flip_set: DescSetIx,
     flip_image: ImageIx,
+
+    text_pipeline: PipelineIx,
+    text_set: DescSetIx,
+    text_image: ImageIx,
 }
 
 fn flip_batch(
@@ -259,6 +263,19 @@ fn main() -> Result<()> {
             flip_pc_size,
         )?;
 
+        let text_bindings = [
+            BindingDesc::StorageImage { binding: 0 },
+            BindingDesc::StorageImage { binding: 1 },
+        ];
+        let text_pc_size = std::mem::size_of::<[i32; 4]>();
+
+        let text_pipeline = res.load_compute_shader_runtime(
+            ctx,
+            "shaders/text.comp.spv",
+            &text_bindings,
+            text_pc_size,
+        )?;
+
         let fill_image = res.allocate_image(
             ctx,
             alloc,
@@ -277,8 +294,18 @@ fn main() -> Result<()> {
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
         )?;
 
+        let text_image = res.allocate_image(
+            ctx,
+            alloc,
+            1024,
+            8,
+            vk::Format::R8G8B8A8_UNORM,
+            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_DST,
+        )?;
+
         let fill_view = res.create_image_view_for_image(ctx, fill_image)?;
         let flip_view = res.create_image_view_for_image(ctx, flip_image)?;
+        let text_view = res.create_image_view_for_image(ctx, text_image)?;
 
         let fill_inputs = [BindingInput::ImageView {
             binding: 0,
@@ -307,15 +334,208 @@ fn main() -> Result<()> {
             vk::ShaderStageFlags::COMPUTE,
         )?;
 
+        let text_inputs = [
+            BindingInput::ImageView {
+                binding: 0,
+                view: fill_view,
+            },
+            BindingInput::ImageView {
+                binding: 1,
+                view: flip_view,
+            },
+        ];
+        let text_set = res.allocate_desc_set(
+            &flip_bindings,
+            &flip_inputs,
+            vk::ShaderStageFlags::COMPUTE,
+        )?;
+
         Ok(ExampleState {
             fill_pipeline,
             fill_set,
             fill_image,
+
             flip_pipeline,
             flip_set,
             flip_image,
+
+            text_pipeline,
+            text_set,
+            text_image,
         })
     })?;
+
+    let mut text_buffer = engine.with_allocators(|ctx, res, alloc| {
+        let elem_size = std::mem::size_of::<u32>();
+        let len = 1024 * 8;
+        let format = vk::Format::R8G8B8A8_UNORM;
+        let usage = vk::BufferUsageFlags::TRANSFER_SRC
+            | vk::BufferUsageFlags::TRANSFER_DST;
+
+        let buf =
+            res.allocate_buffer(ctx, alloc, elem_size, len, format, usage)?;
+
+        Ok(buf)
+    })?;
+
+    {
+        let cmd = engine.allocate_command_buffer()?;
+
+        let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            engine
+                .context
+                .device()
+                .begin_command_buffer(cmd, &cmd_begin_info)?;
+        }
+
+        let mut bytes = Vec::with_capacity(1024 * 8 * 4);
+
+        for ix in 0..(1024 * 8) {
+            let col = ix % 1024;
+            let row = ix / 1024;
+
+            let v = ((col % 32) * 4) as u8;
+
+            bytes.push(v);
+            bytes.push(v);
+            bytes.push(v);
+            bytes.push(255);
+        }
+
+        let context = &engine.context;
+        let res = &mut engine.resources;
+        let alloc = &mut engine.allocator;
+
+        let buffer = &mut res[text_buffer];
+
+        buffer.upload_to_self_bytes(
+            context.device(),
+            context,
+            alloc,
+            bytes.as_slice(),
+            cmd,
+        )?;
+
+        let text_src = &res[text_buffer];
+        let text_img = &res[example_state.text_image];
+
+        VkEngine::transition_image(
+            cmd,
+            context.device(),
+            text_img.image,
+            vk::AccessFlags::empty(),
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::AccessFlags::TRANSFER_WRITE,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::GENERAL,
+        );
+
+        VkEngine::copy_buffer_to_image(
+            context.device(),
+            cmd,
+            text_src.buffer,
+            text_img.image,
+            vk::ImageLayout::GENERAL,
+            vk::Extent3D {
+                width: 1024,
+                height: 8,
+                depth: 1,
+            },
+            None,
+        );
+
+        /*
+        let src_r = &engine.resources[text_buffer];
+        let dst_r = &engine.resources[example_state.text_image];
+
+        let extent = vk::Extent3D {
+            width: 1024,
+            height: 8,
+            depth: 1,
+        };
+
+        VkEngine::copy_buffer_to_image(
+            engine.context.device(),
+            cmd,
+            src_r.buffer,
+            dst_r.image,
+            extent,
+            None,
+        );
+        */
+
+        unsafe { engine.context.device().end_command_buffer(cmd) }?;
+
+        let fence_ix = engine.submit_queue(cmd)?;
+        let fence = engine.resources[fence_ix];
+
+        let fences = [fence];
+        unsafe {
+            engine.context.device().wait_for_fences(
+                &fences,
+                true,
+                1_000_000_000,
+            )?;
+            engine.context.device().reset_fences(&fences)?;
+        };
+
+        engine.free_command_buffer(cmd);
+    }
+
+    /*
+    {
+        let cmd = engine.allocate_command_buffer()?;
+
+        let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            engine
+                .context
+                .device()
+                .begin_command_buffer(cmd, &cmd_begin_info)?;
+        }
+
+        let src_r = &engine.resources[text_buffer];
+        let dst_r = &engine.resources[example_state.text_image];
+
+        let extent = vk::Extent3D {
+            width: 1024,
+            height: 8,
+            depth: 1,
+        };
+
+        VkEngine::copy_buffer_to_image(
+            engine.context.device(),
+            cmd,
+            src_r.buffer,
+            dst_r.image,
+            extent,
+            None,
+        );
+
+        unsafe { engine.context.device().end_command_buffer(cmd) }?;
+
+        let fence_ix = engine.submit_queue(cmd)?;
+        let fence = engine.resources[fence_ix];
+
+        let fences = [fence];
+        unsafe {
+            engine.context.device().wait_for_fences(
+                &fences,
+                true,
+                1_000_000_000,
+            )?;
+            engine.context.device().reset_fences(&fences)?;
+        };
+
+        engine.free_command_buffer(cmd);
+    }
+    */
 
     /*
     let (pipeline, image, desc_set) =

@@ -373,6 +373,7 @@ impl VkEngine {
         cmd: vk::CommandBuffer,
         src: vk::Buffer,
         dst: vk::Image,
+        dst_layout: vk::ImageLayout,
         extent: vk::Extent3D,
         src_offset: Option<u64>,
     ) {
@@ -393,13 +394,7 @@ impl VkEngine {
         let regions = [region];
 
         unsafe {
-            device.cmd_copy_buffer_to_image(
-                cmd,
-                src,
-                dst,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &regions,
-            )
+            device.cmd_copy_buffer_to_image(cmd, src, dst, dst_layout, &regions)
         }
     }
 
