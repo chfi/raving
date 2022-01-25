@@ -54,6 +54,7 @@ impl TextRenderer {
                 8,
                 vk::Format::R8G8B8A8_UNORM,
                 vk::ImageUsageFlags::STORAGE
+                    | vk::ImageUsageFlags::SAMPLED
                     | vk::ImageUsageFlags::TRANSFER_DST,
                 Some("text:font_image"),
             )?;
@@ -157,7 +158,10 @@ impl TextRenderer {
             use image::io::Reader as ImageReader;
 
             let font = ImageReader::open(font_img_path)?.decode()?;
-            let font_rgba8 = font.as_rgba8().unwrap();
+
+            log::warn!("{:?}", font);
+
+            let font_rgba8 = font.to_rgba8();
 
             let pixel_bytes =
                 font_rgba8.enumerate_pixels().flat_map(|(_, _, col)| {
@@ -170,6 +174,7 @@ impl TextRenderer {
                 context,
                 alloc,
                 pixel_bytes,
+                4,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 cmd,
             )?;
@@ -222,16 +227,14 @@ pub struct ExampleState {
     pub fill_pipeline: PipelineIx,
     pub fill_set: DescSetIx,
     pub fill_image: ImageIx,
+    pub fill_view: ImageViewIx,
 
     pub flip_pipeline: PipelineIx,
     pub flip_set: DescSetIx,
     pub flip_image: ImageIx,
-
-    pub text_pipeline: PipelineIx,
-    pub text_set: DescSetIx,
-    pub text_image: ImageIx,
 }
 
+/*
 pub fn text_batch(
     state: ExampleState,
     device: &Device,
@@ -310,6 +313,7 @@ pub fn text_batch(
         vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
     );
 }
+*/
 
 pub fn flip_batch(
     state: ExampleState,
@@ -332,7 +336,8 @@ pub fn flip_batch(
         vk::PipelineStageFlags::COMPUTE_SHADER,
         vk::AccessFlags::SHADER_READ,
         vk::PipelineStageFlags::COMPUTE_SHADER,
-        vk::ImageLayout::GENERAL,
+        // vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
         vk::ImageLayout::GENERAL,
     );
 
@@ -369,6 +374,19 @@ pub fn flip_batch(
         state.flip_set,
         bytes.as_slice(),
         groups,
+    );
+
+    VkEngine::transition_image(
+        cmd,
+        &device,
+        src.image,
+        vk::AccessFlags::SHADER_WRITE,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        vk::AccessFlags::SHADER_READ,
+        vk::PipelineStageFlags::COMPUTE_SHADER,
+        // vk::ImageLayout::GENERAL,
+        vk::ImageLayout::GENERAL,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
     );
 
     VkEngine::transition_image(

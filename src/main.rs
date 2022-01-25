@@ -44,16 +44,11 @@ fn main() -> Result<()> {
             BindingDesc::StorageImage { binding: 0 },
             BindingDesc::StorageImage { binding: 1 },
         ];
-        let text_bindings = [
-            BindingDesc::StorageImage { binding: 0 },
-            BindingDesc::StorageImage { binding: 1 },
-        ];
 
         // let fill_pc_size =
         //     std::mem::size_of::<[i32; 2]>() + std::mem::size_of::<[f32; 4]>();
         let fill_pc_size = std::mem::size_of::<[i32; 2]>();
         let flip_pc_size = std::mem::size_of::<[i32; 2]>();
-        let text_pc_size = std::mem::size_of::<[i32; 4]>();
 
         let fill_pipeline = res.load_compute_shader_runtime(
             ctx,
@@ -67,12 +62,6 @@ fn main() -> Result<()> {
             "shaders/flip.comp.spv",
             &flip_bindings,
             flip_pc_size,
-        )?;
-        let text_pipeline = res.load_compute_shader_runtime(
-            ctx,
-            "shaders/text.comp.spv",
-            &text_bindings,
-            text_pc_size,
         )?;
 
         let fill_image = res.allocate_image(
@@ -93,19 +82,9 @@ fn main() -> Result<()> {
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
             Some("flip_image"),
         )?;
-        let text_image = res.allocate_image(
-            ctx,
-            alloc,
-            1024,
-            8,
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_DST,
-            Some("text_image"),
-        )?;
 
         let fill_view = res.create_image_view_for_image(ctx, fill_image)?;
         let flip_view = res.create_image_view_for_image(ctx, flip_image)?;
-        let text_view = res.create_image_view_for_image(ctx, text_image)?;
 
         let fill_inputs = [BindingInput::ImageView {
             binding: 0,
@@ -121,16 +100,6 @@ fn main() -> Result<()> {
                 view: flip_view,
             },
         ];
-        let text_inputs = [
-            BindingInput::ImageView {
-                binding: 0,
-                view: text_view,
-            },
-            BindingInput::ImageView {
-                binding: 1,
-                view: fill_view,
-            },
-        ];
 
         let fill_set = res.allocate_desc_set(
             &fill_bindings,
@@ -142,26 +111,21 @@ fn main() -> Result<()> {
             &flip_inputs,
             vk::ShaderStageFlags::COMPUTE,
         )?;
-        let text_set = res.allocate_desc_set(
-            &text_bindings,
-            &text_inputs,
-            vk::ShaderStageFlags::COMPUTE,
-        )?;
 
         Ok(ExampleState {
             fill_pipeline,
             fill_set,
             fill_image,
+            fill_view,
 
             flip_pipeline,
             flip_set,
             flip_image,
-
-            text_pipeline,
-            text_set,
-            text_image,
         })
     })?;
+
+    let text_renderer =
+        TextRenderer::new(&mut engine, "8x8font.png", example_state.fill_view)?;
 
     dbg!();
 
@@ -191,103 +155,7 @@ fn main() -> Result<()> {
 
         engine.set_debug_object_name(res[e.fill_image].image, "fill_image")?;
         engine.set_debug_object_name(res[e.flip_image].image, "flip_image")?;
-        engine.set_debug_object_name(res[e.text_image].image, "text_image")?;
         engine.set_debug_object_name(res[text_buffer].buffer, "text_buffer")?;
-    }
-
-    {
-        let cmd = engine.allocate_command_buffer()?;
-
-        let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-        unsafe {
-            engine
-                .context
-                .device()
-                .begin_command_buffer(cmd, &cmd_begin_info)?;
-        }
-
-        let mut bytes = Vec::with_capacity(1024 * 8 * 4);
-
-        for ix in 0..(1024 * 8) {
-            let col = ix % 1024;
-            let row = ix / 1024;
-
-            let v = ((col % 32) * 4) as u8;
-
-            bytes.push(v);
-            bytes.push(v);
-            bytes.push(v);
-            bytes.push(255);
-        }
-
-        let context = &engine.context;
-        let res = &mut engine.resources;
-        let alloc = &mut engine.allocator;
-
-        let buffer = &mut res[text_buffer];
-
-        let staging = buffer.upload_to_self_bytes(
-            context.device(),
-            context,
-            alloc,
-            bytes.as_slice(),
-            cmd,
-        )?;
-
-        let text_src = &res[text_buffer];
-        let text_img = &res[example_state.text_image];
-
-        VkEngine::transition_image(
-            cmd,
-            context.device(),
-            text_img.image,
-            vk::AccessFlags::empty(),
-            vk::PipelineStageFlags::TOP_OF_PIPE,
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::ImageLayout::UNDEFINED,
-            vk::ImageLayout::GENERAL,
-        );
-
-        VkEngine::copy_buffer_to_image(
-            context.device(),
-            cmd,
-            text_src.buffer,
-            text_img.image,
-            vk::ImageLayout::GENERAL,
-            vk::Extent3D {
-                width: 1024,
-                height: 8,
-                depth: 1,
-            },
-            None,
-        );
-
-        unsafe { engine.context.device().end_command_buffer(cmd) }?;
-
-        let fence_ix = engine.submit_queue(cmd)?;
-        let fence = engine.resources[fence_ix];
-
-        let fences = [fence];
-        unsafe {
-            engine.context.device().wait_for_fences(
-                &fences,
-                true,
-                10_000_000_000,
-            )?;
-            engine.context.device().reset_fences(&fences)?;
-        };
-
-        engine
-            .resources
-            .destroy_fence(engine.context.device(), fence_ix)
-            .unwrap();
-
-        staging.cleanup(&engine.context, &mut engine.allocator)?;
-
-        engine.free_command_buffer(cmd);
     }
 
     let mut frames = {
@@ -339,17 +207,17 @@ fn main() -> Result<()> {
         },
     ) as Box<_>;
 
-    let text_batch = Box::new(
-        move |dev: &Device,
-              res: &GpuResources,
-              input: &BatchInput,
-              cmd: vk::CommandBuffer| {
-            text_batch(example_state, dev, res, input, cmd)
-        },
-    ) as Box<_>;
+    // let text_batch = Box::new(
+    //     move |dev: &Device,
+    //           res: &GpuResources,
+    //           input: &BatchInput,
+    //           cmd: vk::CommandBuffer| {
+    //         text_batch(example_state, dev, res, input, cmd)
+    //     },
+    // ) as Box<_>;
 
-    // let batches = [main_batch, flip_batch, copy_batch];
-    let batches = [main_batch, text_batch, copy_batch];
+    let batches = [main_batch, flip_batch, copy_batch];
+    // let batches = [main_batch, text_batch, copy_batch];
 
     let deps = vec![
         None,

@@ -214,7 +214,7 @@ impl GpuResources {
                         let buf_info = vk::DescriptorBufferInfo::builder()
                             .buffer(buffer.buffer)
                             .offset(0)
-                            // .range(range)
+                            .range(vk::WHOLE_SIZE)
                             .build();
 
                         let buffer_info = vec![buf_info];
@@ -758,13 +758,14 @@ impl ImageRes {
         ctx: &VkContext,
         allocator: &mut Allocator,
         pixel_bytes: impl IntoIterator<Item = u8>,
+        elem_size: usize,
         layout: vk::ImageLayout,
         cmd: vk::CommandBuffer,
     ) -> Result<BufferRes> {
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
         let location = MemoryLocation::CpuToGpu;
 
-        let len = self.extent.width * self.extent.height;
+        let len = self.extent.width * self.extent.height * elem_size as u32;
 
         let mut staging = BufferRes::allocate_for_type::<u8>(
             ctx,

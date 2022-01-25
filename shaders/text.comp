@@ -1,16 +1,14 @@
 #version 450
 
 layout (rgba8, set = 0, binding = 0) readonly uniform image2D font_img;
-layout (rgba8, set = 0, binding = 1) uniform image2D image_out;
 
-/*
+
 layout (set = 0, binding = 1) uniform TextData {
   int len;
   uint chars[];
 } text;
 
 layout (rgba8, set = 0, binding = 2) uniform image2D image_out;
-*/
 
 layout (push_constant) uniform Inputs {
   int x;
