@@ -75,9 +75,8 @@ impl GpuResources {
         len: usize,
         format: vk::Format,
         usage: vk::BufferUsageFlags,
+        name: Option<&str>,
     ) -> Result<BufferIx> {
-        let name = None;
-
         let location = gpu_allocator::MemoryLocation::CpuToGpu;
 
         let buffer = BufferRes::allocate(
@@ -95,9 +94,8 @@ impl GpuResources {
         height: u32,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
+        name: Option<&str>,
     ) -> Result<ImageIx> {
-        let name = None;
-
         let image = ImageRes::allocate_2d(
             ctx, allocator, width, height, format, usage, name,
         )?;

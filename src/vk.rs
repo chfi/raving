@@ -731,6 +731,33 @@ impl VkEngine {
 
         Ok(true)
     }
+
+    pub fn set_debug_object_name<T: ash::vk::Handle>(
+        &self,
+        object: T,
+        name: &str,
+    ) -> Result<()> {
+        use std::ffi::CString;
+
+        if let Some(utils) = self.context.debug_utils() {
+            let name = CString::new(name)?;
+
+            let debug_name_info = vk::DebugUtilsObjectNameInfoEXT::builder()
+                .object_type(T::TYPE)
+                .object_handle(object.as_raw())
+                .object_name(&name)
+                .build();
+
+            unsafe {
+                utils.debug_utils_set_object_name(
+                    self.context.device().handle(),
+                    &debug_name_info,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

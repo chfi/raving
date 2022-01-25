@@ -302,10 +302,20 @@ fn main() -> Result<()> {
 
     let example_state = engine.with_allocators(|ctx, res, alloc| {
         let fill_bindings = [BindingDesc::StorageImage { binding: 0 }];
+        let flip_bindings = [
+            BindingDesc::StorageImage { binding: 0 },
+            BindingDesc::StorageImage { binding: 1 },
+        ];
+        let text_bindings = [
+            BindingDesc::StorageImage { binding: 0 },
+            BindingDesc::StorageImage { binding: 1 },
+        ];
 
         // let fill_pc_size =
         //     std::mem::size_of::<[i32; 2]>() + std::mem::size_of::<[f32; 4]>();
         let fill_pc_size = std::mem::size_of::<[i32; 2]>();
+        let flip_pc_size = std::mem::size_of::<[i32; 2]>();
+        let text_pc_size = std::mem::size_of::<[i32; 4]>();
 
         let fill_pipeline = res.load_compute_shader_runtime(
             ctx,
@@ -314,24 +324,12 @@ fn main() -> Result<()> {
             fill_pc_size,
         )?;
 
-        let flip_bindings = [
-            BindingDesc::StorageImage { binding: 0 },
-            BindingDesc::StorageImage { binding: 1 },
-        ];
-        let flip_pc_size = std::mem::size_of::<[i32; 2]>();
-
         let flip_pipeline = res.load_compute_shader_runtime(
             ctx,
             "shaders/flip.comp.spv",
             &flip_bindings,
             flip_pc_size,
         )?;
-
-        let text_bindings = [
-            BindingDesc::StorageImage { binding: 0 },
-            BindingDesc::StorageImage { binding: 1 },
-        ];
-        let text_pc_size = std::mem::size_of::<[i32; 4]>();
 
         let text_pipeline = res.load_compute_shader_runtime(
             ctx,
@@ -347,8 +345,8 @@ fn main() -> Result<()> {
             height,
             vk::Format::R8G8B8A8_UNORM,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+            Some("fill_image"),
         )?;
-
         let flip_image = res.allocate_image(
             ctx,
             alloc,
@@ -356,8 +354,8 @@ fn main() -> Result<()> {
             height,
             vk::Format::R8G8B8A8_UNORM,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+            Some("flip_image"),
         )?;
-
         let text_image = res.allocate_image(
             ctx,
             alloc,
@@ -365,6 +363,7 @@ fn main() -> Result<()> {
             8,
             vk::Format::R8G8B8A8_UNORM,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_DST,
+            Some("text_image"),
         )?;
 
         let fill_view = res.create_image_view_for_image(ctx, fill_image)?;
@@ -375,13 +374,6 @@ fn main() -> Result<()> {
             binding: 0,
             view: fill_view,
         }];
-
-        let fill_set = res.allocate_desc_set(
-            &fill_bindings,
-            &fill_inputs,
-            vk::ShaderStageFlags::COMPUTE,
-        )?;
-
         let flip_inputs = [
             BindingInput::ImageView {
                 binding: 0,
@@ -392,12 +384,6 @@ fn main() -> Result<()> {
                 view: flip_view,
             },
         ];
-        let flip_set = res.allocate_desc_set(
-            &flip_bindings,
-            &flip_inputs,
-            vk::ShaderStageFlags::COMPUTE,
-        )?;
-
         let text_inputs = [
             BindingInput::ImageView {
                 binding: 0,
@@ -408,6 +394,17 @@ fn main() -> Result<()> {
                 view: fill_view,
             },
         ];
+
+        let fill_set = res.allocate_desc_set(
+            &fill_bindings,
+            &fill_inputs,
+            vk::ShaderStageFlags::COMPUTE,
+        )?;
+        let flip_set = res.allocate_desc_set(
+            &flip_bindings,
+            &flip_inputs,
+            vk::ShaderStageFlags::COMPUTE,
+        )?;
         let text_set = res.allocate_desc_set(
             &text_bindings,
             &text_inputs,
@@ -429,6 +426,15 @@ fn main() -> Result<()> {
         })
     })?;
 
+    {
+        let e = example_state;
+        let res = &engine.resources;
+
+        engine.set_debug_object_name(res[e.fill_image].image, "fill_image")?;
+        engine.set_debug_object_name(res[e.flip_image].image, "flip_image")?;
+        engine.set_debug_object_name(res[e.text_image].image, "text_image")?;
+    }
+
     let mut text_buffer = engine.with_allocators(|ctx, res, alloc| {
         let elem_size = std::mem::size_of::<u32>();
         let len = 1024 * 8;
@@ -436,8 +442,15 @@ fn main() -> Result<()> {
         let usage = vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::TRANSFER_DST;
 
-        let buf =
-            res.allocate_buffer(ctx, alloc, elem_size, len, format, usage)?;
+        let buf = res.allocate_buffer(
+            ctx,
+            alloc,
+            elem_size,
+            len,
+            format,
+            usage,
+            Some("text_buffer"),
+        )?;
 
         Ok(buf)
     })?;
