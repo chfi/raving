@@ -54,6 +54,11 @@ impl std::ops::Index<ImageIx> for GpuResources {
         &self.images[i.0]
     }
 }
+impl std::ops::IndexMut<ImageIx> for GpuResources {
+    fn index_mut(&mut self, i: ImageIx) -> &mut Self::Output {
+        &mut self.images[i.0]
+    }
+}
 
 impl std::ops::Index<ImageViewIx> for GpuResources {
     type Output = (vk::ImageView, ImageIx);

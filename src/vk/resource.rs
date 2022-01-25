@@ -73,7 +73,6 @@ impl GpuResources {
         allocator: &mut Allocator,
         elem_size: usize,
         len: usize,
-        format: vk::Format,
         usage: vk::BufferUsageFlags,
         name: Option<&str>,
     ) -> Result<BufferIx> {
@@ -560,7 +559,7 @@ impl BufferRes {
         allocator: &mut Allocator,
         src: &[u8],
         cmd: vk::CommandBuffer,
-    ) -> Result<()> {
+    ) -> Result<Self> {
         // assert!(!self.host_writable());
 
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
@@ -592,7 +591,7 @@ impl BufferRes {
             None,
         );
 
-        Ok(())
+        Ok(staging)
     }
 
     pub fn cleanup(
@@ -686,6 +685,51 @@ pub struct ImageRes {
 }
 
 impl ImageRes {
+    pub fn fill_from_pixels(
+        &mut self,
+        device: &Device,
+        ctx: &VkContext,
+        allocator: &mut Allocator,
+        pixel_bytes: impl IntoIterator<Item = u8>,
+        layout: vk::ImageLayout,
+        cmd: vk::CommandBuffer,
+    ) -> Result<BufferRes> {
+        let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
+        let location = MemoryLocation::CpuToGpu;
+
+        let len = self.extent.width * self.extent.height;
+
+        let mut staging = BufferRes::allocate_for_type::<u8>(
+            ctx,
+            allocator,
+            location,
+            staging_usage,
+            len as usize,
+            Some("tmp staging buffer"),
+        )?;
+
+        let bytes = pixel_bytes.into_iter().collect::<Vec<_>>();
+
+        if let Some(stg) = staging.alloc.mapped_slice_mut() {
+            log::warn!("in mapped slice!");
+            stg.clone_from_slice(&bytes);
+        } else {
+            bail!("couldn't map staging buffer memory");
+        }
+
+        VkEngine::copy_buffer_to_image(
+            device,
+            cmd,
+            staging.buffer,
+            self.image,
+            layout,
+            self.extent,
+            None,
+        );
+
+        Ok(staging)
+    }
+
     pub fn create_image_view(&self, ctx: &VkContext) -> Result<vk::ImageView> {
         let create_info = vk::ImageViewCreateInfo::builder()
             .image(self.image)

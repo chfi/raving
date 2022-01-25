@@ -168,7 +168,6 @@ fn main() -> Result<()> {
     let mut text_buffer = engine.with_allocators(|ctx, res, alloc| {
         let elem_size = std::mem::size_of::<u32>();
         let len = 1024 * 8;
-        let format = vk::Format::R8G8B8A8_UNORM;
         let usage = vk::BufferUsageFlags::TRANSFER_SRC
             | vk::BufferUsageFlags::TRANSFER_DST;
 
@@ -177,7 +176,6 @@ fn main() -> Result<()> {
             alloc,
             elem_size,
             len,
-            format,
             usage,
             Some("text_buffer"),
         )?;
@@ -230,7 +228,7 @@ fn main() -> Result<()> {
 
         let buffer = &mut res[text_buffer];
 
-        buffer.upload_to_self_bytes(
+        let staging = buffer.upload_to_self_bytes(
             context.device(),
             context,
             alloc,
@@ -280,111 +278,13 @@ fn main() -> Result<()> {
                 10_000_000_000,
             )?;
             engine.context.device().reset_fences(&fences)?;
+            engine.context.device().destroy_fence(fence, None);
         };
+
+        staging.cleanup(&engine.context, &mut engine.allocator)?;
 
         engine.free_command_buffer(cmd);
     }
-
-    /*
-    {
-        let cmd = engine.allocate_command_buffer()?;
-
-        let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-        unsafe {
-            engine
-                .context
-                .device()
-                .begin_command_buffer(cmd, &cmd_begin_info)?;
-        }
-
-        let src_r = &engine.resources[text_buffer];
-        let dst_r = &engine.resources[example_state.text_image];
-
-        let extent = vk::Extent3D {
-            width: 1024,
-            height: 8,
-            depth: 1,
-        };
-
-        VkEngine::copy_buffer_to_image(
-            engine.context.device(),
-            cmd,
-            src_r.buffer,
-            dst_r.image,
-            extent,
-            None,
-        );
-
-        unsafe { engine.context.device().end_command_buffer(cmd) }?;
-
-        let fence_ix = engine.submit_queue(cmd)?;
-        let fence = engine.resources[fence_ix];
-
-        let fences = [fence];
-        unsafe {
-            engine.context.device().wait_for_fences(
-                &fences,
-                true,
-                1_000_000_000,
-            )?;
-            engine.context.device().reset_fences(&fences)?;
-        };
-
-        engine.free_command_buffer(cmd);
-    }
-    */
-
-    /*
-    let (pipeline, image, desc_set) =
-        engine.with_allocators(|ctx, res, alloc| {
-            let bindings = [BindingDesc::StorageImage { binding: 0 }];
-
-            // let pc_size_1 = std::mem::size_of::<[i32; 2]>()
-            //     + std::mem::size_of::<[f32; 4]>();
-            let pc_size_1 = std::mem::size_of::<[i32; 2]>();
-
-            // let pipeline = res.load_compute_shader_runtime(
-            //     ctx,
-            //     "shaders/fill_color.comp.spv",
-            //     &bindings,
-            //     pc_size_1,
-            // )?;
-            let pipeline = res.load_compute_shader_runtime(
-                ctx,
-                "shaders/trig_color.comp.spv",
-                &bindings,
-                pc_size_1,
-            )?;
-
-            let image = res.allocate_image(
-                ctx,
-                alloc,
-                width,
-                height,
-                // right now this image is copied to the swapchain, which on
-                // my system uses BGRA rather than RGBA, so this is just a
-                // temporary fix
-                // vk::Format::B8G8R8A8_UNORM,
-                vk::Format::R8G8B8A8_UNORM,
-                vk::ImageUsageFlags::STORAGE
-                    | vk::ImageUsageFlags::TRANSFER_SRC,
-            )?;
-
-            let view = res.create_image_view_for_image(ctx, image)?;
-
-            let bind_inputs = [BindingInput::ImageView { binding: 0, view }];
-
-            let set = res.allocate_desc_set(
-                &bindings,
-                &bind_inputs,
-                vk::ShaderStageFlags::COMPUTE,
-            )?;
-
-            Ok((pipeline, image, set))
-        })?;
-    */
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;

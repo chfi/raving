@@ -3,6 +3,15 @@
 layout (rgba8, set = 0, binding = 0) readonly uniform image2D font_img;
 layout (rgba8, set = 0, binding = 1) uniform image2D image_out;
 
+/*
+layout (set = 0, binding = 1) uniform TextData {
+  int len;
+  uint chars[];
+} text;
+
+layout (rgba8, set = 0, binding = 2) uniform image2D image_out;
+*/
+
 layout (push_constant) uniform Inputs {
   int x;
   int y;
@@ -34,8 +43,6 @@ void main() {
   // vec4 crgb = (1.0 - v) * dst_color + vec4(1.0, 1.0, 1.0, v);
   vec4 crgb = dst_color + vec4(v);
   crgb = normalize(crgb);
-  // vec3 col_rgb = src_color.rgb + dst_color.rgb;
-  // vec4 color = mix(src_color, dst_color, 0.8);
 
   vec4 color = crgb;
 
