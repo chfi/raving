@@ -6,7 +6,44 @@ use crate::vk::{
 };
 use ash::{vk, Device};
 
+use gpu_allocator::vulkan::Allocator;
+use png::Decoder;
+
 use anyhow::Result;
+
+use super::context::VkContext;
+use super::BufferIx;
+
+#[derive(Clone, Copy)]
+pub struct TextRenderer {
+    pub pipeline: PipelineIx,
+    pub set: DescSetIx,
+
+    pub font_image: ImageIx,
+    pub text_buffer: BufferIx,
+    // text_len: usize,
+}
+
+impl TextRenderer {
+    // font has to be 8x8 monospace, in a png, for now
+    pub fn new(
+        ctx: &VkContext,
+        res: &mut GpuResources,
+        allocator: &mut Allocator,
+        font_img_path: &str,
+    ) -> Result<Self> {
+        // dst dims, start pos
+        let pc_size = std::mem::size_of::<[i32; 4]>();
+
+        let bindings = [
+            BindingDesc::StorageImage { binding: 0 },
+            BindingDesc::UniformBuffer { binding: 1 },
+            BindingDesc::StorageImage { binding: 2 },
+        ];
+
+        todo!();
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct ExampleState {

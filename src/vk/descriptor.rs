@@ -20,15 +20,16 @@ pub mod transitions;
 
 pub use transitions::*;
 
-use super::{context::VkContext, ImageIx, ImageViewIx, SamplerIx};
+use super::{context::VkContext, BufferIx, ImageIx, ImageViewIx, SamplerIx};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BindingDesc {
     StorageImage { binding: u32 },
     SampledImage { binding: u32 },
+    UniformBuffer { binding: u32 },
+    StorageBuffer { binding: u32 },
     // StorageImage { binding: u32, readonly: bool, writeonly: bool },
     // Uniform { binding: u32 },
-    // Buffer { binding: u32 },
     // VertexBuffer { },
     // IndexBuffer { },
 }
@@ -38,6 +39,8 @@ impl BindingDesc {
         match self {
             BindingDesc::StorageImage { binding } => *binding,
             BindingDesc::SampledImage { binding } => *binding,
+            BindingDesc::UniformBuffer { binding } => *binding,
+            BindingDesc::StorageBuffer { binding } => *binding,
         }
     }
 
@@ -57,6 +60,20 @@ impl BindingDesc {
                 vk::DescriptorSetLayoutBinding::builder()
                     .binding(*binding)
                     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(stage_flags)
+            }
+            BindingDesc::UniformBuffer { binding } => {
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(*binding)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(stage_flags)
+            }
+            BindingDesc::StorageBuffer { binding } => {
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(*binding)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                     .descriptor_count(1)
                     .stage_flags(stage_flags)
             }
@@ -92,9 +109,16 @@ impl BindingDesc {
                     .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
                     .descriptor_count(1)
                     .build(),
-
                 BindingDesc::SampledImage { .. } => b
                     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .descriptor_count(1)
+                    .build(),
+                BindingDesc::UniformBuffer { .. } => b
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .build(),
+                BindingDesc::StorageBuffer { .. } => b
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                     .descriptor_count(1)
                     .build(),
             };
@@ -123,11 +147,14 @@ pub enum BindingInput {
         view: ImageViewIx,
         sampler: SamplerIx,
     },
-    // Buffer { binding: u32, buffer: BufferIx }
-    // VertexBuffer { binding: u32, buffer: BufferIx }
-    // IndexBuffer { binding: u32, buffer: BufferIx }
-    // SampledImage
-    // Buffer
+    Buffer {
+        binding: u32,
+        buffer: BufferIx,
+    }, // Buffer { binding: u32, buffer: BufferIx }
+       // VertexBuffer { binding: u32, buffer: BufferIx }
+       // IndexBuffer { binding: u32, buffer: BufferIx }
+       // SampledImage
+       // Buffer
 }
 
 impl BindingInput {
@@ -136,6 +163,7 @@ impl BindingInput {
             Self::Image { binding, .. } => binding,
             Self::ImageView { binding, .. } => binding,
             Self::SampledImage { binding, .. } => binding,
+            Self::Buffer { binding, .. } => binding,
         }
     }
 }
@@ -472,12 +500,10 @@ impl<'a> DescriptorBuilder<'a> {
 
         self.bindings.push(layout_binding);
 
-        let write = unsafe {
-            vk::WriteDescriptorSet::builder()
-                .descriptor_type(ty)
-                .image_info(image_info)
-                .dst_binding(binding)
-        };
+        let write = vk::WriteDescriptorSet::builder()
+            .descriptor_type(ty)
+            .image_info(image_info)
+            .dst_binding(binding);
 
         self.writes.push(write);
 

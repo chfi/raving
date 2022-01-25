@@ -267,26 +267,6 @@ fn main() -> Result<()> {
             None,
         );
 
-        /*
-        let src_r = &engine.resources[text_buffer];
-        let dst_r = &engine.resources[example_state.text_image];
-
-        let extent = vk::Extent3D {
-            width: 1024,
-            height: 8,
-            depth: 1,
-        };
-
-        VkEngine::copy_buffer_to_image(
-            engine.context.device(),
-            cmd,
-            src_r.buffer,
-            dst_r.image,
-            extent,
-            None,
-        );
-        */
-
         unsafe { engine.context.device().end_command_buffer(cmd) }?;
 
         let fence_ix = engine.submit_queue(cmd)?;

@@ -146,21 +146,36 @@ impl GpuResources {
         use parking_lot::Mutex;
 
         let img_infos = Mutex::new(Vec::new());
+        let buf_infos = Mutex::new(Vec::new());
 
         for (desc, input) in bind_descs.iter().zip(bind_inputs) {
             match *desc {
-                Desc::StorageImage { binding } => {
+                Desc::StorageImage { binding }
+                | Desc::SampledImage { binding } => {
                     if input.binding() != binding {
                         bail!("Binding descriptions and input order do not match: {} vs {}",
                               binding,
                               input.binding());
                     }
 
+                    let (layout, ty) =
+                        if matches!(*desc, Desc::StorageImage { .. }) {
+                            (
+                                vk::ImageLayout::GENERAL,
+                                vk::DescriptorType::STORAGE_IMAGE,
+                            )
+                        } else {
+                            (
+                                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                                vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                            )
+                        };
+
                     if let In::ImageView { view, .. } = input {
                         let (view, _image) = self.image_views[view.0];
 
                         let img_info = vk::DescriptorImageInfo::builder()
-                            .image_layout(vk::ImageLayout::GENERAL)
+                            .image_layout(layout)
                             .image_view(view)
                             .build();
 
@@ -182,12 +197,7 @@ impl GpuResources {
                             let lmao: &[vk::DescriptorImageInfo] =
                                 std::slice::from_raw_parts(image_info, len);
 
-                            builder.bind_image(
-                                binding,
-                                lmao,
-                                vk::DescriptorType::STORAGE_IMAGE,
-                                stage_flags,
-                            );
+                            builder.bind_image(binding, lmao, ty, stage_flags);
                         }
                     } else {
                         bail!(
@@ -197,41 +207,45 @@ impl GpuResources {
                         );
                     }
                 }
-                Desc::SampledImage { binding } => {
-                    if let In::ImageView { view, .. } = input {
-                        let (view, _image) = self.image_views[view.0];
+                Desc::UniformBuffer { binding }
+                | Desc::StorageBuffer { binding } => {
+                    if let In::Buffer { buffer, .. } = input {
+                        let buffer = &self.buffers[buffer.0];
 
-                        let img_info = vk::DescriptorImageInfo::builder()
-                            .image_layout(
-                                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                            )
-                            .image_view(view)
+                        let buf_info = vk::DescriptorBufferInfo::builder()
+                            .buffer(buffer.buffer)
+                            .offset(0)
+                            // .range(range)
                             .build();
 
-                        let image_info = vec![img_info];
+                        let buffer_info = vec![buf_info];
 
-                        let (image_info, len) = {
-                            let mut infos = img_infos.lock();
+                        let (buffer_info, len) = {
+                            let mut infos = buf_infos.lock();
                             let ix = infos.len();
 
-                            let len = image_info.len();
-
-                            infos.push(image_info);
+                            let len = buffer_info.len();
+                            infos.push(buffer_info);
 
                             let lol = infos[ix].as_ptr();
                             (lol, len)
                         };
 
                         unsafe {
-                            let lmao: &[vk::DescriptorImageInfo] =
-                                std::slice::from_raw_parts(image_info, len);
+                            let lmao: &[vk::DescriptorBufferInfo] =
+                                std::slice::from_raw_parts(buffer_info, len);
 
-                            builder.bind_image(
-                                binding,
-                                lmao,
-                                vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                                stage_flags,
-                            );
+                            let ty = match *desc {
+                                Desc::StorageBuffer { .. } => {
+                                    vk::DescriptorType::STORAGE_BUFFER
+                                }
+                                Desc::UniformBuffer { .. } => {
+                                    vk::DescriptorType::UNIFORM_BUFFER
+                                }
+                                _ => unreachable!(),
+                            };
+
+                            builder.bind_buffer(binding, lmao, ty, stage_flags);
                         }
                     } else {
                         bail!(
