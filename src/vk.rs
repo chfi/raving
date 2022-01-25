@@ -42,6 +42,8 @@ pub struct VkEngine {
     #[allow(dead_code)]
     pub swapchain_image_views: Vec<vk::ImageView>,
 
+    command_pool: vk::CommandPool,
+
     frame_number: usize,
 }
 
@@ -176,13 +178,20 @@ impl VkEngine {
 
         let queues = Queues::init(graphics_queue, graphics_ix)?;
 
-        let create_flags = vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER;
-
         let frame_number = 0;
 
-        let mut resources = GpuResources::new(&vk_context)?;
+        let resources = GpuResources::new(&vk_context)?;
 
         let device = vk_context.device();
+
+        let create_flags = vk::CommandPoolCreateFlags::empty();
+        let command_pool_info = vk::CommandPoolCreateInfo::builder()
+            .queue_family_index(graphics_ix)
+            .flags(create_flags)
+            .build();
+
+        let command_pool =
+            unsafe { device.create_command_pool(&command_pool_info, None) }?;
 
         let engine = VkEngine {
             allocator,
@@ -196,10 +205,64 @@ impl VkEngine {
             swapchain_images: images,
             swapchain_image_views,
 
+            command_pool,
+
             frame_number,
         };
 
         Ok(engine)
+    }
+
+    pub fn allocate_command_buffer(&mut self) -> Result<vk::CommandBuffer> {
+        let ctx = &self.context;
+
+        let command_buffer = {
+            let alloc_info = vk::CommandBufferAllocateInfo::builder()
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_pool(self.command_pool)
+                .command_buffer_count(1)
+                .build();
+
+            let bufs =
+                unsafe { ctx.device().allocate_command_buffers(&alloc_info) }?;
+
+            bufs[0]
+        };
+
+        Ok(command_buffer)
+    }
+
+    pub fn free_command_buffer(&mut self, cmd: vk::CommandBuffer) {
+        unsafe {
+            self.context
+                .device()
+                .free_command_buffers(self.command_pool, &[cmd]);
+        };
+    }
+
+    pub fn submit_queue(&mut self, cmd: vk::CommandBuffer) -> Result<FenceIx> {
+        let ctx = &self.context;
+        let device = ctx.device();
+        let fence = self.resources.allocate_fence(ctx)?;
+
+        let cmds = [cmd];
+
+        let batch = vk::SubmitInfo::builder()
+            .command_buffers(&cmds)
+            .wait_semaphores(&[])
+            .wait_dst_stage_mask(&[])
+            .signal_semaphores(&[])
+            .build();
+
+        let submit_infos = [batch];
+
+        let queue = self.queues.thread.queue;
+
+        unsafe {
+            device.queue_submit(queue, &submit_infos, self.resources[fence])?;
+        }
+
+        Ok(fence)
     }
 
     pub fn with_resources<T, F>(&self, f: F) -> Result<T>
