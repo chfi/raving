@@ -67,6 +67,26 @@ impl GpuResources {
         Ok(result)
     }
 
+    pub fn allocate_buffer(
+        &mut self,
+        ctx: &VkContext,
+        allocator: &mut Allocator,
+        elem_size: usize,
+        len: usize,
+        format: vk::Format,
+        usage: vk::BufferUsageFlags,
+    ) -> Result<BufferIx> {
+        let name = None;
+
+        let location = gpu_allocator::MemoryLocation::CpuToGpu;
+
+        let buffer = BufferRes::allocate(
+            ctx, allocator, location, usage, elem_size, len, name,
+        )?;
+        let ix = self.buffers.insert(buffer);
+        Ok(BufferIx(ix))
+    }
+
     pub fn allocate_image(
         &mut self,
         ctx: &VkContext,
@@ -471,12 +491,12 @@ impl GpuResources {
 #[allow(dead_code)]
 pub struct BufferRes {
     name: Option<String>,
-    pub(super) buffer: vk::Buffer,
+    pub buffer: vk::Buffer,
 
-    elem_size: usize,
-    len: usize,
+    pub elem_size: usize,
+    pub len: usize,
 
-    location: gpu_allocator::MemoryLocation,
+    pub location: gpu_allocator::MemoryLocation,
 
     alloc: Allocation,
 }
@@ -523,11 +543,13 @@ impl BufferRes {
 
     pub fn upload_to_self_bytes(
         &mut self,
+        device: &Device,
         ctx: &VkContext,
         allocator: &mut Allocator,
         src: &[u8],
+        cmd: vk::CommandBuffer,
     ) -> Result<()> {
-        assert!(!self.host_writable());
+        // assert!(!self.host_writable());
 
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
         let location = MemoryLocation::CpuToGpu;
@@ -548,7 +570,15 @@ impl BufferRes {
             bail!("couldn't map staging buffer memory");
         }
 
-        todo!();
+        VkEngine::copy_buffer(
+            device,
+            cmd,
+            staging.buffer,
+            self.buffer,
+            src.len(),
+            None,
+            None,
+        );
 
         Ok(())
     }

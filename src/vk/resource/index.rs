@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, Result};
 
 use thunderdome::{Arena, Index};
 
-use super::{GpuResources, ImageRes};
+use super::{BufferRes, GpuResources, ImageRes};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PipelineIx(pub(super) Index);
@@ -63,7 +63,6 @@ impl std::ops::Index<ImageViewIx> for GpuResources {
     }
 }
 
-/* buffers aren't in yet
 impl std::ops::Index<BufferIx> for GpuResources {
     type Output = BufferRes;
 
@@ -71,7 +70,12 @@ impl std::ops::Index<BufferIx> for GpuResources {
         &self.buffers[i.0]
     }
 }
-*/
+
+impl std::ops::IndexMut<BufferIx> for GpuResources {
+    fn index_mut(&mut self, i: BufferIx) -> &mut Self::Output {
+        &mut self.buffers[i.0]
+    }
+}
 
 impl std::ops::Index<SemaphoreIx> for GpuResources {
     type Output = vk::Semaphore;
