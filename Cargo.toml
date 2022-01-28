@@ -12,8 +12,6 @@ gpu-allocator = { version = "0.15", features = ["vulkan"] }
 rspirv-reflect = "0.5"
 
 winit = "0.25"
-egui = "0.15"
-# clipboard = "0.5"
 
 crossbeam = "0.8"
 parking_lot = "0.11.1"
@@ -22,10 +20,9 @@ futures = { version = "0.3", features = ["thread-pool"] }
 futures-timer = { version = "3.0.2" }
 poll-promise = "0.1"
 
-rhai = { version = "1.0.1", features = ["sync", "f32_float"] }
+rhai = { version = "1.4", features = ["sync", "f32_float"] }
 bytemuck = { version = "1.7", features = ["derive"] }
 
-# png = "0.17"
 image = "0.23"
 rgb = "0.8.25"
 colorous = "1.0.5"

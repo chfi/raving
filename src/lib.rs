@@ -1,7 +1,4 @@
-pub mod graph;
 pub mod vk;
-
-pub mod script;
 
 #[macro_export]
 macro_rules! include_shader {

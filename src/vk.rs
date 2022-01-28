@@ -23,8 +23,6 @@ pub use resource::*;
 
 use context::{Queues, VkContext};
 
-use crate::graph::Batch;
-
 pub const FRAME_OVERLAP: usize = 2;
 
 pub struct VkEngine {
