@@ -8,7 +8,6 @@ layout (set = 0, binding = 1) readonly buffer TextData {
 } text;
 
 layout (set = 0, binding = 2) readonly buffer LineData {
-  uint len;
   uint offsets[];
 } lines;
 
@@ -33,8 +32,7 @@ void main() {
 
   uvec2 dst_pixel = gl_GlobalInvocationID.xy;
 
-  if (line_ix >= lines.len ||
-      line_end >= text.len ||
+  if (line_end >= text.len ||
       dst_pixel.x >= inputs.img_width ||
       dst_pixel.y >= inputs.img_height) {
     return;
