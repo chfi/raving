@@ -133,10 +133,7 @@ impl GpuResources {
             );
         }
 
-        let mut builder = DescriptorBuilder::begin(
-            &mut self.layout_cache,
-            &mut self.descriptor_allocator,
-        );
+        let mut builder = DescriptorBuilder::begin();
 
         use BindingDesc as Desc;
         use BindingInput as In;
@@ -256,7 +253,8 @@ impl GpuResources {
             }
         }
 
-        let set = builder.build()?;
+        let set = builder
+            .build(&mut self.layout_cache, &mut self.descriptor_allocator)?;
 
         let ix = self.descriptor_sets.insert(set);
 

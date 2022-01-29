@@ -220,9 +220,6 @@ impl std::hash::Hash for DescriptorLayoutInfo {
 }
 
 pub struct DescriptorBuilder<'a> {
-    layout_cache: &'a mut DescriptorLayoutCache,
-    allocator: &'a mut DescriptorAllocator,
-
     bindings: Vec<vk::DescriptorSetLayoutBinding>,
     writes: Vec<vk::WriteDescriptorSetBuilder<'a>>,
 }
@@ -444,14 +441,8 @@ impl DescriptorLayoutCache {
 }
 
 impl<'a> DescriptorBuilder<'a> {
-    pub(super) fn begin(
-        layout_cache: &'a mut DescriptorLayoutCache,
-        allocator: &'a mut DescriptorAllocator,
-    ) -> Self {
+    pub(super) fn begin() -> Self {
         Self {
-            layout_cache,
-            allocator,
-
             bindings: Vec::new(),
             writes: Vec::new(),
         }
@@ -510,14 +501,18 @@ impl<'a> DescriptorBuilder<'a> {
         self
     }
 
-    pub(super) fn build(mut self) -> Result<vk::DescriptorSet> {
+    pub(super) fn build(
+        mut self,
+        layout_cache: &mut DescriptorLayoutCache,
+        allocator: &mut DescriptorAllocator,
+    ) -> Result<vk::DescriptorSet> {
         let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
             .bindings(self.bindings.as_slice())
             .build();
 
-        let layout = self.layout_cache.get_descriptor_layout(&create_info)?;
+        let layout = layout_cache.get_descriptor_layout(&create_info)?;
 
-        let set = self.allocator.allocate(layout)?;
+        let set = allocator.allocate(layout)?;
 
         let writes = self
             .writes
@@ -530,7 +525,7 @@ impl<'a> DescriptorBuilder<'a> {
         // }
 
         unsafe {
-            self.allocator
+            allocator
                 .device
                 .update_descriptor_sets(writes.as_slice(), &[]);
         }
