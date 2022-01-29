@@ -7,6 +7,8 @@ use crate::vk::resource::index::*;
 
 use rhai::plugin::*;
 
+pub mod console;
+
 #[export_module]
 pub mod vk {
 
