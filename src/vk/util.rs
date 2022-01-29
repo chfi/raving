@@ -78,7 +78,7 @@ impl LineRenderer {
                 .mapped_slice_mut()
                 .ok_or(anyhow!("couldn't map text buffer memory!"))?;
 
-            let mut ix = 1;
+            let mut ix = 4;
             let mut write_u32 = |u: u32| {
                 for (i, b) in u.to_le_bytes().into_iter().enumerate() {
                     mapped[ix + i] = b;
