@@ -134,13 +134,6 @@ fn main() -> Result<()> {
 
     line_renderer.update_lines(&mut engine.resources, lines)?;
 
-    // text_renderer.update_text_buffer(&mut engine.resources, "F")?;
-    // text_renderer.update_text_buffer(&mut engine.resources, "hello world!")?;
-    // text_renderer.update_text_buffer(
-    //     &mut engine.resources,
-    //     "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    // )?;
-
     dbg!();
 
     {
@@ -256,15 +249,6 @@ fn main() -> Result<()> {
                         );
                     },
                 ) as Box<_>;
-
-                // let text_batch = Box::new(
-                //     move |dev: &Device,
-                //           res: &GpuResources,
-                //           input: &BatchInput,
-                //           cmd: vk::CommandBuffer| {
-                //         text_batch(example_state, dev, res, input, cmd)
-                //     },
-                // ) as Box<_>;
 
                 let batches = [&main_batch, &text_batch, &copy_batch];
                 // let batches = [main_batch, text_batch, copy_batch];
