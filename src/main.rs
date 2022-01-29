@@ -123,15 +123,19 @@ fn main() -> Result<()> {
         })
     })?;
 
-    let mut text_renderer = TextRenderer::new(
+    let mut line_renderer = LineRenderer::new(
         &mut engine,
         "8x8font.png",
         example_state.fill_image,
         example_state.fill_view,
     )?;
 
+    let lines = ["hello world", "e", "l", "l", "o     world", "???"];
+
+    line_renderer.update_lines(&mut engine.resources, lines)?;
+
     // text_renderer.update_text_buffer(&mut engine.resources, "F")?;
-    text_renderer.update_text_buffer(&mut engine.resources, "hello world!")?;
+    // text_renderer.update_text_buffer(&mut engine.resources, "hello world!")?;
     // text_renderer.update_text_buffer(
     //     &mut engine.resources,
     //     "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
@@ -222,7 +226,8 @@ fn main() -> Result<()> {
                           res: &GpuResources,
                           input: &BatchInput,
                           cmd: vk::CommandBuffer| {
-                        let dst = &res[text_renderer.out_image];
+                        // let dst = &res[text_renderer.out_image];
+                        let dst = &res[line_renderer.out_image];
 
                         VkEngine::transition_image(
                             cmd,
@@ -236,7 +241,7 @@ fn main() -> Result<()> {
                             vk::ImageLayout::GENERAL,
                         );
 
-                        text_renderer.draw_at((100, 100), dev, res, cmd);
+                        line_renderer.draw_at((100, 100), dev, res, cmd);
 
                         VkEngine::transition_image(
                             cmd,

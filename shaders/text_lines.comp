@@ -25,22 +25,32 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 void main() {
   //
+  uint char_ix = gl_WorkGroupID.x;
   uint line_ix = gl_WorkGroupID.y;
 
   uint line_start = lines.offsets[2 * line_ix];
   uint line_end = lines.offsets[2 * line_ix + 1];
 
-  uvec2 dst_pixel = gl_GlobalInvocationID.xy;
-
-  if (line_end >= text.len ||
-      dst_pixel.x >= inputs.img_width ||
-      dst_pixel.y >= inputs.img_height) {
+  if (line_end > text.len) {
     return;
   }
 
-  uint char_offset = line_start + gl_WorkGroupID.x;
+  uint char_offset = line_start + char_ix;
 
   ivec2 local = ivec2(gl_LocalInvocationID.xy);
+
+  int x_offset = inputs.x + int(char_ix) * 8 + local.x;
+  int y_offset = inputs.y + int(line_ix) * 8 + local.y;
+
+  ivec2 dst_px = ivec2(x_offset, y_offset);
+  vec4 out_col = vec4(1.0, 0.0, 0.0, 1.0);
+  imageStore(image_out, dst_px, out_col);
+
+  if (char_offset >= line_end) {
+    out_col = vec4(0.0, 0.0, 1.0, 1.0);
+    imageStore(image_out, dst_px, out_col);
+    return;
+  }
 
   uint char = min(text.chars[char_offset], 127);
 
@@ -49,8 +59,10 @@ void main() {
   vec4 font_col = imageLoad(font_img, char_px);
 
   // TODO this check is just for the specific font i'm currently using
-  if (font_col.r == 0.0) {
-    ivec2 dst_px = ivec2(dst_pixel);
+  if (font_col.r == 0.0 &&
+      x_offset <= inputs.img_width &&
+      y_offset <= inputs.img_height) {
+    ivec2 dst_px = ivec2(x_offset, y_offset);
 
     vec4 out_col = vec4(1.0);
 

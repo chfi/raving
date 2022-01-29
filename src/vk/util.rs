@@ -43,11 +43,12 @@ impl LineRenderer {
         bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
 
         let x_groups = self.text_len as u32;
+        let y_groups = self.line_count as u32;
 
-        let x_size = 8;
-        let y_size = 8;
+        // let x_size = 8;
+        // let y_size = 8;
 
-        let groups = (x_groups, 1, 1);
+        let groups = (x_groups, y_groups, 1);
 
         VkEngine::dispatch_compute(
             resources,
