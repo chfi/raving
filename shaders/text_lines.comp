@@ -1,0 +1,61 @@
+#version 450
+
+layout (rgba8, set = 0, binding = 0) readonly uniform image2D font_img;
+
+layout (set = 0, binding = 1) readonly buffer TextData {
+  uint len;
+  uint chars[];
+} text;
+
+layout (set = 0, binding = 2) readonly buffer LineData {
+  uint len;
+  uint offsets[];
+} lines;
+
+layout (rgba8, set = 0, binding = 3) uniform image2D image_out;
+// layout (rgba8, set = 1, binding = 0) uniform image2D image_out;
+
+layout (push_constant) uniform Inputs {
+  int x;
+  int y;
+  int img_width;
+  int img_height;
+} inputs;
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+void main() {
+  //
+  uint line_ix = gl_WorkGroupID.y;
+
+  uint line_start = lines.offsets[2 * line_ix];
+  uint line_end = lines.offsets[2 * line_ix + 1];
+
+  uvec2 dst_pixel = gl_GlobalInvocationID.xy;
+
+  if (line_ix >= lines.len ||
+      line_end >= text.len ||
+      dst_pixel.x >= inputs.img_width ||
+      dst_pixel.y >= inputs.img_height) {
+    return;
+  }
+
+  uint char_offset = line_start + gl_WorkGroupID.x;
+
+  ivec2 local = ivec2(gl_LocalInvocationID.xy);
+
+  uint char = min(text.chars[char_offset], 127);
+
+  ivec2 char_px = ivec2(char * 8 + local.x, local.y);
+
+  vec4 font_col = imageLoad(font_img, char_px);
+
+  // TODO this check is just for the specific font i'm currently using
+  if (font_col.r == 0.0) {
+    ivec2 dst_px = ivec2(dst_pixel);
+
+    vec4 out_col = vec4(1.0);
+
+    imageStore(image_out, dst_px, out_col);
+  }
+}

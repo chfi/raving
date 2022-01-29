@@ -3,12 +3,52 @@ use parking_lot::{Mutex, RwLock};
 
 use lazy_static::lazy_static;
 
+use crate::vk::resource::index::*;
+
 use rhai::plugin::*;
 
 #[export_module]
 pub mod vk {
 
     use ash::vk;
+
+    pub mod pipeline {
+        use crate::vk::descriptor::BindingDesc;
+
+        pub struct ComputePipeline {
+            name: String,
+            src_path: String,
+
+            pipeline: PipelineIx,
+
+            bindings: Vec<BindingDesc>,
+            pc_size: u64,
+        }
+    }
+
+    pub mod binding {
+        use crate::vk::descriptor::BindingDesc;
+
+        macro_rules! mk_binding {
+            ($name:ident, $v:ident) => {
+                pub fn $name(binding: i64) -> BindingDesc {
+                    BindingDesc::$v {
+                        binding: binding as u32,
+                    }
+                }
+            };
+        }
+
+        mk_binding!(storage_image, StorageImage);
+        mk_binding!(sampled_image, SampledImage);
+        mk_binding!(storage_buffer, StorageBuffer);
+        mk_binding!(uniform_buffer, UniformBuffer);
+    }
+
+    pub mod cmd {
+
+        //
+    }
 
     #[rhai_mod(name = "ImageLayout")]
     pub mod image_layout {
