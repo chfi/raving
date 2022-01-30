@@ -34,7 +34,7 @@ pub struct ModuleBuilder {
 
     desc_set_vars: FxHashMap<String, Resolvable<DescSetIx>>,
     // images: FxHashMap<usize, Resolvable<ImageIx>>,
-    rhai_mod: rhai::Module,
+    // rhai_mod: rhai::Module,
 }
 
 /// the minimal engine
@@ -66,10 +66,10 @@ pub fn create_engine() -> rhai::Engine {
 }
 
 impl ModuleBuilder {
-    pub fn from_script(path: &str) -> anyhow::Result<Self> {
-        let mut engine = create_engine();
+    pub fn from_script(path: &str) -> anyhow::Result<(Self, rhai::Module)> {
+        let (module, arcres) = {
+            let mut engine = create_engine();
 
-        let ast = {
             let result = Self::default();
             let arcres = Arc::new(Mutex::new(result));
 
@@ -88,21 +88,53 @@ impl ModuleBuilder {
             );
 
             let res = arcres.clone();
+            engine.register_fn("image_var", move |name: &str| {
+                let resolvable = res.lock().image_var(name);
+                resolvable
+            });
 
-            // engine.register_fn(
-            //     "image_var"
-            //         move |name: &str| {
+            let res = arcres.clone();
+            engine.register_fn("image_view_var", move |name: &str| {
+                let resolvable = res.lock().image_view_var(name);
+                resolvable
+            });
 
-            //         });
+            let res = arcres.clone();
+            engine.register_fn("buffer_var", move |name: &str| {
+                let resolvable = res.lock().buffer_var(name);
+                resolvable
+            });
+
+            let res = arcres.clone();
+            engine.register_fn("pipeline_var", move |name: &str| {
+                let resolvable = res.lock().pipeline_var(name);
+                resolvable
+            });
+
+            let res = arcres.clone();
+            engine.register_fn("desc_set_var", move |name: &str| {
+                let resolvable = res.lock().desc_set_var(name);
+                resolvable
+            });
 
             let path = std::path::PathBuf::from(path);
             let ast = engine.compile_file(path)?;
 
-            ast
+            let module = rhai::Module::eval_ast_as_new(
+                rhai::Scope::new(),
+                &ast,
+                &engine,
+            )?;
+
+            let _ = engine;
+
+            // let result = Arc::
+
+            (module, arcres)
         };
 
-        let module =
-            rhai::Module::eval_ast_as_new(rhai::Scope::new(), &ast, &engine)?;
+        let mutex = Arc::try_unwrap(arcres).ok().unwrap();
+        let result = mutex.into_inner();
 
         // module.build_index()
 
@@ -110,10 +142,58 @@ impl ModuleBuilder {
             log::warn!("{} - {:?}", name, var);
         }
 
-        // result.rhai_mod = module;
+        Ok((result, module))
+    }
 
-        // Ok(result)
-        todo!();
+    pub fn image_var(&mut self, k: &str) -> Resolvable<ImageIx> {
+        if let Some(res) = self.image_vars.get(k) {
+            res.clone()
+        } else {
+            let resolvable = Resolvable::empty();
+            self.image_vars.insert(k.to_string(), resolvable.clone());
+            resolvable
+        }
+    }
+
+    pub fn image_view_var(&mut self, k: &str) -> Resolvable<ImageViewIx> {
+        if let Some(res) = self.image_view_vars.get(k) {
+            res.clone()
+        } else {
+            let resolvable = Resolvable::empty();
+            self.image_view_vars
+                .insert(k.to_string(), resolvable.clone());
+            resolvable
+        }
+    }
+
+    pub fn buffer_var(&mut self, k: &str) -> Resolvable<BufferIx> {
+        if let Some(res) = self.buffer_vars.get(k) {
+            res.clone()
+        } else {
+            let resolvable = Resolvable::empty();
+            self.buffer_vars.insert(k.to_string(), resolvable.clone());
+            resolvable
+        }
+    }
+
+    pub fn pipeline_var(&mut self, k: &str) -> Resolvable<PipelineIx> {
+        if let Some(res) = self.pipeline_vars.get(k) {
+            res.clone()
+        } else {
+            let resolvable = Resolvable::empty();
+            self.pipeline_vars.insert(k.to_string(), resolvable.clone());
+            resolvable
+        }
+    }
+
+    pub fn desc_set_var(&mut self, k: &str) -> Resolvable<DescSetIx> {
+        if let Some(res) = self.desc_set_vars.get(k) {
+            res.clone()
+        } else {
+            let resolvable = Resolvable::empty();
+            self.desc_set_vars.insert(k.to_string(), resolvable.clone());
+            resolvable
+        }
     }
 
     pub fn bind_image_var(&mut self, k: &str, v: ImageIx) -> Option<()> {
@@ -257,7 +337,7 @@ impl ModuleBuilder {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Resolvable<T: Copy> {
     value: Arc<AtomicCell<Option<T>>>,
 }
@@ -265,6 +345,12 @@ pub struct Resolvable<T: Copy> {
 impl<T: Copy> Resolvable<T> {
     pub fn new(value: Arc<AtomicCell<Option<T>>>) -> Self {
         Self { value }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            value: Arc::new(AtomicCell::new(None)),
+        }
     }
 
     pub fn get(&self) -> Option<T> {
