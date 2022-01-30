@@ -9,17 +9,22 @@ use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 use crate::vk::{
-    context::VkContext, resource::index::*, util::LineRenderer, GpuResources,
-    VkEngine,
+    context::VkContext, descriptor::BindingDesc, resource::index::*,
+    util::LineRenderer, GpuResources, VkEngine,
 };
 
 use rhai::plugin::*;
 
 use super::vk as rvk;
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct ModuleBuilder {
-    resolvers: Vec<WithAllocators<()>>,
+    image_resolvers: Vec<WithAllocators<()>>,
+    image_view_resolvers: Vec<WithAllocators<()>>,
+
+    buffer_resolvers: Vec<WithAllocators<()>>,
+    pipeline_resolvers: Vec<WithAllocators<()>>,
+    desc_set_resolvers: Vec<WithAllocators<()>>,
 
     image_vars: FxHashMap<String, Resolvable<ImageIx>>,
     image_view_vars: FxHashMap<String, Resolvable<ImageViewIx>>,
@@ -32,6 +37,85 @@ pub struct ModuleBuilder {
 }
 
 impl ModuleBuilder {
+    pub fn bind_image_var(&mut self, k: &str, v: ImageIx) -> Option<()> {
+        let var = self.image_vars.remove(k)?;
+        var.value.store(Some(v));
+        Some(())
+    }
+
+    pub fn bind_image_view_var(
+        &mut self,
+        k: &str,
+        v: ImageViewIx,
+    ) -> Option<()> {
+        let var = self.image_view_vars.remove(k)?;
+        var.value.store(Some(v));
+        Some(())
+    }
+
+    pub fn bind_buffer_var(&mut self, k: &str, v: BufferIx) -> Option<()> {
+        let var = self.buffer_vars.remove(k)?;
+        var.value.store(Some(v));
+        Some(())
+    }
+
+    pub fn bind_pipeline_var(&mut self, k: &str, v: PipelineIx) -> Option<()> {
+        let var = self.pipeline_vars.remove(k)?;
+        var.value.store(Some(v));
+        Some(())
+    }
+
+    pub fn bind_desc_set_var(&mut self, k: &str, v: DescSetIx) -> Option<()> {
+        let var = self.desc_set_vars.remove(k)?;
+        var.value.store(Some(v));
+        Some(())
+    }
+
+    pub fn resolve(
+        &mut self,
+        ctx: &VkContext,
+        res: &mut GpuResources,
+        alloc: &mut Allocator,
+    ) -> anyhow::Result<bool> {
+        for f in self.pipeline_resolvers.drain(..) {
+            f(ctx, res, alloc)?;
+        }
+
+        for f in self.image_resolvers.drain(..) {
+            f(ctx, res, alloc)?;
+        }
+
+        for f in self.image_view_resolvers.drain(..) {
+            f(ctx, res, alloc)?;
+        }
+
+        for f in self.buffer_resolvers.drain(..) {
+            f(ctx, res, alloc)?;
+        }
+
+        for f in self.desc_set_resolvers.drain(..) {
+            f(ctx, res, alloc)?;
+        }
+
+        Ok(self.is_resolved())
+    }
+
+    pub fn is_resolved(&self) -> bool {
+        let resolvers = self.image_resolvers.is_empty()
+            && self.image_view_resolvers.is_empty()
+            && self.buffer_resolvers.is_empty()
+            && self.pipeline_resolvers.is_empty()
+            && self.desc_set_resolvers.is_empty();
+
+        let vars = self.image_vars.is_empty()
+            && self.image_view_vars.is_empty()
+            && self.buffer_vars.is_empty()
+            && self.pipeline_vars.is_empty()
+            && self.desc_set_vars.is_empty();
+
+        resolvers && vars
+    }
+
     pub fn allocate_image(
         &mut self,
         width: u32,
@@ -55,7 +139,40 @@ impl ModuleBuilder {
             },
         ) as WithAllocators<()>;
 
-        self.resolvers.push(resolver);
+        self.image_resolvers.push(resolver);
+
+        Resolvable::new(resolvable)
+    }
+
+    pub fn load_compute_shader(
+        &mut self,
+        shader_path: &str,
+        bindings: &[BindingDesc],
+        pc_size: usize,
+    ) -> Resolvable<PipelineIx> {
+        let resolvable = Arc::new(AtomicCell::new(None));
+
+        let inner = resolvable.clone();
+
+        let shader_path = shader_path.to_string();
+        let bindings = Vec::from(bindings);
+
+        let resolver = Box::new(
+            move |ctx: &VkContext,
+                  res: &mut GpuResources,
+                  _alloc: &mut Allocator| {
+                let pipeline = res.load_compute_shader_runtime(
+                    ctx,
+                    &shader_path,
+                    &bindings,
+                    pc_size,
+                )?;
+                inner.store(Some(pipeline));
+                Ok(())
+            },
+        ) as WithAllocators<()>;
+
+        self.pipeline_resolvers.push(resolver);
 
         Resolvable::new(resolvable)
     }
