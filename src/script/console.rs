@@ -34,9 +34,88 @@ pub struct ModuleBuilder {
 
     desc_set_vars: FxHashMap<String, Resolvable<DescSetIx>>,
     // images: FxHashMap<usize, Resolvable<ImageIx>>,
+    rhai_mod: rhai::Module,
+}
+
+/// the minimal engine
+pub fn create_engine() -> rhai::Engine {
+    let mut engine = rhai::Engine::new();
+
+    engine.register_type_with_name::<ImageIx>("ImageIx");
+    engine.register_type_with_name::<ImageViewIx>("ImageViewIx");
+    engine.register_type_with_name::<BufferIx>("BufferIx");
+    engine.register_type_with_name::<PipelineIx>("PipelineIx");
+    engine.register_type_with_name::<DescSetIx>("DescSetIx");
+
+    engine
+        .register_type_with_name::<Resolvable<ImageIx>>("Resolvable<ImageIx>");
+    engine.register_type_with_name::<Resolvable<ImageViewIx>>(
+        "Resolvable<ImageViewIx>",
+    );
+    engine.register_type_with_name::<Resolvable<BufferIx>>(
+        "Resolvable<BufferIx>",
+    );
+    engine.register_type_with_name::<Resolvable<PipelineIx>>(
+        "Resolvable<PipelineIx>",
+    );
+    engine.register_type_with_name::<Resolvable<DescSetIx>>(
+        "Resolvable<DescSetIx>",
+    );
+
+    engine
 }
 
 impl ModuleBuilder {
+    pub fn from_script(path: &str) -> anyhow::Result<Self> {
+        let mut engine = create_engine();
+
+        let ast = {
+            let result = Self::default();
+            let arcres = Arc::new(Mutex::new(result));
+
+            let res = arcres.clone();
+
+            engine.register_fn(
+                "allocate_image",
+                move |width: u32,
+                      height: u32,
+                      format: vk::Format,
+                      usage: vk::ImageUsageFlags| {
+                    let resolvable =
+                        res.lock().allocate_image(width, height, format, usage);
+                    resolvable
+                },
+            );
+
+            let res = arcres.clone();
+
+            // engine.register_fn(
+            //     "image_var"
+            //         move |name: &str| {
+
+            //         });
+
+            let path = std::path::PathBuf::from(path);
+            let ast = engine.compile_file(path)?;
+
+            ast
+        };
+
+        let module =
+            rhai::Module::eval_ast_as_new(rhai::Scope::new(), &ast, &engine)?;
+
+        // module.build_index()
+
+        for (name, var) in module.iter_var() {
+            log::warn!("{} - {:?}", name, var);
+        }
+
+        // result.rhai_mod = module;
+
+        // Ok(result)
+        todo!();
+    }
+
     pub fn bind_image_var(&mut self, k: &str, v: ImageIx) -> Option<()> {
         let var = self.image_vars.remove(k)?;
         var.value.store(Some(v));
