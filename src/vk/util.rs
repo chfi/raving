@@ -42,7 +42,7 @@ impl LineRenderer {
         let mut bytes: Vec<u8> = Vec::with_capacity(8);
         bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
 
-        let x_groups = self.text_len as u32;
+        let x_groups = 256 as u32;
         let y_groups = self.line_count as u32;
 
         // let x_size = 8;

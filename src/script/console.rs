@@ -1,7 +1,7 @@
 use ash::vk;
 use crossbeam::atomic::AtomicCell;
 use gpu_allocator::vulkan::Allocator;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 
 use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
@@ -10,11 +10,86 @@ use std::sync::Arc;
 
 use crate::vk::{
     context::VkContext, resource::index::*, util::LineRenderer, GpuResources,
+    VkEngine,
 };
 
 use rhai::plugin::*;
 
 use super::vk as rvk;
+
+#[derive(Default, Clone)]
+pub struct ModuleBuilder {
+    resolvers: Vec<WithAllocators<()>>,
+
+    image_vars: FxHashMap<String, Resolvable<ImageIx>>,
+    image_view_vars: FxHashMap<String, Resolvable<ImageViewIx>>,
+
+    buffer_vars: FxHashMap<String, Resolvable<BufferIx>>,
+    pipeline_vars: FxHashMap<String, Resolvable<PipelineIx>>,
+
+    desc_set_vars: FxHashMap<String, Resolvable<DescSetIx>>,
+    // images: FxHashMap<usize, Resolvable<ImageIx>>,
+}
+
+impl ModuleBuilder {
+    pub fn allocate_image(
+        &mut self,
+        width: u32,
+        height: u32,
+        format: vk::Format,
+        usage: vk::ImageUsageFlags,
+    ) -> Resolvable<ImageIx> {
+        let resolvable = Arc::new(AtomicCell::new(None));
+
+        let inner = resolvable.clone();
+
+        let resolver = Box::new(
+            move |ctx: &VkContext,
+                  res: &mut GpuResources,
+                  alloc: &mut Allocator| {
+                let img = res.allocate_image(
+                    ctx, alloc, width, height, format, usage, None,
+                )?;
+                inner.store(Some(img));
+                Ok(())
+            },
+        ) as WithAllocators<()>;
+
+        self.resolvers.push(resolver);
+
+        Resolvable::new(resolvable)
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct Resolvable<T: Copy> {
+    value: Arc<AtomicCell<Option<T>>>,
+}
+
+impl<T: Copy> Resolvable<T> {
+    pub fn new(value: Arc<AtomicCell<Option<T>>>) -> Self {
+        Self { value }
+    }
+
+    pub fn get(&self) -> Option<T> {
+        self.value.load()
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct ResolvableRef<T> {
+    value: Arc<RwLock<Option<T>>>,
+}
+
+impl<T> ResolvableRef<T> {
+    pub fn get(&self) -> Option<RwLockReadGuard<Option<T>>> {
+        let lock = self.value.try_read()?;
+        if lock.is_none() {
+            return None;
+        }
+        Some(lock)
+    }
+}
 
 pub type WithAllocators<T> = Box<
     dyn FnOnce(
@@ -24,6 +99,17 @@ pub type WithAllocators<T> = Box<
         ) -> anyhow::Result<T>
         + Send
         + Sync,
+>;
+
+pub type AllocResolver = Box<
+    dyn FnOnce(&VkContext, &mut GpuResources, &mut Allocator) + Send + Sync,
+>;
+
+pub type GpuCmd = Arc<
+    dyn Fn(&ash::Device, &GpuResources, vk::CommandBuffer)
+        + Send
+        + Sync
+        + 'static,
 >;
 
 // pub struct VariableMap<T> {
@@ -92,6 +178,7 @@ pub struct BatchBuilder {
     pipeline_vars: VariableMap<PipelineIx>,
 
     desc_set_vars: VariableMap<DescSetIx>,
+    // cmds: Arc<Mutex<FxHashMap<usize, GpuCmd>>>,
 }
 
 impl BatchBuilder {
