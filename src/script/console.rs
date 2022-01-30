@@ -174,7 +174,6 @@ impl ModuleBuilder {
             let arcres = Arc::new(Mutex::new(result));
 
             let res = arcres.clone();
-
             engine.register_fn(
                 "allocate_image",
                 move |width: i64,
@@ -186,6 +185,24 @@ impl ModuleBuilder {
                         height as u32,
                         format,
                         usage,
+                    );
+                    resolvable
+                },
+            );
+
+            let res = arcres.clone();
+            engine.register_fn(
+                "load_compute_shader",
+                move |path: &str, bindings: rhai::Array, pc_size: i64| {
+                    let bindings = bindings
+                        .into_iter()
+                        .map(|b| b.cast::<BindingDesc>())
+                        .collect::<Vec<_>>();
+
+                    let resolvable = res.lock().load_compute_shader(
+                        path,
+                        &bindings,
+                        pc_size as usize,
                     );
                     resolvable
                 },
@@ -302,7 +319,10 @@ impl ModuleBuilder {
     }
 
     pub fn bind_image_var(&mut self, k: &str, v: ImageIx) -> Option<()> {
-        let var = self.image_vars.remove(k)?;
+        let var = self
+            .image_vars
+            .remove(k)
+            .expect("tried to bind to missing variable");
         var.value.store(Some(v));
         Some(())
     }
@@ -312,25 +332,37 @@ impl ModuleBuilder {
         k: &str,
         v: ImageViewIx,
     ) -> Option<()> {
-        let var = self.image_view_vars.remove(k)?;
+        let var = self
+            .image_view_vars
+            .remove(k)
+            .expect("tried to bind to missing variable");
         var.value.store(Some(v));
         Some(())
     }
 
     pub fn bind_buffer_var(&mut self, k: &str, v: BufferIx) -> Option<()> {
-        let var = self.buffer_vars.remove(k)?;
+        let var = self
+            .buffer_vars
+            .remove(k)
+            .expect("tried to bind to missing variable");
         var.value.store(Some(v));
         Some(())
     }
 
     pub fn bind_pipeline_var(&mut self, k: &str, v: PipelineIx) -> Option<()> {
-        let var = self.pipeline_vars.remove(k)?;
+        let var = self
+            .pipeline_vars
+            .remove(k)
+            .expect("tried to bind to missing variable");
         var.value.store(Some(v));
         Some(())
     }
 
     pub fn bind_desc_set_var(&mut self, k: &str, v: DescSetIx) -> Option<()> {
-        let var = self.desc_set_vars.remove(k)?;
+        let var = self
+            .desc_set_vars
+            .remove(k)
+            .expect("tried to bind to missing variable");
         var.value.store(Some(v));
         Some(())
     }

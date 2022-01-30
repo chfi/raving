@@ -140,9 +140,14 @@ fn main() -> Result<()> {
     log::warn!("MODULE BUILDER");
     let (mut builder, module) = ModuleBuilder::from_script("test.rhai")?;
 
+    engine.with_allocators(|ctx, res, alloc| {
+        builder.resolve(ctx, res, alloc)?;
+        Ok(())
+    })?;
+
     log::warn!("is resolved: {}", builder.is_resolved());
-    log::warn!("binding pipeline variable");
-    builder.bind_pipeline_var("pipeline", line_renderer.pipeline);
+    // log::warn!("binding pipeline variable");
+    // builder.bind_pipeline_var("pipeline", line_renderer.pipeline);
     log::warn!("binding descriptor set variable");
     builder.bind_desc_set_var("desc_set", line_renderer.set);
     log::warn!("is resolved: {}", builder.is_resolved());

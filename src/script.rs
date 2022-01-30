@@ -33,20 +33,29 @@ pub mod vk {
     pub mod binding {
         use crate::vk::descriptor::BindingDesc;
 
-        macro_rules! mk_binding {
-            ($name:ident, $v:ident) => {
-                pub fn $name(binding: i64) -> BindingDesc {
-                    BindingDesc::$v {
-                        binding: binding as u32,
-                    }
-                }
-            };
+        pub fn storage_image(binding: i64) -> BindingDesc {
+            BindingDesc::StorageImage {
+                binding: binding as u32,
+            }
         }
 
-        mk_binding!(storage_image, StorageImage);
-        mk_binding!(sampled_image, SampledImage);
-        mk_binding!(storage_buffer, StorageBuffer);
-        mk_binding!(uniform_buffer, UniformBuffer);
+        pub fn sampled_image(binding: i64) -> BindingDesc {
+            BindingDesc::SampledImage {
+                binding: binding as u32,
+            }
+        }
+
+        pub fn storage_buffer(binding: i64) -> BindingDesc {
+            BindingDesc::StorageBuffer {
+                binding: binding as u32,
+            }
+        }
+
+        pub fn uniform_buffer(binding: i64) -> BindingDesc {
+            BindingDesc::UniformBuffer {
+                binding: binding as u32,
+            }
+        }
     }
 
     pub mod cmd {
