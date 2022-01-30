@@ -174,6 +174,8 @@ fn draw_at(x, y) {
 
     let batch = draw_at(100, 100)?;
 
+    let batch_fn = batch.build();
+
     // let draw_at = Box::new(|batch: &mut BatchBuilder| {
 
     // });
@@ -261,6 +263,8 @@ fn draw_at(x, y) {
                 let f_ix = engine.current_frame_number();
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
 
+                let rhai_batch = batch_fn.clone();
+
                 let text_batch = Box::new(
                     move |dev: &Device,
                           res: &GpuResources,
@@ -281,7 +285,8 @@ fn draw_at(x, y) {
                             vk::ImageLayout::GENERAL,
                         );
 
-                        line_renderer.draw_at((100, 100), dev, res, cmd);
+                        rhai_batch(dev, res, cmd);
+                        // line_renderer.draw_at((100, 100), dev, res, cmd);
 
                         VkEngine::transition_image(
                             cmd,

@@ -27,6 +27,21 @@ pub struct BatchBuilder {
 }
 
 impl BatchBuilder {
+    pub fn build(self) -> BatchFn {
+        let cmds = Arc::new(self.command_fns);
+
+        let batch =
+            Arc::new(move |dev: &ash::Device, res: &GpuResources, cmd| {
+                let cmds = cmds.clone();
+
+                for f in cmds.iter() {
+                    f(dev, res, cmd);
+                }
+            }) as BatchFn;
+
+        batch
+    }
+
     pub fn dispatch_compute(
         &mut self,
         pipeline: PipelineIx,
