@@ -14,6 +14,8 @@ pub mod vk {
 
     use ash::vk;
 
+    pub const HELLO: i64 = 42;
+
     pub mod pipeline {
         use crate::vk::descriptor::BindingDesc;
 
@@ -47,10 +49,7 @@ pub mod vk {
         mk_binding!(uniform_buffer, UniformBuffer);
     }
 
-    pub mod cmd {
-
-        //
-    }
+    pub mod cmd {}
 
     #[rhai_mod(name = "BufferUsageFlags")]
     pub mod buffer_usage {
@@ -70,54 +69,45 @@ pub mod vk {
         flag!(VERTEX_BUFFER);
         flag!(INDIRECT_BUFFER);
 
-        #[rhai_fn(name = "|")]
+        #[rhai_fn(name = "|", global)]
         pub fn or(
-            f: &mut vk::BufferUsageFlags,
+            f: vk::BufferUsageFlags,
             g: vk::BufferUsageFlags,
         ) -> vk::BufferUsageFlags {
-            *f | g
+            f | g
         }
 
-        #[rhai_fn(name = "&")]
+        #[rhai_fn(name = "&", global)]
         pub fn and(
-            f: &mut vk::BufferUsageFlags,
+            f: vk::BufferUsageFlags,
             g: vk::BufferUsageFlags,
         ) -> vk::BufferUsageFlags {
-            *f & g
+            f & g
         }
     }
 
     #[rhai_mod(name = "ImageUsageFlags")]
     pub mod image_usage {
-        macro_rules! flag {
-            ($f:ident) => {
-                pub const $f: vk::ImageUsageFlags = vk::ImageUsageFlags::$f;
-            };
+        use ash::vk::ImageUsageFlags as Flags;
+
+        pub const TRANSFER_SRC: Flags = Flags::TRANSFER_SRC;
+        pub const TRANSFER_DST: Flags = Flags::TRANSFER_DST;
+        pub const SAMPLED: Flags = Flags::SAMPLED;
+        pub const STORAGE: Flags = Flags::STORAGE;
+        pub const COLOR_ATTACHMENT: Flags = Flags::COLOR_ATTACHMENT;
+        pub const DEPTH_STENCIL_ATTACHMENT: Flags =
+            Flags::DEPTH_STENCIL_ATTACHMENT;
+        pub const TRANSIENT_ATTACHMENT: Flags = Flags::TRANSIENT_ATTACHMENT;
+        pub const INPUT_ATTACHMENT: Flags = Flags::INPUT_ATTACHMENT;
+
+        #[rhai_fn(name = "|", global)]
+        pub fn or(f: Flags, g: Flags) -> vk::ImageUsageFlags {
+            f | g
         }
 
-        flag!(TRANSFER_SRC);
-        flag!(TRANSFER_DST);
-        flag!(SAMPLED);
-        flag!(STORAGE);
-        flag!(COLOR_ATTACHMENT);
-        flag!(DEPTH_STENCIL_ATTACHMENT);
-        flag!(TRANSIENT_ATTACHMENT);
-        flag!(INPUT_ATTACHMENT);
-
-        #[rhai_fn(name = "|")]
-        pub fn or(
-            f: &mut vk::ImageUsageFlags,
-            g: vk::ImageUsageFlags,
-        ) -> vk::ImageUsageFlags {
-            *f | g
-        }
-
-        #[rhai_fn(name = "&")]
-        pub fn and(
-            f: &mut vk::ImageUsageFlags,
-            g: vk::ImageUsageFlags,
-        ) -> vk::ImageUsageFlags {
-            *f & g
+        #[rhai_fn(name = "&", global)]
+        pub fn and(f: Flags, g: Flags) -> vk::ImageUsageFlags {
+            f & g
         }
     }
 
@@ -234,196 +224,269 @@ pub mod vk {
 
     #[rhai_mod(name = "Format")]
     pub mod format {
-        macro_rules! fmt {
-            ($f:ident) => {
-                pub const $f: vk::Format = vk::Format::$f;
-            };
-        }
-
-        fmt!(UNDEFINED);
-        fmt!(R4G4_UNORM_PACK8);
-        fmt!(R4G4B4A4_UNORM_PACK16);
-        fmt!(B4G4R4A4_UNORM_PACK16);
-        fmt!(R5G6B5_UNORM_PACK16);
-        fmt!(B5G6R5_UNORM_PACK16);
-        fmt!(R5G5B5A1_UNORM_PACK16);
-        fmt!(B5G5R5A1_UNORM_PACK16);
-        fmt!(A1R5G5B5_UNORM_PACK16);
-        fmt!(R8_UNORM);
-        fmt!(R8_SNORM);
-        fmt!(R8_USCALED);
-        fmt!(R8_SSCALED);
-        fmt!(R8_UINT);
-        fmt!(R8_SINT);
-        fmt!(R8_SRGB);
-        fmt!(R8G8_UNORM);
-        fmt!(R8G8_SNORM);
-        fmt!(R8G8_USCALED);
-        fmt!(R8G8_SSCALED);
-        fmt!(R8G8_UINT);
-        fmt!(R8G8_SINT);
-        fmt!(R8G8_SRGB);
-        fmt!(R8G8B8_UNORM);
-        fmt!(R8G8B8_SNORM);
-        fmt!(R8G8B8_USCALED);
-        fmt!(R8G8B8_SSCALED);
-        fmt!(R8G8B8_UINT);
-        fmt!(R8G8B8_SINT);
-        fmt!(R8G8B8_SRGB);
-        fmt!(B8G8R8_UNORM);
-        fmt!(B8G8R8_SNORM);
-        fmt!(B8G8R8_USCALED);
-        fmt!(B8G8R8_SSCALED);
-        fmt!(B8G8R8_UINT);
-        fmt!(B8G8R8_SINT);
-        fmt!(B8G8R8_SRGB);
-        fmt!(R8G8B8A8_UNORM);
-        fmt!(R8G8B8A8_SNORM);
-        fmt!(R8G8B8A8_USCALED);
-        fmt!(R8G8B8A8_SSCALED);
-        fmt!(R8G8B8A8_UINT);
-        fmt!(R8G8B8A8_SINT);
-        fmt!(R8G8B8A8_SRGB);
-        fmt!(B8G8R8A8_UNORM);
-        fmt!(B8G8R8A8_SNORM);
-        fmt!(B8G8R8A8_USCALED);
-        fmt!(B8G8R8A8_SSCALED);
-        fmt!(B8G8R8A8_UINT);
-        fmt!(B8G8R8A8_SINT);
-        fmt!(B8G8R8A8_SRGB);
-        fmt!(A8B8G8R8_UNORM_PACK32);
-        fmt!(A8B8G8R8_SNORM_PACK32);
-        fmt!(A8B8G8R8_USCALED_PACK32);
-        fmt!(A8B8G8R8_SSCALED_PACK32);
-        fmt!(A8B8G8R8_UINT_PACK32);
-        fmt!(A8B8G8R8_SINT_PACK32);
-        fmt!(A8B8G8R8_SRGB_PACK32);
-        fmt!(A2R10G10B10_UNORM_PACK32);
-        fmt!(A2R10G10B10_SNORM_PACK32);
-        fmt!(A2R10G10B10_USCALED_PACK32);
-        fmt!(A2R10G10B10_SSCALED_PACK32);
-        fmt!(A2R10G10B10_UINT_PACK32);
-        fmt!(A2R10G10B10_SINT_PACK32);
-        fmt!(A2B10G10R10_UNORM_PACK32);
-        fmt!(A2B10G10R10_SNORM_PACK32);
-        fmt!(A2B10G10R10_USCALED_PACK32);
-        fmt!(A2B10G10R10_SSCALED_PACK32);
-        fmt!(A2B10G10R10_UINT_PACK32);
-        fmt!(A2B10G10R10_SINT_PACK32);
-        fmt!(R16_UNORM);
-        fmt!(R16_SNORM);
-        fmt!(R16_USCALED);
-        fmt!(R16_SSCALED);
-        fmt!(R16_UINT);
-        fmt!(R16_SINT);
-        fmt!(R16_SFLOAT);
-        fmt!(R16G16_UNORM);
-        fmt!(R16G16_SNORM);
-        fmt!(R16G16_USCALED);
-        fmt!(R16G16_SSCALED);
-        fmt!(R16G16_UINT);
-        fmt!(R16G16_SINT);
-        fmt!(R16G16_SFLOAT);
-        fmt!(R16G16B16_UNORM);
-        fmt!(R16G16B16_SNORM);
-        fmt!(R16G16B16_USCALED);
-        fmt!(R16G16B16_SSCALED);
-        fmt!(R16G16B16_UINT);
-        fmt!(R16G16B16_SINT);
-        fmt!(R16G16B16_SFLOAT);
-        fmt!(R16G16B16A16_UNORM);
-        fmt!(R16G16B16A16_SNORM);
-        fmt!(R16G16B16A16_USCALED);
-        fmt!(R16G16B16A16_SSCALED);
-        fmt!(R16G16B16A16_UINT);
-        fmt!(R16G16B16A16_SINT);
-        fmt!(R16G16B16A16_SFLOAT);
-        fmt!(R32_UINT);
-        fmt!(R32_SINT);
-        fmt!(R32_SFLOAT);
-        fmt!(R32G32_UINT);
-        fmt!(R32G32_SINT);
-        fmt!(R32G32_SFLOAT);
-        fmt!(R32G32B32_UINT);
-        fmt!(R32G32B32_SINT);
-        fmt!(R32G32B32_SFLOAT);
-        fmt!(R32G32B32A32_UINT);
-        fmt!(R32G32B32A32_SINT);
-        fmt!(R32G32B32A32_SFLOAT);
-        fmt!(R64_UINT);
-        fmt!(R64_SINT);
-        fmt!(R64_SFLOAT);
-        fmt!(R64G64_UINT);
-        fmt!(R64G64_SINT);
-        fmt!(R64G64_SFLOAT);
-        fmt!(R64G64B64_UINT);
-        fmt!(R64G64B64_SINT);
-        fmt!(R64G64B64_SFLOAT);
-        fmt!(R64G64B64A64_UINT);
-        fmt!(R64G64B64A64_SINT);
-        fmt!(R64G64B64A64_SFLOAT);
-        fmt!(B10G11R11_UFLOAT_PACK32);
-        fmt!(E5B9G9R9_UFLOAT_PACK32);
-        fmt!(D16_UNORM);
-        fmt!(X8_D24_UNORM_PACK32);
-        fmt!(D32_SFLOAT);
-        fmt!(S8_UINT);
-        fmt!(D16_UNORM_S8_UINT);
-        fmt!(D24_UNORM_S8_UINT);
-        fmt!(D32_SFLOAT_S8_UINT);
-        fmt!(BC1_RGB_UNORM_BLOCK);
-        fmt!(BC1_RGB_SRGB_BLOCK);
-        fmt!(BC1_RGBA_UNORM_BLOCK);
-        fmt!(BC1_RGBA_SRGB_BLOCK);
-        fmt!(BC2_UNORM_BLOCK);
-        fmt!(BC2_SRGB_BLOCK);
-        fmt!(BC3_UNORM_BLOCK);
-        fmt!(BC3_SRGB_BLOCK);
-        fmt!(BC4_UNORM_BLOCK);
-        fmt!(BC4_SNORM_BLOCK);
-        fmt!(BC5_UNORM_BLOCK);
-        fmt!(BC5_SNORM_BLOCK);
-        fmt!(BC6H_UFLOAT_BLOCK);
-        fmt!(BC6H_SFLOAT_BLOCK);
-        fmt!(BC7_UNORM_BLOCK);
-        fmt!(BC7_SRGB_BLOCK);
-        fmt!(ETC2_R8G8B8_UNORM_BLOCK);
-        fmt!(ETC2_R8G8B8_SRGB_BLOCK);
-        fmt!(ETC2_R8G8B8A1_UNORM_BLOCK);
-        fmt!(ETC2_R8G8B8A1_SRGB_BLOCK);
-        fmt!(ETC2_R8G8B8A8_UNORM_BLOCK);
-        fmt!(ETC2_R8G8B8A8_SRGB_BLOCK);
-        fmt!(EAC_R11_UNORM_BLOCK);
-        fmt!(EAC_R11_SNORM_BLOCK);
-        fmt!(EAC_R11G11_UNORM_BLOCK);
-        fmt!(EAC_R11G11_SNORM_BLOCK);
-        fmt!(ASTC_4X4_UNORM_BLOCK);
-        fmt!(ASTC_4X4_SRGB_BLOCK);
-        fmt!(ASTC_5X4_UNORM_BLOCK);
-        fmt!(ASTC_5X4_SRGB_BLOCK);
-        fmt!(ASTC_5X5_UNORM_BLOCK);
-        fmt!(ASTC_5X5_SRGB_BLOCK);
-        fmt!(ASTC_6X5_UNORM_BLOCK);
-        fmt!(ASTC_6X5_SRGB_BLOCK);
-        fmt!(ASTC_6X6_UNORM_BLOCK);
-        fmt!(ASTC_6X6_SRGB_BLOCK);
-        fmt!(ASTC_8X5_UNORM_BLOCK);
-        fmt!(ASTC_8X5_SRGB_BLOCK);
-        fmt!(ASTC_8X6_UNORM_BLOCK);
-        fmt!(ASTC_8X6_SRGB_BLOCK);
-        fmt!(ASTC_8X8_UNORM_BLOCK);
-        fmt!(ASTC_8X8_SRGB_BLOCK);
-        fmt!(ASTC_10X5_UNORM_BLOCK);
-        fmt!(ASTC_10X5_SRGB_BLOCK);
-        fmt!(ASTC_10X6_UNORM_BLOCK);
-        fmt!(ASTC_10X6_SRGB_BLOCK);
-        fmt!(ASTC_10X8_UNORM_BLOCK);
-        fmt!(ASTC_10X8_SRGB_BLOCK);
-        fmt!(ASTC_10X10_UNORM_BLOCK);
-        fmt!(ASTC_10X10_SRGB_BLOCK);
-        fmt!(ASTC_12X10_UNORM_BLOCK);
-        fmt!(ASTC_12X10_SRGB_BLOCK);
-        fmt!(ASTC_12X12_UNORM_BLOCK);
-        fmt!(ASTC_12X12_SRGB_BLOCK);
+        pub const UNDEFINED: vk::Format = vk::Format::UNDEFINED;
+        pub const R4G4_UNORM_PACK8: vk::Format = vk::Format::R4G4_UNORM_PACK8;
+        pub const R4G4B4A4_UNORM_PACK16: vk::Format =
+            vk::Format::R4G4B4A4_UNORM_PACK16;
+        pub const B4G4R4A4_UNORM_PACK16: vk::Format =
+            vk::Format::B4G4R4A4_UNORM_PACK16;
+        pub const R5G6B5_UNORM_PACK16: vk::Format =
+            vk::Format::R5G6B5_UNORM_PACK16;
+        pub const B5G6R5_UNORM_PACK16: vk::Format =
+            vk::Format::B5G6R5_UNORM_PACK16;
+        pub const R5G5B5A1_UNORM_PACK16: vk::Format =
+            vk::Format::R5G5B5A1_UNORM_PACK16;
+        pub const B5G5R5A1_UNORM_PACK16: vk::Format =
+            vk::Format::B5G5R5A1_UNORM_PACK16;
+        pub const A1R5G5B5_UNORM_PACK16: vk::Format =
+            vk::Format::A1R5G5B5_UNORM_PACK16;
+        pub const R8_UNORM: vk::Format = vk::Format::R8_UNORM;
+        pub const R8_SNORM: vk::Format = vk::Format::R8_SNORM;
+        pub const R8_USCALED: vk::Format = vk::Format::R8_USCALED;
+        pub const R8_SSCALED: vk::Format = vk::Format::R8_SSCALED;
+        pub const R8_UINT: vk::Format = vk::Format::R8_UINT;
+        pub const R8_SINT: vk::Format = vk::Format::R8_SINT;
+        pub const R8_SRGB: vk::Format = vk::Format::R8_SRGB;
+        pub const R8G8_UNORM: vk::Format = vk::Format::R8G8_UNORM;
+        pub const R8G8_SNORM: vk::Format = vk::Format::R8G8_SNORM;
+        pub const R8G8_USCALED: vk::Format = vk::Format::R8G8_USCALED;
+        pub const R8G8_SSCALED: vk::Format = vk::Format::R8G8_SSCALED;
+        pub const R8G8_UINT: vk::Format = vk::Format::R8G8_UINT;
+        pub const R8G8_SINT: vk::Format = vk::Format::R8G8_SINT;
+        pub const R8G8_SRGB: vk::Format = vk::Format::R8G8_SRGB;
+        pub const R8G8B8_UNORM: vk::Format = vk::Format::R8G8B8_UNORM;
+        pub const R8G8B8_SNORM: vk::Format = vk::Format::R8G8B8_SNORM;
+        pub const R8G8B8_USCALED: vk::Format = vk::Format::R8G8B8_USCALED;
+        pub const R8G8B8_SSCALED: vk::Format = vk::Format::R8G8B8_SSCALED;
+        pub const R8G8B8_UINT: vk::Format = vk::Format::R8G8B8_UINT;
+        pub const R8G8B8_SINT: vk::Format = vk::Format::R8G8B8_SINT;
+        pub const R8G8B8_SRGB: vk::Format = vk::Format::R8G8B8_SRGB;
+        pub const B8G8R8_UNORM: vk::Format = vk::Format::B8G8R8_UNORM;
+        pub const B8G8R8_SNORM: vk::Format = vk::Format::B8G8R8_SNORM;
+        pub const B8G8R8_USCALED: vk::Format = vk::Format::B8G8R8_USCALED;
+        pub const B8G8R8_SSCALED: vk::Format = vk::Format::B8G8R8_SSCALED;
+        pub const B8G8R8_UINT: vk::Format = vk::Format::B8G8R8_UINT;
+        pub const B8G8R8_SINT: vk::Format = vk::Format::B8G8R8_SINT;
+        pub const B8G8R8_SRGB: vk::Format = vk::Format::B8G8R8_SRGB;
+        pub const R8G8B8A8_UNORM: vk::Format = vk::Format::R8G8B8A8_UNORM;
+        pub const R8G8B8A8_SNORM: vk::Format = vk::Format::R8G8B8A8_SNORM;
+        pub const R8G8B8A8_USCALED: vk::Format = vk::Format::R8G8B8A8_USCALED;
+        pub const R8G8B8A8_SSCALED: vk::Format = vk::Format::R8G8B8A8_SSCALED;
+        pub const R8G8B8A8_UINT: vk::Format = vk::Format::R8G8B8A8_UINT;
+        pub const R8G8B8A8_SINT: vk::Format = vk::Format::R8G8B8A8_SINT;
+        pub const R8G8B8A8_SRGB: vk::Format = vk::Format::R8G8B8A8_SRGB;
+        pub const B8G8R8A8_UNORM: vk::Format = vk::Format::B8G8R8A8_UNORM;
+        pub const B8G8R8A8_SNORM: vk::Format = vk::Format::B8G8R8A8_SNORM;
+        pub const B8G8R8A8_USCALED: vk::Format = vk::Format::B8G8R8A8_USCALED;
+        pub const B8G8R8A8_SSCALED: vk::Format = vk::Format::B8G8R8A8_SSCALED;
+        pub const B8G8R8A8_UINT: vk::Format = vk::Format::B8G8R8A8_UINT;
+        pub const B8G8R8A8_SINT: vk::Format = vk::Format::B8G8R8A8_SINT;
+        pub const B8G8R8A8_SRGB: vk::Format = vk::Format::B8G8R8A8_SRGB;
+        pub const A8B8G8R8_UNORM_PACK32: vk::Format =
+            vk::Format::A8B8G8R8_UNORM_PACK32;
+        pub const A8B8G8R8_SNORM_PACK32: vk::Format =
+            vk::Format::A8B8G8R8_SNORM_PACK32;
+        pub const A8B8G8R8_USCALED_PACK32: vk::Format =
+            vk::Format::A8B8G8R8_USCALED_PACK32;
+        pub const A8B8G8R8_SSCALED_PACK32: vk::Format =
+            vk::Format::A8B8G8R8_SSCALED_PACK32;
+        pub const A8B8G8R8_UINT_PACK32: vk::Format =
+            vk::Format::A8B8G8R8_UINT_PACK32;
+        pub const A8B8G8R8_SINT_PACK32: vk::Format =
+            vk::Format::A8B8G8R8_SINT_PACK32;
+        pub const A8B8G8R8_SRGB_PACK32: vk::Format =
+            vk::Format::A8B8G8R8_SRGB_PACK32;
+        pub const A2R10G10B10_UNORM_PACK32: vk::Format =
+            vk::Format::A2R10G10B10_UNORM_PACK32;
+        pub const A2R10G10B10_SNORM_PACK32: vk::Format =
+            vk::Format::A2R10G10B10_SNORM_PACK32;
+        pub const A2R10G10B10_USCALED_PACK32: vk::Format =
+            vk::Format::A2R10G10B10_USCALED_PACK32;
+        pub const A2R10G10B10_SSCALED_PACK32: vk::Format =
+            vk::Format::A2R10G10B10_SSCALED_PACK32;
+        pub const A2R10G10B10_UINT_PACK32: vk::Format =
+            vk::Format::A2R10G10B10_UINT_PACK32;
+        pub const A2R10G10B10_SINT_PACK32: vk::Format =
+            vk::Format::A2R10G10B10_SINT_PACK32;
+        pub const A2B10G10R10_UNORM_PACK32: vk::Format =
+            vk::Format::A2B10G10R10_UNORM_PACK32;
+        pub const A2B10G10R10_SNORM_PACK32: vk::Format =
+            vk::Format::A2B10G10R10_SNORM_PACK32;
+        pub const A2B10G10R10_USCALED_PACK32: vk::Format =
+            vk::Format::A2B10G10R10_USCALED_PACK32;
+        pub const A2B10G10R10_SSCALED_PACK32: vk::Format =
+            vk::Format::A2B10G10R10_SSCALED_PACK32;
+        pub const A2B10G10R10_UINT_PACK32: vk::Format =
+            vk::Format::A2B10G10R10_UINT_PACK32;
+        pub const A2B10G10R10_SINT_PACK32: vk::Format =
+            vk::Format::A2B10G10R10_SINT_PACK32;
+        pub const R16_UNORM: vk::Format = vk::Format::R16_UNORM;
+        pub const R16_SNORM: vk::Format = vk::Format::R16_SNORM;
+        pub const R16_USCALED: vk::Format = vk::Format::R16_USCALED;
+        pub const R16_SSCALED: vk::Format = vk::Format::R16_SSCALED;
+        pub const R16_UINT: vk::Format = vk::Format::R16_UINT;
+        pub const R16_SINT: vk::Format = vk::Format::R16_SINT;
+        pub const R16_SFLOAT: vk::Format = vk::Format::R16_SFLOAT;
+        pub const R16G16_UNORM: vk::Format = vk::Format::R16G16_UNORM;
+        pub const R16G16_SNORM: vk::Format = vk::Format::R16G16_SNORM;
+        pub const R16G16_USCALED: vk::Format = vk::Format::R16G16_USCALED;
+        pub const R16G16_SSCALED: vk::Format = vk::Format::R16G16_SSCALED;
+        pub const R16G16_UINT: vk::Format = vk::Format::R16G16_UINT;
+        pub const R16G16_SINT: vk::Format = vk::Format::R16G16_SINT;
+        pub const R16G16_SFLOAT: vk::Format = vk::Format::R16G16_SFLOAT;
+        pub const R16G16B16_UNORM: vk::Format = vk::Format::R16G16B16_UNORM;
+        pub const R16G16B16_SNORM: vk::Format = vk::Format::R16G16B16_SNORM;
+        pub const R16G16B16_USCALED: vk::Format = vk::Format::R16G16B16_USCALED;
+        pub const R16G16B16_SSCALED: vk::Format = vk::Format::R16G16B16_SSCALED;
+        pub const R16G16B16_UINT: vk::Format = vk::Format::R16G16B16_UINT;
+        pub const R16G16B16_SINT: vk::Format = vk::Format::R16G16B16_SINT;
+        pub const R16G16B16_SFLOAT: vk::Format = vk::Format::R16G16B16_SFLOAT;
+        pub const R16G16B16A16_UNORM: vk::Format =
+            vk::Format::R16G16B16A16_UNORM;
+        pub const R16G16B16A16_SNORM: vk::Format =
+            vk::Format::R16G16B16A16_SNORM;
+        pub const R16G16B16A16_USCALED: vk::Format =
+            vk::Format::R16G16B16A16_USCALED;
+        pub const R16G16B16A16_SSCALED: vk::Format =
+            vk::Format::R16G16B16A16_SSCALED;
+        pub const R16G16B16A16_UINT: vk::Format = vk::Format::R16G16B16A16_UINT;
+        pub const R16G16B16A16_SINT: vk::Format = vk::Format::R16G16B16A16_SINT;
+        pub const R16G16B16A16_SFLOAT: vk::Format =
+            vk::Format::R16G16B16A16_SFLOAT;
+        pub const R32_UINT: vk::Format = vk::Format::R32_UINT;
+        pub const R32_SINT: vk::Format = vk::Format::R32_SINT;
+        pub const R32_SFLOAT: vk::Format = vk::Format::R32_SFLOAT;
+        pub const R32G32_UINT: vk::Format = vk::Format::R32G32_UINT;
+        pub const R32G32_SINT: vk::Format = vk::Format::R32G32_SINT;
+        pub const R32G32_SFLOAT: vk::Format = vk::Format::R32G32_SFLOAT;
+        pub const R32G32B32_UINT: vk::Format = vk::Format::R32G32B32_UINT;
+        pub const R32G32B32_SINT: vk::Format = vk::Format::R32G32B32_SINT;
+        pub const R32G32B32_SFLOAT: vk::Format = vk::Format::R32G32B32_SFLOAT;
+        pub const R32G32B32A32_UINT: vk::Format = vk::Format::R32G32B32A32_UINT;
+        pub const R32G32B32A32_SINT: vk::Format = vk::Format::R32G32B32A32_SINT;
+        pub const R32G32B32A32_SFLOAT: vk::Format =
+            vk::Format::R32G32B32A32_SFLOAT;
+        pub const R64_UINT: vk::Format = vk::Format::R64_UINT;
+        pub const R64_SINT: vk::Format = vk::Format::R64_SINT;
+        pub const R64_SFLOAT: vk::Format = vk::Format::R64_SFLOAT;
+        pub const R64G64_UINT: vk::Format = vk::Format::R64G64_UINT;
+        pub const R64G64_SINT: vk::Format = vk::Format::R64G64_SINT;
+        pub const R64G64_SFLOAT: vk::Format = vk::Format::R64G64_SFLOAT;
+        pub const R64G64B64_UINT: vk::Format = vk::Format::R64G64B64_UINT;
+        pub const R64G64B64_SINT: vk::Format = vk::Format::R64G64B64_SINT;
+        pub const R64G64B64_SFLOAT: vk::Format = vk::Format::R64G64B64_SFLOAT;
+        pub const R64G64B64A64_UINT: vk::Format = vk::Format::R64G64B64A64_UINT;
+        pub const R64G64B64A64_SINT: vk::Format = vk::Format::R64G64B64A64_SINT;
+        pub const R64G64B64A64_SFLOAT: vk::Format =
+            vk::Format::R64G64B64A64_SFLOAT;
+        pub const B10G11R11_UFLOAT_PACK32: vk::Format =
+            vk::Format::B10G11R11_UFLOAT_PACK32;
+        pub const E5B9G9R9_UFLOAT_PACK32: vk::Format =
+            vk::Format::E5B9G9R9_UFLOAT_PACK32;
+        pub const D16_UNORM: vk::Format = vk::Format::D16_UNORM;
+        pub const X8_D24_UNORM_PACK32: vk::Format =
+            vk::Format::X8_D24_UNORM_PACK32;
+        pub const D32_SFLOAT: vk::Format = vk::Format::D32_SFLOAT;
+        pub const S8_UINT: vk::Format = vk::Format::S8_UINT;
+        pub const D16_UNORM_S8_UINT: vk::Format = vk::Format::D16_UNORM_S8_UINT;
+        pub const D24_UNORM_S8_UINT: vk::Format = vk::Format::D24_UNORM_S8_UINT;
+        pub const D32_SFLOAT_S8_UINT: vk::Format =
+            vk::Format::D32_SFLOAT_S8_UINT;
+        pub const BC1_RGB_UNORM_BLOCK: vk::Format =
+            vk::Format::BC1_RGB_UNORM_BLOCK;
+        pub const BC1_RGB_SRGB_BLOCK: vk::Format =
+            vk::Format::BC1_RGB_SRGB_BLOCK;
+        pub const BC1_RGBA_UNORM_BLOCK: vk::Format =
+            vk::Format::BC1_RGBA_UNORM_BLOCK;
+        pub const BC1_RGBA_SRGB_BLOCK: vk::Format =
+            vk::Format::BC1_RGBA_SRGB_BLOCK;
+        pub const BC2_UNORM_BLOCK: vk::Format = vk::Format::BC2_UNORM_BLOCK;
+        pub const BC2_SRGB_BLOCK: vk::Format = vk::Format::BC2_SRGB_BLOCK;
+        pub const BC3_UNORM_BLOCK: vk::Format = vk::Format::BC3_UNORM_BLOCK;
+        pub const BC3_SRGB_BLOCK: vk::Format = vk::Format::BC3_SRGB_BLOCK;
+        pub const BC4_UNORM_BLOCK: vk::Format = vk::Format::BC4_UNORM_BLOCK;
+        pub const BC4_SNORM_BLOCK: vk::Format = vk::Format::BC4_SNORM_BLOCK;
+        pub const BC5_UNORM_BLOCK: vk::Format = vk::Format::BC5_UNORM_BLOCK;
+        pub const BC5_SNORM_BLOCK: vk::Format = vk::Format::BC5_SNORM_BLOCK;
+        pub const BC6H_UFLOAT_BLOCK: vk::Format = vk::Format::BC6H_UFLOAT_BLOCK;
+        pub const BC6H_SFLOAT_BLOCK: vk::Format = vk::Format::BC6H_SFLOAT_BLOCK;
+        pub const BC7_UNORM_BLOCK: vk::Format = vk::Format::BC7_UNORM_BLOCK;
+        pub const BC7_SRGB_BLOCK: vk::Format = vk::Format::BC7_SRGB_BLOCK;
+        pub const ETC2_R8G8B8_UNORM_BLOCK: vk::Format =
+            vk::Format::ETC2_R8G8B8_UNORM_BLOCK;
+        pub const ETC2_R8G8B8_SRGB_BLOCK: vk::Format =
+            vk::Format::ETC2_R8G8B8_SRGB_BLOCK;
+        pub const ETC2_R8G8B8A1_UNORM_BLOCK: vk::Format =
+            vk::Format::ETC2_R8G8B8A1_UNORM_BLOCK;
+        pub const ETC2_R8G8B8A1_SRGB_BLOCK: vk::Format =
+            vk::Format::ETC2_R8G8B8A1_SRGB_BLOCK;
+        pub const ETC2_R8G8B8A8_UNORM_BLOCK: vk::Format =
+            vk::Format::ETC2_R8G8B8A8_UNORM_BLOCK;
+        pub const ETC2_R8G8B8A8_SRGB_BLOCK: vk::Format =
+            vk::Format::ETC2_R8G8B8A8_SRGB_BLOCK;
+        pub const EAC_R11_UNORM_BLOCK: vk::Format =
+            vk::Format::EAC_R11_UNORM_BLOCK;
+        pub const EAC_R11_SNORM_BLOCK: vk::Format =
+            vk::Format::EAC_R11_SNORM_BLOCK;
+        pub const EAC_R11G11_UNORM_BLOCK: vk::Format =
+            vk::Format::EAC_R11G11_UNORM_BLOCK;
+        pub const EAC_R11G11_SNORM_BLOCK: vk::Format =
+            vk::Format::EAC_R11G11_SNORM_BLOCK;
+        pub const ASTC_4X4_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_4X4_UNORM_BLOCK;
+        pub const ASTC_4X4_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_4X4_SRGB_BLOCK;
+        pub const ASTC_5X4_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_5X4_UNORM_BLOCK;
+        pub const ASTC_5X4_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_5X4_SRGB_BLOCK;
+        pub const ASTC_5X5_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_5X5_UNORM_BLOCK;
+        pub const ASTC_5X5_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_5X5_SRGB_BLOCK;
+        pub const ASTC_6X5_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_6X5_UNORM_BLOCK;
+        pub const ASTC_6X5_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_6X5_SRGB_BLOCK;
+        pub const ASTC_6X6_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_6X6_UNORM_BLOCK;
+        pub const ASTC_6X6_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_6X6_SRGB_BLOCK;
+        pub const ASTC_8X5_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_8X5_UNORM_BLOCK;
+        pub const ASTC_8X5_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_8X5_SRGB_BLOCK;
+        pub const ASTC_8X6_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_8X6_UNORM_BLOCK;
+        pub const ASTC_8X6_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_8X6_SRGB_BLOCK;
+        pub const ASTC_8X8_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_8X8_UNORM_BLOCK;
+        pub const ASTC_8X8_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_8X8_SRGB_BLOCK;
+        pub const ASTC_10X5_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_10X5_UNORM_BLOCK;
+        pub const ASTC_10X5_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_10X5_SRGB_BLOCK;
+        pub const ASTC_10X6_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_10X6_UNORM_BLOCK;
+        pub const ASTC_10X6_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_10X6_SRGB_BLOCK;
+        pub const ASTC_10X8_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_10X8_UNORM_BLOCK;
+        pub const ASTC_10X8_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_10X8_SRGB_BLOCK;
+        pub const ASTC_10X10_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_10X10_UNORM_BLOCK;
+        pub const ASTC_10X10_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_10X10_SRGB_BLOCK;
+        pub const ASTC_12X10_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_12X10_UNORM_BLOCK;
+        pub const ASTC_12X10_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_12X10_SRGB_BLOCK;
+        pub const ASTC_12X12_UNORM_BLOCK: vk::Format =
+            vk::Format::ASTC_12X12_UNORM_BLOCK;
+        pub const ASTC_12X12_SRGB_BLOCK: vk::Format =
+            vk::Format::ASTC_12X12_SRGB_BLOCK;
     }
 }

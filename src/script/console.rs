@@ -41,6 +41,16 @@ pub struct ModuleBuilder {
 pub fn create_engine() -> rhai::Engine {
     let mut engine = rhai::Engine::new();
 
+    engine.register_type_with_name::<ash::vk::Format>("Format");
+    engine
+        .register_type_with_name::<ash::vk::ImageUsageFlags>("ImageUsageFlags");
+    engine.register_type_with_name::<ash::vk::BufferUsageFlags>(
+        "BufferUsageFlags",
+    );
+
+    let vk_mod = rhai::exported_module!(super::vk);
+    engine.register_static_module("vk", vk_mod.into());
+
     engine.register_type_with_name::<ImageIx>("ImageIx");
     engine.register_type_with_name::<ImageViewIx>("ImageViewIx");
     engine.register_type_with_name::<BufferIx>("BufferIx");
@@ -77,12 +87,16 @@ impl ModuleBuilder {
 
             engine.register_fn(
                 "allocate_image",
-                move |width: u32,
-                      height: u32,
+                move |width: i64,
+                      height: i64,
                       format: vk::Format,
                       usage: vk::ImageUsageFlags| {
-                    let resolvable =
-                        res.lock().allocate_image(width, height, format, usage);
+                    let resolvable = res.lock().allocate_image(
+                        width as u32,
+                        height as u32,
+                        format,
+                        usage,
+                    );
                     resolvable
                 },
             );
@@ -271,6 +285,8 @@ impl ModuleBuilder {
             && self.buffer_vars.is_empty()
             && self.pipeline_vars.is_empty()
             && self.desc_set_vars.is_empty();
+
+        log::warn!("resolvers = {}\tvars = {}", resolvers, vars);
 
         resolvers && vars
     }

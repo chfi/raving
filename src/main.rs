@@ -1,3 +1,4 @@
+use engine::script::console::ModuleBuilder;
 use engine::vk::{
     BatchInput, DescSetIx, FrameResources, GpuResources, ImageIx, PipelineIx,
     VkEngine,
@@ -133,6 +134,25 @@ fn main() -> Result<()> {
     let lines = ["hello world", "e", "l", "l", "o     world", "???"];
 
     line_renderer.update_lines(&mut engine.resources, lines)?;
+
+    dbg!();
+
+    log::warn!("MODULE BUILDER");
+    let (mut builder, module) = ModuleBuilder::from_script("test.rhai")?;
+
+    // log::warn!("is resolved: {}", builder.is_resolved());
+    // log::warn!("resolving");
+
+    // engine.with_allocators(|ctx, res, alloc| {
+    //     builder.resolve(ctx, res, alloc)?;
+    //     Ok(())
+    // })?;
+    log::warn!("is resolved: {}", builder.is_resolved());
+    log::warn!("binding pipeline variable");
+    builder.bind_pipeline_var("pipeline", line_renderer.pipeline);
+    log::warn!("binding descriptor set variable");
+    builder.bind_desc_set_var("desc_set", line_renderer.set);
+    log::warn!("is resolved: {}", builder.is_resolved());
 
     dbg!();
 
