@@ -124,6 +124,8 @@ pub fn create_engine() -> rhai::Engine {
         set.value.load().unwrap()
     });
 
+    engine.register_fn("batch_builder", || BatchBuilder::default());
+
     engine.register_fn(
         "dispatch_compute",
         |builder: &mut BatchBuilder,

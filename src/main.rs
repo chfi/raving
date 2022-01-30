@@ -1,4 +1,4 @@
-use engine::script::console::ModuleBuilder;
+use engine::script::console::{BatchBuilder, ModuleBuilder};
 use engine::vk::{
     BatchInput, DescSetIx, FrameResources, GpuResources, ImageIx, PipelineIx,
     VkEngine,
@@ -146,6 +146,40 @@ fn main() -> Result<()> {
     log::warn!("binding descriptor set variable");
     builder.bind_desc_set_var("desc_set", line_renderer.set);
     log::warn!("is resolved: {}", builder.is_resolved());
+
+    let mut rhai_engine = engine::script::console::create_engine();
+    rhai_engine.register_static_module("self", module.into());
+
+    dbg!();
+
+    let script = "
+fn draw_at(x, y) {
+  let batch = batch_builder();
+  let p = self::pipeline.get();
+  let s = self::desc_set.get();
+  batch.dispatch_compute(p, s, 8, 1, 1);
+  batch
+}
+";
+
+    dbg!();
+
+    let draw_at = rhai::Func::<(i64, i64), BatchBuilder>::create_from_script(
+        rhai_engine,
+        script,
+        "draw_at",
+    )?;
+
+    dbg!();
+
+    let batch = draw_at(100, 100)?;
+
+    // let draw_at = Box::new(|batch: &mut BatchBuilder| {
+
+    // });
+
+    // let batchfn = rhai::Func::<(&mut BatchBuilder,), ()>::create_from_ast(
+    //     engine,
 
     dbg!();
 
