@@ -150,38 +150,16 @@ fn main() -> Result<()> {
     let mut rhai_engine = engine::script::console::create_engine();
     rhai_engine.register_static_module("self", module.into());
 
-    dbg!();
-
-    let script = "
-fn draw_at(x, y) {
-  let batch = batch_builder();
-  let p = self::pipeline.get();
-  let s = self::desc_set.get();
-  batch.dispatch_compute(p, s, 8, 1, 1);
-  batch
-}
-";
-
-    dbg!();
-
-    let draw_at = rhai::Func::<(i64, i64), BatchBuilder>::create_from_script(
+    let draw_at = rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
         rhai_engine,
-        script,
+        builder.script_ast.clone_functions_only(),
         "draw_at",
-    )?;
+    );
 
     dbg!();
 
     let batch = draw_at(100, 100)?;
-
     let batch_fn = batch.build();
-
-    // let draw_at = Box::new(|batch: &mut BatchBuilder| {
-
-    // });
-
-    // let batchfn = rhai::Func::<(&mut BatchBuilder,), ()>::create_from_ast(
-    //     engine,
 
     dbg!();
 

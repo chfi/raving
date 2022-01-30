@@ -92,6 +92,7 @@ pub struct ModuleBuilder {
     desc_set_vars: FxHashMap<String, Resolvable<DescSetIx>>,
     // images: FxHashMap<usize, Resolvable<ImageIx>>,
     // rhai_mod: rhai::Module,
+    pub script_ast: rhai::AST,
 }
 
 /// the minimal engine
@@ -166,7 +167,7 @@ pub fn create_engine() -> rhai::Engine {
 
 impl ModuleBuilder {
     pub fn from_script(path: &str) -> anyhow::Result<(Self, rhai::Module)> {
-        let (module, arcres) = {
+        let (module, ast, arcres) = {
             let mut engine = create_engine();
 
             let result = Self::default();
@@ -233,12 +234,13 @@ impl ModuleBuilder {
 
             // let result = Arc::
 
-            (module, arcres)
+            (module, ast, arcres)
         };
 
         let mutex = Arc::try_unwrap(arcres).ok().unwrap();
-        let result = mutex.into_inner();
+        let mut result = mutex.into_inner();
 
+        result.script_ast = ast;
         // module.build_index()
 
         for (name, var) in module.iter_var() {
