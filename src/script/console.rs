@@ -17,6 +17,48 @@ use rhai::plugin::*;
 
 use super::vk as rvk;
 
+pub type BatchFn =
+    Arc<dyn Fn(&ash::Device, &GpuResources, vk::CommandBuffer) + Send + Sync>;
+
+#[derive(Default, Clone)]
+pub struct BatchBuilder {
+    command_fns: Vec<BatchFn>,
+    // Vec<Box<dyn Fn(&ash::Device, &GpuResources, vk::CommandBuffer)>>,
+}
+
+impl BatchBuilder {
+    pub fn dispatch_compute(
+        &mut self,
+        pipeline: PipelineIx,
+        desc_set: DescSetIx,
+        push_constants: Vec<u8>,
+        x_groups: i64,
+        y_groups: i64,
+        z_groups: i64,
+    ) {
+        let bytes = Arc::new(push_constants);
+
+        let inner = bytes.clone();
+        let f = Arc::new(move |dev: &ash::Device, res: &GpuResources, cmd| {
+            let bytes = inner.clone();
+
+            let groups = (x_groups as u32, y_groups as u32, z_groups as u32);
+
+            VkEngine::dispatch_compute(
+                res,
+                dev,
+                cmd,
+                pipeline,
+                desc_set,
+                bytes.as_slice(),
+                groups,
+            );
+        }) as BatchFn;
+
+        self.command_fns.push(f);
+    }
+}
+
 #[derive(Default)]
 pub struct ModuleBuilder {
     image_resolvers: Vec<WithAllocators<()>>,
@@ -70,6 +112,36 @@ pub fn create_engine() -> rhai::Engine {
     );
     engine.register_type_with_name::<Resolvable<DescSetIx>>(
         "Resolvable<DescSetIx>",
+    );
+
+    engine.register_type_with_name::<BatchBuilder>("BatchBuilder");
+
+    engine.register_fn("get", |pipeline: Resolvable<PipelineIx>| {
+        pipeline.value.load().unwrap()
+    });
+
+    engine.register_fn("get", |set: Resolvable<DescSetIx>| {
+        set.value.load().unwrap()
+    });
+
+    engine.register_fn(
+        "dispatch_compute",
+        |builder: &mut BatchBuilder,
+         pipeline: PipelineIx,
+         desc_set: DescSetIx,
+         // push_constants: Vec<u8>,
+         x_groups: i64,
+         y_groups: i64,
+         z_groups: i64| {
+            let push_constants = [100u32, 100, 800, 600];
+
+            let mut bytes: Vec<u8> = Vec::with_capacity(8);
+            bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
+
+            builder.dispatch_compute(
+                pipeline, desc_set, bytes, x_groups, y_groups, z_groups,
+            );
+        },
     );
 
     engine
@@ -398,195 +470,3 @@ pub type WithAllocators<T> = Box<
         + Send
         + Sync,
 >;
-
-pub type AllocResolver = Box<
-    dyn FnOnce(&VkContext, &mut GpuResources, &mut Allocator) + Send + Sync,
->;
-
-pub type GpuCmd = Arc<
-    dyn Fn(&ash::Device, &GpuResources, vk::CommandBuffer)
-        + Send
-        + Sync
-        + 'static,
->;
-
-// pub struct VariableMap<T> {
-//     map: FxHashMap<usize
-// }
-
-pub enum Resolver<T> {
-    Resolver(Option<WithAllocators<T>>),
-    Value(T),
-}
-
-impl<T> Resolver<T> {
-    pub fn resolve(
-        &mut self,
-        ctx: &VkContext,
-        res: &mut GpuResources,
-        alloc: &mut Allocator,
-    ) -> Option<&T> {
-        match self {
-            Resolver::Resolver(resolver) => {
-                let f = resolver.take()?;
-
-                let v = f(ctx, res, alloc).ok()?;
-
-                *self = Self::Value(v);
-
-                self.get()
-            }
-            Resolver::Value(v) => Some(v),
-        }
-    }
-
-    pub fn get(&self) -> Option<&T> {
-        if let Self::Value(v) = &self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-
-    pub fn can_resolve(&self) -> bool {
-        !matches!(self, Self::Resolver(None))
-    }
-
-    pub fn is_resolved(&self) -> bool {
-        matches!(self, Self::Value(_))
-    }
-}
-
-impl<T> std::default::Default for Resolver<T> {
-    fn default() -> Self {
-        Self::Resolver(None)
-    }
-}
-
-pub type VariableMap<T> = Arc<Mutex<FxHashMap<usize, Mutex<Resolver<T>>>>>;
-// Arc<Mutex<FxHashMap<usize, Mutex<Option<WithAllocators<T>>>>>>;
-
-#[derive(Default, Clone)]
-pub struct BatchBuilder {
-    image_vars: VariableMap<ImageIx>,
-    image_view_vars: Arc<Mutex<FxHashMap<usize, usize>>>,
-
-    buffer_vars: VariableMap<BufferIx>,
-
-    pipeline_vars: VariableMap<PipelineIx>,
-
-    desc_set_vars: VariableMap<DescSetIx>,
-    // cmds: Arc<Mutex<FxHashMap<usize, GpuCmd>>>,
-}
-
-impl BatchBuilder {
-    pub fn allocate_image(
-        &self,
-        w: u32,
-        h: u32,
-        fmt: vk::Format,
-        usage: vk::ImageUsageFlags,
-    ) -> usize {
-        let resolver = Box::new(
-            move |ctx: &VkContext,
-                  res: &mut GpuResources,
-                  alloc: &mut Allocator| {
-                res.allocate_image(ctx, alloc, w, h, fmt, usage, None)
-            },
-        ) as WithAllocators<ImageIx>;
-        self.new_image_resolver(resolver)
-    }
-
-    pub fn new_image_resolver(
-        &self,
-        resolver: WithAllocators<ImageIx>,
-    ) -> usize {
-        let mut vars = self.image_vars.lock();
-
-        let i = vars.len();
-
-        vars.insert(i, Mutex::new(Resolver::Resolver(Some(resolver))));
-
-        i
-    }
-
-    pub fn new_image_view(&self, img: usize) -> Option<usize> {
-        let mut vars = self.image_view_vars.lock();
-        let i = vars.len();
-        vars.insert(i, img);
-        Some(i)
-    }
-
-    pub fn get_image(&self, img: usize) -> Option<ImageIx> {
-        let mut vars = self.image_vars.lock();
-        let resolver = vars.get_mut(&img)?;
-        let r = resolver.get_mut();
-        let v = r.get()?;
-        Some(*v)
-    }
-
-    pub fn resolve_image(
-        &self,
-        img: usize,
-        ctx: &VkContext,
-        res: &mut GpuResources,
-        alloc: &mut Allocator,
-    ) -> Option<ImageIx> {
-        let mut vars = self.image_vars.lock();
-        let resolver = vars.get_mut(&img)?;
-        let r = resolver.get_mut();
-        let v = r.resolve(ctx, res, alloc)?;
-        Some(*v)
-    }
-
-    pub fn create_engine(&self) -> rhai::Engine {
-        let mut engine = rhai::Engine::new();
-
-        let self_arc = Arc::new(self.clone());
-        let other = self_arc.clone();
-
-        engine.register_result_fn(
-            "allocate_image",
-            move |width: i64,
-                  height: i64,
-                  fmt: ash::vk::Format,
-                  usage: ash::vk::ImageUsageFlags| {
-                let img = other.allocate_image(
-                    width as u32,
-                    height as u32,
-                    fmt,
-                    usage,
-                );
-
-                Ok(img)
-            },
-        );
-
-        let other = self_arc.clone();
-
-        engine.register_result_fn(
-            "create_image_view",
-            move |image_var: usize| {
-                let i = other.new_image_view(image_var).unwrap();
-                Ok(i)
-            },
-        );
-
-        todo!();
-    }
-}
-
-pub struct Console {
-    // input_history: Vec<String>,
-    output_log: Vec<String>,
-
-    renderer: LineRenderer,
-}
-
-impl Console {
-    pub fn create_engine() -> rhai::Engine {
-        let mut engine = rhai::Engine::new();
-
-        todo!();
-    }
-}

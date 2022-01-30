@@ -49,7 +49,33 @@ pub mod vk {
         mk_binding!(uniform_buffer, UniformBuffer);
     }
 
-    pub mod cmd {}
+    pub mod cmd {
+        use crate::vk::{GpuResources, VkEngine};
+
+        /*
+        pub fn dispatch_compute(
+            resources: &mut GpuResources,
+            device: ash::Device,
+            cmd: vk::CommandBuffer,
+            pipeline: PipelineIx,
+            set: DescSetIx,
+            pc_bytes: Vec<u8>,
+            x_groups: i64,
+            y_groups: i64,
+            z_groups: i64,
+        ) {
+            VkEngine::dispatch_compute(
+                resources,
+                &device,
+                cmd,
+                pipeline,
+                set,
+                pc_bytes.as_slice(),
+                (x_groups as u32, y_groups as u32, z_groups as u32),
+            );
+        }
+        */
+    }
 
     #[rhai_mod(name = "BufferUsageFlags")]
     pub mod buffer_usage {
