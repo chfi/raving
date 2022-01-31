@@ -304,6 +304,16 @@ pub fn create_engine() -> rhai::Engine {
     engine.register_fn("batch_builder", || BatchBuilder::default());
 
     engine.register_fn(
+        "load_image_from_file",
+        |builder: &mut BatchBuilder,
+         file_path: &str,
+         dst_image: ImageIx,
+         final_layout: vk::ImageLayout| {
+            builder.load_image_from_file(file_path, dst_image, final_layout)
+        },
+    );
+
+    engine.register_fn(
         "transition_image",
         |builder: &mut BatchBuilder,
          image: ImageIx,
@@ -379,6 +389,15 @@ impl ModuleBuilder {
                         format,
                         usage,
                     );
+                    resolvable
+                },
+            );
+
+            let res = arcres.clone();
+            engine.register_fn(
+                "image_view_for",
+                move |image: Resolvable<ImageIx>| {
+                    let resolvable = res.lock().create_image_view(image);
                     resolvable
                 },
             );
@@ -619,6 +638,30 @@ impl ModuleBuilder {
         log::warn!("resolvers = {}\tvars = {}", resolvers, vars);
 
         resolvers && vars
+    }
+
+    pub fn create_image_view(
+        &mut self,
+        image_ix: Resolvable<ImageIx>,
+    ) -> Resolvable<ImageViewIx> {
+        let resolvable = Arc::new(AtomicCell::new(None));
+
+        let inner = resolvable.clone();
+
+        let resolver = Box::new(
+            move |ctx: &VkContext,
+                  res: &mut GpuResources,
+                  alloc: &mut Allocator| {
+                let image = image_ix.value.load().unwrap();
+                let view = res.create_image_view_for_image(ctx, image)?;
+                inner.store(Some(view));
+                Ok(())
+            },
+        ) as WithAllocators<()>;
+
+        self.image_view_resolvers.push(resolver);
+
+        Resolvable::new(resolvable)
     }
 
     pub fn allocate_image(

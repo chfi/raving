@@ -1,7 +1,7 @@
-use engine::script::console::{BatchBuilder, ModuleBuilder};
+use engine::script::console::{BatchBuilder, ModuleBuilder, Resolvable};
 use engine::vk::{
-    BatchInput, DescSetIx, FrameResources, GpuResources, ImageIx, PipelineIx,
-    VkEngine,
+    BatchInput, DescSetIx, FrameResources, GpuResources, ImageIx, ImageViewIx,
+    PipelineIx, VkEngine,
 };
 
 use engine::vk::util::*;
@@ -13,6 +13,8 @@ use flexi_logger::{Duplicate, FileSpec, Logger};
 use winit::event::{Event, WindowEvent};
 // use winit::platform::unix::*;
 use winit::{event_loop::EventLoop, window::WindowBuilder};
+
+use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -124,19 +126,6 @@ fn main() -> Result<()> {
         })
     })?;
 
-    let mut line_renderer = LineRenderer::new(
-        &mut engine,
-        "8x8font.png",
-        example_state.fill_image,
-        example_state.fill_view,
-    )?;
-
-    let lines = ["hello world", "e", "l", "l", "o     world", "???"];
-
-    line_renderer.update_lines(&mut engine.resources, lines)?;
-
-    dbg!();
-
     log::warn!("MODULE BUILDER");
     let (mut builder, module) = ModuleBuilder::from_script("test.rhai")?;
 
@@ -144,6 +133,30 @@ fn main() -> Result<()> {
         builder.resolve(ctx, res, alloc)?;
         Ok(())
     })?;
+
+    let font_image = module
+        .get_var_value::<Resolvable<ImageIx>>("font_image")
+        .and_then(|r| r.get())
+        .unwrap();
+    let font_image_view = module
+        .get_var_value::<Resolvable<ImageViewIx>>("font_image_view")
+        .and_then(|r| r.get())
+        .unwrap();
+
+    let mut line_renderer = LineRenderer::new(
+        &mut engine,
+        // "8x8font.png",
+        example_state.fill_image,
+        example_state.fill_view,
+        font_image,
+        font_image_view,
+    )?;
+
+    let lines = ["hello world", "e", "l", "l", "o     world", "???"];
+
+    line_renderer.update_lines(&mut engine.resources, lines)?;
+
+    dbg!();
 
     log::warn!("is resolved: {}", builder.is_resolved());
     // log::warn!("binding pipeline variable");
@@ -156,9 +169,20 @@ fn main() -> Result<()> {
     log::warn!("is resolved: {}", builder.is_resolved());
 
     let mut rhai_engine = engine::script::console::create_engine();
-    rhai_engine.register_static_module("self", module.into());
+
+    let arc_module: Arc<rhai::Module> = module.into();
+
+    rhai_engine.register_static_module("self", arc_module.clone());
 
     builder.set_int("line_count", lines.len() as i64);
+    let init = rhai::Func::<(), BatchBuilder>::create_from_ast(
+        rhai_engine,
+        builder.script_ast.clone_functions_only(),
+        "init",
+    );
+
+    let mut rhai_engine = engine::script::console::create_engine();
+    rhai_engine.register_static_module("self", arc_module);
 
     let draw_at = rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
         rhai_engine,

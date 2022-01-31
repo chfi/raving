@@ -136,7 +136,9 @@ impl LineRenderer {
     // font has to be 8x8 monospace, in a png, for now
     pub fn new(
         engine: &mut VkEngine,
-        font_img_path: &str,
+        // font_img_path: &str,
+        font_image: ImageIx,
+        font_view: ImageViewIx,
         out_image: ImageIx,
         out_view: ImageViewIx,
     ) -> Result<Self> {
@@ -158,18 +160,18 @@ impl LineRenderer {
                 pc_size,
             )?;
 
-            let font_image = res.allocate_image(
-                ctx,
-                alloc,
-                1024,
-                8,
-                vk::Format::R8G8B8A8_UNORM,
-                vk::ImageUsageFlags::STORAGE
-                    | vk::ImageUsageFlags::SAMPLED
-                    | vk::ImageUsageFlags::TRANSFER_DST,
-                Some("lines:font_image"),
-            )?;
-            let font_view = res.create_image_view_for_image(ctx, font_image)?;
+            // let font_image = res.allocate_image(
+            //     ctx,
+            //     alloc,
+            //     1024,
+            //     8,
+            //     vk::Format::R8G8B8A8_UNORM,
+            //     vk::ImageUsageFlags::STORAGE
+            //         | vk::ImageUsageFlags::SAMPLED
+            //         | vk::ImageUsageFlags::TRANSFER_DST,
+            //     Some("lines:font_image"),
+            // )?;
+            // let font_view = res.create_image_view_for_image(ctx, font_image)?;
 
             let usage = vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER;
@@ -257,6 +259,7 @@ impl LineRenderer {
             )?;
         }
 
+        /*
         {
             let cmd = engine.allocate_command_buffer()?;
 
@@ -276,6 +279,7 @@ impl LineRenderer {
 
             let font_vk = &mut res[result.font_image];
 
+            /*
             //////////////
 
             VkEngine::transition_image(
@@ -325,6 +329,7 @@ impl LineRenderer {
             );
 
             //////////////
+            */
 
             unsafe { engine.context.device().end_command_buffer(cmd) }?;
 
@@ -350,6 +355,7 @@ impl LineRenderer {
 
             engine.free_command_buffer(cmd);
         }
+        */
 
         Ok(result)
     }
