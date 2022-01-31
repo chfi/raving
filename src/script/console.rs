@@ -20,8 +20,23 @@ use super::vk as rvk;
 pub type BatchFn =
     Arc<dyn Fn(&ash::Device, &GpuResources, vk::CommandBuffer) + Send + Sync>;
 
+pub type InitFn = Arc<
+    dyn Fn(
+            &VkContext,
+            &mut GpuResources,
+            &mut Allocator,
+            vk::CommandBuffer,
+        ) -> anyhow::Result<()>
+        + Send
+        + Sync,
+>;
+
 #[derive(Default, Clone)]
 pub struct BatchBuilder {
+    init_fn: Vec<InitFn>,
+
+    staging_buffers: Arc<Mutex<Vec<BufferIx>>>,
+
     command_fns: Vec<BatchFn>,
     // Vec<Box<dyn Fn(&ash::Device, &GpuResources, vk::CommandBuffer)>>,
 }
@@ -41,6 +56,84 @@ impl BatchBuilder {
 
         batch
     }
+
+    pub fn load_image_from_file(
+        &mut self,
+        file_path: &str,
+        dst_image: ImageIx,
+        final_layout: vk::ImageLayout,
+    ) {
+        let file_path = file_path.to_string();
+
+        let staging_bufs = self.staging_buffers.clone();
+
+        let f = Arc::new(
+            move |ctx: &VkContext,
+                  res: &mut GpuResources,
+                  alloc: &mut Allocator,
+                  cmd: vk::CommandBuffer| {
+                let dev = ctx.device();
+
+                let img = &mut res[dst_image];
+                let vk_img = img.image;
+
+                VkEngine::transition_image(
+                    cmd,
+                    dev,
+                    vk_img,
+                    vk::AccessFlags::empty(),
+                    vk::PipelineStageFlags::TOP_OF_PIPE,
+                    vk::AccessFlags::TRANSFER_WRITE,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                );
+
+                use image::io::Reader as ImageReader;
+
+                let font = ImageReader::open(&file_path)?.decode()?;
+
+                let font_rgba8 = font.to_rgba8();
+
+                let pixel_bytes =
+                    font_rgba8.enumerate_pixels().flat_map(|(_, _, col)| {
+                        let [r, g, b, a] = col.0;
+                        [r, g, b, a].into_iter()
+                    });
+
+                let staging = img.fill_from_pixels(
+                    dev,
+                    ctx,
+                    alloc,
+                    pixel_bytes,
+                    4,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    cmd,
+                )?;
+
+                let staging_ix = res.insert_buffer(staging);
+
+                staging_bufs.lock().push(staging_ix);
+
+                VkEngine::transition_image(
+                    cmd,
+                    dev,
+                    vk_img,
+                    vk::AccessFlags::TRANSFER_WRITE,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::AccessFlags::MEMORY_READ,
+                    vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    final_layout,
+                );
+
+                Ok(())
+            },
+        ) as InitFn;
+
+        self.init_fn.push(f);
+    }
+
     pub fn transition_image(
         &mut self,
         image: ImageIx,

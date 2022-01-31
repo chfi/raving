@@ -67,6 +67,11 @@ impl GpuResources {
         Ok(result)
     }
 
+    pub fn insert_buffer(&mut self, buffer: BufferRes) -> BufferIx {
+        let ix = self.buffers.insert(buffer);
+        BufferIx(ix)
+    }
+
     pub fn allocate_buffer(
         &mut self,
         ctx: &VkContext,
