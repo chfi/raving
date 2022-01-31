@@ -506,6 +506,22 @@ impl GpuResources {
         Some(())
     }
 
+    pub fn free_buffer(
+        &mut self,
+        ctx: &VkContext,
+        alloc: &mut Allocator,
+        ix: BufferIx,
+    ) -> Result<()> {
+        let buf_res = self
+            .buffers
+            .remove(ix.0)
+            .ok_or(anyhow!("Tried to free buffer that did not exist"))?;
+
+        buf_res.cleanup(ctx, alloc)?;
+
+        Ok(())
+    }
+
     pub fn cleanup(
         &mut self,
         ctx: &VkContext,

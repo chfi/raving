@@ -57,6 +57,21 @@ impl BatchBuilder {
         batch
     }
 
+    pub fn free_staging_buffers(
+        &mut self,
+        ctx: &VkContext,
+        res: &mut GpuResources,
+        alloc: &mut Allocator,
+    ) -> anyhow::Result<()> {
+        let mut buffers = self.staging_buffers.lock();
+
+        for buf_ix in buffers.drain(..) {
+            res.free_buffer(ctx, alloc, buf_ix)?;
+        }
+
+        Ok(())
+    }
+
     pub fn load_image_from_file(
         &mut self,
         file_path: &str,
