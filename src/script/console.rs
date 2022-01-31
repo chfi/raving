@@ -90,6 +90,9 @@ pub struct ModuleBuilder {
     pipeline_vars: FxHashMap<String, Resolvable<PipelineIx>>,
 
     desc_set_vars: FxHashMap<String, Resolvable<DescSetIx>>,
+
+    ints: FxHashMap<String, Arc<AtomicCell<i64>>>,
+
     // images: FxHashMap<usize, Resolvable<ImageIx>>,
     // rhai_mod: rhai::Module,
     pub script_ast: rhai::AST,
@@ -140,6 +143,8 @@ pub fn create_engine() -> rhai::Engine {
         set.value.load().unwrap()
     });
 
+    engine.register_fn("get", |i: Arc<AtomicCell<i64>>| i.load());
+
     engine.register_fn("batch_builder", || BatchBuilder::default());
 
     engine.register_fn(
@@ -166,6 +171,11 @@ pub fn create_engine() -> rhai::Engine {
 }
 
 impl ModuleBuilder {
+    pub fn set_int(&mut self, k: &str, v: i64) {
+        let cell = self.ints.get(k).unwrap();
+        cell.store(v);
+    }
+
     pub fn from_script(path: &str) -> anyhow::Result<(Self, rhai::Module)> {
         let (module, ast, arcres) = {
             let mut engine = create_engine();
@@ -207,6 +217,13 @@ impl ModuleBuilder {
                     resolvable
                 },
             );
+
+            let res = arcres.clone();
+            engine.register_fn("atomic_int", move |name: &str| {
+                let var = Arc::new(AtomicCell::new(0i64));
+                res.lock().ints.insert(name.to_string(), var.clone());
+                var
+            });
 
             let res = arcres.clone();
             engine.register_fn("image_var", move |name: &str| {

@@ -155,6 +155,8 @@ fn main() -> Result<()> {
     let mut rhai_engine = engine::script::console::create_engine();
     rhai_engine.register_static_module("self", module.into());
 
+    builder.set_int("line_count", lines.len() as i64);
+
     let draw_at = rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
         rhai_engine,
         builder.script_ast.clone_functions_only(),

@@ -10,10 +10,14 @@ export let pipeline = load_compute_shader("shaders/text_lines.comp.spv",
 
 export let desc_set = desc_set_var("desc_set");
 
+export let line_count = atomic_int("line_count");
+
 fn draw_at(x, y) {
   let batch = batch_builder();
   let p = self::pipeline.get();
   let s = self::desc_set.get();
-  batch.dispatch_compute(p, s, 8, 1, 1);
+  let y = self::line_count.get();
+  print(y);
+  batch.dispatch_compute(p, s, 80, y, 1);
   batch
 }
