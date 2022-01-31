@@ -41,6 +41,34 @@ impl BatchBuilder {
 
         batch
     }
+    pub fn transition_image(
+        &mut self,
+        image: ImageIx,
+        src_access_mask: vk::AccessFlags,
+        src_stage_mask: vk::PipelineStageFlags,
+        dst_access_mask: vk::AccessFlags,
+        dst_stage_mask: vk::PipelineStageFlags,
+        old_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+    ) {
+        let f = Arc::new(move |dev: &ash::Device, res: &GpuResources, cmd| {
+            let img = &res[image];
+
+            VkEngine::transition_image(
+                cmd,
+                dev,
+                img.image,
+                src_access_mask,
+                src_stage_mask,
+                dst_access_mask,
+                dst_stage_mask,
+                old_layout,
+                new_layout,
+            );
+        }) as BatchFn;
+
+        self.command_fns.push(f);
+    }
 
     pub fn dispatch_compute(
         &mut self,
@@ -136,15 +164,24 @@ pub fn create_engine() -> rhai::Engine {
 
     engine.register_type_with_name::<BatchBuilder>("BatchBuilder");
 
+    engine.register_fn("get", |img: Resolvable<ImageIx>| {
+        img.value.load().unwrap()
+    });
+    engine.register_fn("get", |view: Resolvable<ImageViewIx>| {
+        view.value.load().unwrap()
+    });
+    engine.register_fn("get", |buf: Resolvable<BufferIx>| {
+        buf.value.load().unwrap()
+    });
     engine.register_fn("get", |pipeline: Resolvable<PipelineIx>| {
         pipeline.value.load().unwrap()
     });
-
     engine.register_fn("get", |set: Resolvable<DescSetIx>| {
         set.value.load().unwrap()
     });
 
-    engine.register_fn("get", |i: Arc<AtomicCell<i64>>| i.load());
+    engine.register_fn("get", |v: Arc<AtomicCell<i64>>| v.load());
+    engine.register_fn("get", |v: Arc<AtomicCell<f32>>| v.load());
 
     engine.register_fn("append_int", |blob: &mut Vec<u8>, v: i64| {
         let v = [v as i32];
@@ -157,6 +194,28 @@ pub fn create_engine() -> rhai::Engine {
     });
 
     engine.register_fn("batch_builder", || BatchBuilder::default());
+
+    engine.register_fn(
+        "transition_image",
+        |builder: &mut BatchBuilder,
+         image: ImageIx,
+         src_access_mask: vk::AccessFlags,
+         src_stage_mask: vk::PipelineStageFlags,
+         dst_access_mask: vk::AccessFlags,
+         dst_stage_mask: vk::PipelineStageFlags,
+         old_layout: vk::ImageLayout,
+         new_layout: vk::ImageLayout| {
+            builder.transition_image(
+                image,
+                src_access_mask,
+                src_stage_mask,
+                dst_access_mask,
+                dst_stage_mask,
+                old_layout,
+                new_layout,
+            );
+        },
+    );
 
     engine.register_fn(
         "dispatch_compute",

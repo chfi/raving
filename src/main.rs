@@ -148,6 +148,9 @@ fn main() -> Result<()> {
     log::warn!("is resolved: {}", builder.is_resolved());
     // log::warn!("binding pipeline variable");
     // builder.bind_pipeline_var("pipeline", line_renderer.pipeline);
+
+    builder.bind_image_var("out_image", line_renderer.out_image);
+
     log::warn!("binding descriptor set variable");
     builder.bind_desc_set_var("desc_set", line_renderer.set);
     log::warn!("is resolved: {}", builder.is_resolved());
@@ -257,40 +260,11 @@ fn main() -> Result<()> {
                           res: &GpuResources,
                           input: &BatchInput,
                           cmd: vk::CommandBuffer| {
-                        // let dst = &res[text_renderer.out_image];
-                        let dst = &res[line_renderer.out_image];
-
-                        VkEngine::transition_image(
-                            cmd,
-                            dev,
-                            dst.image,
-                            vk::AccessFlags::SHADER_WRITE,
-                            vk::PipelineStageFlags::COMPUTE_SHADER,
-                            vk::AccessFlags::SHADER_WRITE,
-                            vk::PipelineStageFlags::COMPUTE_SHADER,
-                            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                            vk::ImageLayout::GENERAL,
-                        );
-
                         rhai_batch(dev, res, cmd);
-                        // line_renderer.draw_at((100, 100), dev, res, cmd);
-
-                        VkEngine::transition_image(
-                            cmd,
-                            dev,
-                            dst.image,
-                            vk::AccessFlags::SHADER_WRITE,
-                            vk::PipelineStageFlags::COMPUTE_SHADER,
-                            vk::AccessFlags::SHADER_READ,
-                            vk::PipelineStageFlags::COMPUTE_SHADER,
-                            vk::ImageLayout::GENERAL,
-                            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                        );
                     },
                 ) as Box<_>;
 
                 let batches = [&main_batch, &text_batch, &copy_batch];
-                // let batches = [main_batch, text_batch, copy_batch];
 
                 let deps = vec![
                     None,

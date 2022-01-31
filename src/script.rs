@@ -58,8 +58,6 @@ pub mod vk {
         }
     }
 
-    // pub mod cmd {}
-
     #[rhai_mod(name = "BufferUsageFlags")]
     pub mod buffer_usage {
         macro_rules! flag {
@@ -122,20 +120,18 @@ pub mod vk {
 
     #[rhai_mod(name = "ImageLayout")]
     pub mod image_layout {
-        macro_rules! layout {
-            ($l:ident) => {
-                pub const $l: vk::ImageLayout = vk::ImageLayout::$l;
-            };
-        }
+        use ash::vk::ImageLayout as Layout;
 
-        layout!(UNDEFINED);
-        layout!(PREINITIALIZED);
-        layout!(GENERAL);
-        layout!(TRANSFER_SRC_OPTIMAL);
-        layout!(TRANSFER_DST_OPTIMAL);
-        layout!(SHADER_READ_ONLY_OPTIMAL);
-        layout!(COLOR_ATTACHMENT_OPTIMAL);
-        layout!(PRESENT_SRC_KHR);
+        pub const UNDEFINED: Layout = Layout::UNDEFINED;
+        pub const PREINITIALIZED: Layout = Layout::PREINITIALIZED;
+        pub const GENERAL: Layout = Layout::GENERAL;
+        pub const TRANSFER_SRC_OPTIMAL: Layout = Layout::TRANSFER_SRC_OPTIMAL;
+        pub const TRANSFER_DST_OPTIMAL: Layout = Layout::TRANSFER_DST_OPTIMAL;
+        pub const SHADER_READ_ONLY_OPTIMAL: Layout =
+            Layout::SHADER_READ_ONLY_OPTIMAL;
+        pub const COLOR_ATTACHMENT_OPTIMAL: Layout =
+            Layout::COLOR_ATTACHMENT_OPTIMAL;
+        pub const PRESENT_SRC_KHR: Layout = Layout::PRESENT_SRC_KHR;
     }
 
     #[rhai_mod(name = "DescriptorType")]
@@ -178,57 +174,53 @@ pub mod vk {
 
     #[rhai_mod(name = "PipelineStageFlags")]
     pub mod pipeline_stage_flags {
-        macro_rules! flag {
-            ($f:ident) => {
-                pub const $f: vk::PipelineStageFlags =
-                    vk::PipelineStageFlags::$f;
-            };
-        }
+        use ash::vk::PipelineStageFlags as Flags;
 
-        flag!(TOP_OF_PIPE);
-        flag!(DRAW_INDIRECT);
-        flag!(VERTEX_INPUT);
-        flag!(VERTEX_SHADER);
-        flag!(TESSELLATION_CONTROL_SHADER);
-        flag!(TESSELLATION_EVALUATION_SHADER);
-        flag!(GEOMETRY_SHADER);
-        flag!(FRAGMENT_SHADER);
-        flag!(EARLY_FRAGMENT_TESTS);
-        flag!(LATE_FRAGMENT_TESTS);
-        flag!(COLOR_ATTACHMENT_OUTPUT);
-        flag!(COMPUTE_SHADER);
-        flag!(TRANSFER);
-        flag!(BOTTOM_OF_PIPE);
-        flag!(HOST);
-        flag!(ALL_GRAPHICS);
-        flag!(ALL_COMMANDS);
+        pub const TOP_OF_PIPE: Flags = Flags::TOP_OF_PIPE;
+        pub const DRAW_INDIRECT: Flags = Flags::DRAW_INDIRECT;
+        pub const VERTEX_INPUT: Flags = Flags::VERTEX_INPUT;
+        pub const VERTEX_SHADER: Flags = Flags::VERTEX_SHADER;
+        pub const TESSELLATION_CONTROL_SHADER: Flags =
+            Flags::TESSELLATION_CONTROL_SHADER;
+        pub const TESSELLATION_EVALUATION_SHADER: Flags =
+            Flags::TESSELLATION_EVALUATION_SHADER;
+        pub const GEOMETRY_SHADER: Flags = Flags::GEOMETRY_SHADER;
+        pub const FRAGMENT_SHADER: Flags = Flags::FRAGMENT_SHADER;
+        pub const EARLY_FRAGMENT_TESTS: Flags = Flags::EARLY_FRAGMENT_TESTS;
+        pub const LATE_FRAGMENT_TESTS: Flags = Flags::LATE_FRAGMENT_TESTS;
+        pub const COLOR_ATTACHMENT_OUTPUT: Flags =
+            Flags::COLOR_ATTACHMENT_OUTPUT;
+        pub const COMPUTE_SHADER: Flags = Flags::COMPUTE_SHADER;
+        pub const TRANSFER: Flags = Flags::TRANSFER;
+        pub const BOTTOM_OF_PIPE: Flags = Flags::BOTTOM_OF_PIPE;
+        pub const HOST: Flags = Flags::HOST;
+        pub const ALL_GRAPHICS: Flags = Flags::ALL_GRAPHICS;
+        pub const ALL_COMMANDS: Flags = Flags::ALL_COMMANDS;
     }
 
     #[rhai_mod(name = "AccessFlags")]
     pub mod access_flags {
-        macro_rules! flag {
-            ($f:ident) => {
-                pub const $f: vk::AccessFlags = vk::AccessFlags::$f;
-            };
-        }
+        use ash::vk::AccessFlags as Flags;
 
-        flag!(INDIRECT_COMMAND_READ);
-        flag!(INDEX_READ);
-        flag!(VERTEX_ATTRIBUTE_READ);
-        flag!(UNIFORM_READ);
-        flag!(INPUT_ATTACHMENT_READ);
-        flag!(SHADER_READ);
-        flag!(SHADER_WRITE);
-        flag!(COLOR_ATTACHMENT_READ);
-        flag!(COLOR_ATTACHMENT_WRITE);
-        flag!(DEPTH_STENCIL_ATTACHMENT_READ);
-        flag!(DEPTH_STENCIL_ATTACHMENT_WRITE);
-        flag!(TRANSFER_READ);
-        flag!(TRANSFER_WRITE);
-        flag!(HOST_READ);
-        flag!(HOST_WRITE);
-        flag!(MEMORY_READ);
-        flag!(MEMORY_WRITE);
+        pub const INDIRECT_COMMAND_READ: Flags = Flags::INDIRECT_COMMAND_READ;
+        pub const INDEX_READ: Flags = Flags::INDEX_READ;
+        pub const VERTEX_ATTRIBUTE_READ: Flags = Flags::VERTEX_ATTRIBUTE_READ;
+        pub const UNIFORM_READ: Flags = Flags::UNIFORM_READ;
+        pub const INPUT_ATTACHMENT_READ: Flags = Flags::INPUT_ATTACHMENT_READ;
+        pub const SHADER_READ: Flags = Flags::SHADER_READ;
+        pub const SHADER_WRITE: Flags = Flags::SHADER_WRITE;
+        pub const COLOR_ATTACHMENT_READ: Flags = Flags::COLOR_ATTACHMENT_READ;
+        pub const COLOR_ATTACHMENT_WRITE: Flags = Flags::COLOR_ATTACHMENT_WRITE;
+        pub const DEPTH_STENCIL_ATTACHMENT_READ: Flags =
+            Flags::DEPTH_STENCIL_ATTACHMENT_READ;
+        pub const DEPTH_STENCIL_ATTACHMENT_WRITE: Flags =
+            Flags::DEPTH_STENCIL_ATTACHMENT_WRITE;
+        pub const TRANSFER_READ: Flags = Flags::TRANSFER_READ;
+        pub const TRANSFER_WRITE: Flags = Flags::TRANSFER_WRITE;
+        pub const HOST_READ: Flags = Flags::HOST_READ;
+        pub const HOST_WRITE: Flags = Flags::HOST_WRITE;
+        pub const MEMORY_READ: Flags = Flags::MEMORY_READ;
+        pub const MEMORY_WRITE: Flags = Flags::MEMORY_WRITE;
     }
 
     #[rhai_mod(name = "Format")]
