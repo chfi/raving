@@ -16,8 +16,15 @@ fn draw_at(x, y) {
   let batch = batch_builder();
   let p = self::pipeline.get();
   let s = self::desc_set.get();
-  let y = self::line_count.get();
-  print(y);
-  batch.dispatch_compute(p, s, 80, y, 1);
+  let l = self::line_count.get();
+
+  let pc = blob();
+
+  pc.append_int(x);
+  pc.append_int(y);
+  pc.append_int(800);
+  pc.append_int(600);
+
+  batch.dispatch_compute(p, s, pc, 80, l, 1);
   batch
 }

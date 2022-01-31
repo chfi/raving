@@ -165,9 +165,6 @@ fn main() -> Result<()> {
 
     dbg!();
 
-    let batch = draw_at(100, 100)?;
-    let batch_fn = batch.build();
-
     dbg!();
 
     {
@@ -248,6 +245,11 @@ fn main() -> Result<()> {
                 let f_ix = engine.current_frame_number();
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
 
+                let x = 400.0 + 200.0 * t.sin();
+                let y = 300.0 + 160.0 * t.cos();
+
+                let batch = draw_at(x as i64, y as i64).unwrap();
+                let batch_fn = batch.build();
                 let rhai_batch = batch_fn.clone();
 
                 let text_batch = Box::new(

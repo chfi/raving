@@ -92,6 +92,7 @@ pub struct ModuleBuilder {
     desc_set_vars: FxHashMap<String, Resolvable<DescSetIx>>,
 
     ints: FxHashMap<String, Arc<AtomicCell<i64>>>,
+    floats: FxHashMap<String, Arc<AtomicCell<f32>>>,
 
     // images: FxHashMap<usize, Resolvable<ImageIx>>,
     // rhai_mod: rhai::Module,
@@ -145,6 +146,16 @@ pub fn create_engine() -> rhai::Engine {
 
     engine.register_fn("get", |i: Arc<AtomicCell<i64>>| i.load());
 
+    engine.register_fn("append_int", |blob: &mut Vec<u8>, v: i64| {
+        let v = [v as i32];
+        blob.extend_from_slice(bytemuck::cast_slice(&v));
+    });
+
+    engine.register_fn("append_float", |blob: &mut Vec<u8>, v: f32| {
+        let v = [v as f32];
+        blob.extend_from_slice(bytemuck::cast_slice(&v));
+    });
+
     engine.register_fn("batch_builder", || BatchBuilder::default());
 
     engine.register_fn(
@@ -152,17 +163,17 @@ pub fn create_engine() -> rhai::Engine {
         |builder: &mut BatchBuilder,
          pipeline: PipelineIx,
          desc_set: DescSetIx,
-         // push_constants: Vec<u8>,
+         push_constants: Vec<u8>,
          x_groups: i64,
          y_groups: i64,
          z_groups: i64| {
-            let push_constants = [100u32, 100, 800, 600];
-
-            let mut bytes: Vec<u8> = Vec::with_capacity(8);
-            bytes.extend_from_slice(bytemuck::cast_slice(&push_constants));
-
             builder.dispatch_compute(
-                pipeline, desc_set, bytes, x_groups, y_groups, z_groups,
+                pipeline,
+                desc_set,
+                push_constants,
+                x_groups,
+                y_groups,
+                z_groups,
             );
         },
     );
@@ -173,6 +184,11 @@ pub fn create_engine() -> rhai::Engine {
 impl ModuleBuilder {
     pub fn set_int(&mut self, k: &str, v: i64) {
         let cell = self.ints.get(k).unwrap();
+        cell.store(v);
+    }
+
+    pub fn set_float(&mut self, k: &str, v: f32) {
+        let cell = self.floats.get(k).unwrap();
         cell.store(v);
     }
 
@@ -222,6 +238,13 @@ impl ModuleBuilder {
             engine.register_fn("atomic_int", move |name: &str| {
                 let var = Arc::new(AtomicCell::new(0i64));
                 res.lock().ints.insert(name.to_string(), var.clone());
+                var
+            });
+
+            let res = arcres.clone();
+            engine.register_fn("atomic_float", move |name: &str| {
+                let var = Arc::new(AtomicCell::new(0f32));
+                res.lock().floats.insert(name.to_string(), var.clone());
                 var
             });
 
