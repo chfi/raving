@@ -10,6 +10,8 @@ use winit::window::Window;
 
 use anyhow::{anyhow, bail, Result};
 
+use std::sync::Arc;
+
 use thunderdome::{Arena, Index};
 
 pub mod context;
@@ -510,6 +512,67 @@ impl VkEngine {
                 &image_barriers,
             );
         };
+    }
+
+    pub fn submit_batches_fence(
+        &mut self,
+        batches: &[Arc<
+            dyn Fn(
+                    &VkContext,
+                    &mut GpuResources,
+                    &mut Allocator,
+                    vk::CommandBuffer,
+                ) -> anyhow::Result<()>
+                + Send
+                + Sync,
+        >],
+    ) -> Result<FenceIx> {
+        let cmd = self.allocate_command_buffer()?;
+
+        let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            self.context
+                .device()
+                .begin_command_buffer(cmd, &cmd_begin_info)?;
+        }
+
+        let ctx = &self.context;
+        let dev = ctx.device();
+
+        let res = &mut self.resources;
+        let alloc = &mut self.allocator;
+
+        for batch in batches.iter() {
+            batch(ctx, res, alloc, cmd)?;
+        }
+
+        unsafe { dev.end_command_buffer(cmd) }?;
+
+        let fence_ix = self.submit_queue(cmd)?;
+
+        Ok(fence_ix)
+    }
+
+    // TODO this should allow for custom timeouts & not always block
+    // and remove
+    pub fn block_on_fence(&mut self, ix: FenceIx) -> Result<()> {
+        let fence =
+            self.resources.fences.remove(ix.0).ok_or(anyhow!(
+                "tried to block on fence that does not exist"
+            ))?;
+
+        let fences = [fence];
+
+        let dev = self.context.device();
+
+        unsafe {
+            dev.wait_for_fences(&fences, true, 10_000_000_000)?;
+            dev.reset_fences(&fences)?;
+        };
+
+        Ok(())
     }
 
     pub fn draw_from_batches(

@@ -33,7 +33,7 @@ pub type InitFn = Arc<
 
 #[derive(Default, Clone)]
 pub struct BatchBuilder {
-    init_fn: Vec<InitFn>,
+    pub init_fn: Vec<InitFn>,
 
     staging_buffers: Arc<Mutex<Vec<BufferIx>>>,
 

@@ -10,15 +10,15 @@ export let pipeline = load_compute_shader("shaders/text_lines.comp.spv",
 export let desc_set = desc_set_var("desc_set");
 export let line_count = atomic_int("line_count");
 
-// export let font_image = image_var("font_image");
-
 export let font_image = allocate_image(1024,
                                        8,
                                        vk::Format::R8G8B8A8_UNORM,
                                        vk::ImageUsageFlags::STORAGE
                                        | vk::ImageUsageFlags::SAMPLED
+                                       | vk::ImageUsageFlags::TRANSFER_SRC
                                        | vk::ImageUsageFlags::TRANSFER_DST);
 
+export let font_image_view = image_view_for(font_image);
 
 
 export let out_image = image_var("out_image");
@@ -29,7 +29,7 @@ fn init() {
 
   init_batch.load_image_from_file("8x8font.png",
                                   img,
-                                  vk::ImageLayout::R8G8B8A8_UNORM);
+                                  vk::ImageLayout::TRANSFER_SRC_OPTIMAL);
 
   init_batch
 }

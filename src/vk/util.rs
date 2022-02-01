@@ -191,7 +191,7 @@ impl LineRenderer {
                 alloc,
                 gpu_allocator::MemoryLocation::CpuToGpu,
                 1,
-                256,
+                256 * 4 * 2, // 256 * 2 u32s
                 usage,
                 Some("lines:line_data_buffer"),
             )?;

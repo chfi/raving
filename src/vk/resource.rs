@@ -38,7 +38,7 @@ pub struct GpuResources {
     samplers: Arena<vk::Sampler>,
 
     semaphores: Arena<vk::Semaphore>,
-    fences: Arena<vk::Fence>,
+    pub(super) fences: Arena<vk::Fence>,
 }
 
 impl GpuResources {

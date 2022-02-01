@@ -29,7 +29,7 @@ pub struct BufferIx(pub(super) Index);
 pub struct SemaphoreIx(pub(super) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct FenceIx(pub(super) Index);
+pub struct FenceIx(pub Index);
 
 impl std::ops::Index<PipelineIx> for GpuResources {
     type Output = (vk::Pipeline, vk::PipelineLayout);

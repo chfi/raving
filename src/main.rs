@@ -171,7 +171,6 @@ fn main() -> Result<()> {
     let mut rhai_engine = engine::script::console::create_engine();
 
     let arc_module: Arc<rhai::Module> = module.into();
-
     rhai_engine.register_static_module("self", arc_module.clone());
 
     builder.set_int("line_count", lines.len() as i64);
@@ -254,6 +253,15 @@ fn main() -> Result<()> {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     let start = std::time::Instant::now();
+
+    {
+        let init_builder = init()?;
+
+        let fence =
+            engine.submit_batches_fence(init_builder.init_fn.as_slice())?;
+
+        engine.block_on_fence(fence)?;
+    }
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = winit::event_loop::ControlFlow::Poll;
