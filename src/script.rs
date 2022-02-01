@@ -202,6 +202,10 @@ pub mod vk {
     pub mod access_flags {
         use ash::vk::AccessFlags as Flags;
 
+        pub fn empty() -> Flags {
+            Flags::empty()
+        }
+
         pub const INDIRECT_COMMAND_READ: Flags = Flags::INDIRECT_COMMAND_READ;
         pub const INDEX_READ: Flags = Flags::INDEX_READ;
         pub const VERTEX_ATTRIBUTE_READ: Flags = Flags::VERTEX_ATTRIBUTE_READ;

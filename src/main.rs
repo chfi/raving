@@ -47,8 +47,6 @@ fn main() -> Result<()> {
             BindingDesc::StorageImage { binding: 1 },
         ];
 
-        // let fill_pc_size =
-        //     std::mem::size_of::<[i32; 2]>() + std::mem::size_of::<[f32; 4]>();
         let fill_pc_size = std::mem::size_of::<[i32; 2]>();
         let flip_pc_size = std::mem::size_of::<[i32; 2]>();
 
@@ -145,7 +143,6 @@ fn main() -> Result<()> {
 
     let mut line_renderer = LineRenderer::new(
         &mut engine,
-        // "8x8font.png",
         font_image,
         font_image_view,
         example_state.fill_image,
@@ -162,10 +159,12 @@ fn main() -> Result<()> {
     // log::warn!("binding pipeline variable");
     // builder.bind_pipeline_var("pipeline", line_renderer.pipeline);
 
+    builder.bind_image_var("bg_image", example_state.fill_image);
     builder.bind_image_var("out_image", line_renderer.out_image);
 
-    log::warn!("binding descriptor set variable");
-    builder.bind_desc_set_var("desc_set", line_renderer.set);
+    log::warn!("binding descriptor set variables");
+    builder.bind_desc_set_var("bg_desc_set", example_state.fill_set);
+    builder.bind_desc_set_var("line_desc_set", line_renderer.set);
     log::warn!("is resolved: {}", builder.is_resolved());
 
     let mut rhai_engine = engine::script::console::create_engine();
@@ -181,13 +180,24 @@ fn main() -> Result<()> {
     );
 
     let mut rhai_engine = engine::script::console::create_engine();
+    rhai_engine.register_static_module("self", arc_module.clone());
+
+    let draw_background =
+        rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
+            rhai_engine,
+            builder.script_ast.clone_functions_only(),
+            "background",
+        );
+
+    let mut rhai_engine = engine::script::console::create_engine();
     rhai_engine.register_static_module("self", arc_module);
 
-    let draw_at = rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
-        rhai_engine,
-        builder.script_ast.clone_functions_only(),
-        "draw_at",
-    );
+    let draw_at =
+        rhai::Func::<(i64, i64, i64, i64), BatchBuilder>::create_from_ast(
+            rhai_engine,
+            builder.script_ast.clone_functions_only(),
+            "draw_at",
+        );
 
     dbg!();
 
@@ -223,30 +233,12 @@ fn main() -> Result<()> {
         [new_frame(), new_frame()]
     };
 
-    let main_batch = Box::new(
-        move |dev: &Device,
-              res: &GpuResources,
-              input: &BatchInput,
-              cmd: vk::CommandBuffer| {
-            compute_batch(example_state, dev, res, input, cmd)
-        },
-    ) as Box<_>;
-
     let copy_batch = Box::new(
         move |dev: &Device,
               res: &GpuResources,
               input: &BatchInput,
               cmd: vk::CommandBuffer| {
             copy_batch(example_state, dev, res, input, cmd)
-        },
-    ) as Box<_>;
-
-    let flip_batch = Box::new(
-        move |dev: &Device,
-              res: &GpuResources,
-              input: &BatchInput,
-              cmd: vk::CommandBuffer| {
-            flip_batch(example_state, dev, res, input, cmd)
         },
     ) as Box<_>;
 
@@ -283,9 +275,22 @@ fn main() -> Result<()> {
                 let x = 400.0 + 200.0 * t.sin();
                 let y = 300.0 + 160.0 * t.cos();
 
-                let batch = draw_at(x as i64, y as i64).unwrap();
+                let bg_batch = draw_background(800, 600).unwrap();
+                let bg_batch_fn = bg_batch.build();
+                let bg_rhai_batch = bg_batch_fn.clone();
+
+                let batch = draw_at(x as i64, y as i64, 800, 600).unwrap();
                 let batch_fn = batch.build();
                 let rhai_batch = batch_fn.clone();
+
+                let bg_batch = Box::new(
+                    move |dev: &Device,
+                          res: &GpuResources,
+                          input: &BatchInput,
+                          cmd: vk::CommandBuffer| {
+                        bg_rhai_batch(dev, res, cmd);
+                    },
+                ) as Box<_>;
 
                 let text_batch = Box::new(
                     move |dev: &Device,
@@ -296,7 +301,8 @@ fn main() -> Result<()> {
                     },
                 ) as Box<_>;
 
-                let batches = [&main_batch, &text_batch, &copy_batch];
+                let batches = [&bg_batch, &text_batch, &copy_batch];
+                // let batches = [&main_batch, &text_batch, &copy_batch];
 
                 let deps = vec![
                     None,
