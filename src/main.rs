@@ -73,7 +73,7 @@ fn main() -> Result<()> {
             height,
             vk::Format::R8G8B8A8_UNORM,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
-            Some("fill_image"),
+            Some("outer-fill_image"),
         )?;
         let flip_image = res.allocate_image(
             ctx,
@@ -146,10 +146,10 @@ fn main() -> Result<()> {
     let mut line_renderer = LineRenderer::new(
         &mut engine,
         // "8x8font.png",
-        example_state.fill_image,
-        example_state.fill_view,
         font_image,
         font_image_view,
+        example_state.fill_image,
+        example_state.fill_view,
     )?;
 
     let lines = ["hello world", "e", "l", "l", "o     world", "???"];

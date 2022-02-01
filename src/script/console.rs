@@ -379,7 +379,8 @@ impl ModuleBuilder {
             let res = arcres.clone();
             engine.register_fn(
                 "allocate_image",
-                move |width: i64,
+                move |name: &str,
+                      width: i64,
                       height: i64,
                       format: vk::Format,
                       usage: vk::ImageUsageFlags| {
@@ -388,6 +389,7 @@ impl ModuleBuilder {
                         height as u32,
                         format,
                         usage,
+                        Some(name),
                     );
                     resolvable
                 },
@@ -670,8 +672,11 @@ impl ModuleBuilder {
         height: u32,
         format: vk::Format,
         usage: vk::ImageUsageFlags,
+        name: Option<&str>,
     ) -> Resolvable<ImageIx> {
         let resolvable = Arc::new(AtomicCell::new(None));
+
+        let name = name.map(String::from);
 
         let inner = resolvable.clone();
 
@@ -680,7 +685,13 @@ impl ModuleBuilder {
                   res: &mut GpuResources,
                   alloc: &mut Allocator| {
                 let img = res.allocate_image(
-                    ctx, alloc, width, height, format, usage, None,
+                    ctx,
+                    alloc,
+                    width,
+                    height,
+                    format,
+                    usage,
+                    name.as_ref().map(|s| s.as_str()),
                 )?;
                 inner.store(Some(img));
                 Ok(())
