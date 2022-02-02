@@ -1032,6 +1032,7 @@ pub mod frame {
     use rustc_hash::FxHashMap;
     use std::{collections::BTreeMap, sync::Arc};
 
+    use crate::vk::descriptor::BindingDesc;
     use crate::vk::resource::index::*;
     use crate::vk::{context::VkContext, GpuResources};
 
@@ -1085,6 +1086,20 @@ pub mod frame {
             }
         }
 
+        pub fn to_primary(self) -> Self {
+            Self {
+                secondary: false,
+                ..self
+            }
+        }
+
+        pub fn to_secondary(self) -> Self {
+            Self {
+                secondary: true,
+                ..self
+            }
+        }
+
         pub fn is_primary(&self) -> bool {
             !self.secondary
         }
@@ -1100,15 +1115,95 @@ pub mod frame {
         priority: Priority,
     }
 
+    impl<T: Copy> Resolvable<T> {
+        pub fn get(&self) -> Option<T> {
+            self.value.load()
+        }
+
+        pub fn get_unwrap(&self) -> T {
+            self.value.load().unwrap()
+        }
+    }
+
     // impl<T: Copy> Resolvable<T> {
     //     pub fn
     // }
 
     pub struct FrameBuilder {
         resolvers: BTreeMap<Priority, Vec<ResolverFn>>,
+        // variables: HashMap
     }
 
     impl FrameBuilder {
+        pub fn allocate_buffer(
+            &mut self,
+            size: u64,
+            usage: ash::vk::BufferUsageFlags,
+            name: Option<&str>,
+        ) -> Resolvable<ImageIx> {
+            todo!();
+        }
+
+        pub fn allocate_image(
+            &mut self,
+            width: u32,
+            height: u32,
+            format: ash::vk::Format,
+            usage: ash::vk::ImageUsageFlags,
+            name: Option<&str>,
+        ) -> Resolvable<ImageIx> {
+            todo!();
+        }
+
+        pub fn create_image_view(
+            &mut self,
+            image_ix: Resolvable<ImageIx>,
+        ) -> Resolvable<ImageViewIx> {
+            todo!();
+        }
+
+        pub fn load_compute_shader(
+            &mut self,
+            shader_path: &str,
+            bindings: &[BindingDesc],
+            pc_size: usize,
+        ) -> Resolvable<PipelineIx> {
+            todo!();
+        }
+
+        pub fn resolve_and_then<
+            T: Copy + Send + Sync + 'static,
+            U: Copy + Send + Sync + 'static,
+        >(
+            &mut self,
+            f: impl FnOnce(T) -> U + Send + Sync + 'static,
+            r: Resolvable<T>,
+        ) -> Resolvable<U> {
+            // let priority = r.priority.as
+            let priority = r.priority.to_secondary();
+
+            let cell = Arc::new(AtomicCell::new(None));
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |_: &VkContext,
+                      _: &mut GpuResources,
+                      _: &mut Allocator| {
+                    let t = r.get_unwrap();
+                    let u = f(t);
+                    inner.store(Some(u));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
+        }
+
         pub fn add_resolvable<F, T>(
             &mut self,
             priority: Priority,
