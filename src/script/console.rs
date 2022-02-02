@@ -1032,7 +1032,7 @@ pub mod frame {
     use rustc_hash::FxHashMap;
     use std::{collections::BTreeMap, sync::Arc};
 
-    use crate::vk::descriptor::BindingDesc;
+    use crate::vk::descriptor::{BindingDesc, BindingInput};
     use crate::vk::resource::index::*;
     use crate::vk::{context::VkContext, GpuResources};
 
@@ -1152,7 +1152,36 @@ pub mod frame {
             usage: ash::vk::ImageUsageFlags,
             name: Option<&str>,
         ) -> Resolvable<ImageIx> {
-            todo!();
+            let priority = Priority::primary(ResolveOrder::Image);
+
+            let cell = Arc::new(AtomicCell::new(None));
+            let name = name.map(String::from);
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      alloc: &mut Allocator| {
+                    let img = res.allocate_image(
+                        ctx,
+                        alloc,
+                        width,
+                        height,
+                        format,
+                        usage,
+                        name.as_ref().map(|s| s.as_str()),
+                    )?;
+                    inner.store(Some(img));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
         }
 
         pub fn create_image_view(
@@ -1160,6 +1189,74 @@ pub mod frame {
             image_ix: Resolvable<ImageIx>,
         ) -> Resolvable<ImageViewIx> {
             todo!();
+        }
+
+        pub fn create_desc_set(
+            &mut self,
+            stage_flags: ash::vk::ShaderStageFlags,
+            binding_descs: &[BindingDesc],
+            dyn_inputs: rhai::Array,
+        ) -> Resolvable<DescSetIx> {
+            let mut inputs: Vec<BindingInput> = Vec::new();
+
+            for v in dyn_inputs {
+                let map: rhai::Map = v.cast();
+
+                log::warn!("extracting type");
+                let ty = map.get("type").unwrap();
+                let ty_str = ty.clone().into_string().unwrap();
+
+                log::warn!("extracting binding");
+                let binding = map.get("binding").unwrap().clone();
+                let binding = binding.as_int().unwrap() as u32;
+
+                match ty_str.as_str() {
+                    "image_view" => {
+                        log::warn!("extracting view");
+                        let view = map.get("view").unwrap().clone();
+                        let view = view.cast();
+                        let input = BindingInput::ImageView { binding, view };
+                        inputs.push(input);
+                    }
+                    "buffer" => {
+                        log::warn!("extracting buffer");
+                        let buffer = map.get("buffer").unwrap().clone();
+                        let buffer = buffer.cast();
+                        let input = BindingInput::Buffer { binding, buffer };
+                        inputs.push(input);
+                    }
+                    _ => panic!("unsupported binding input type"),
+                }
+            }
+
+            let cell = Arc::new(AtomicCell::new(None));
+            // let name = name.map(String::from);
+            let inner = cell.clone();
+
+            let binding_descs = binding_descs.to_owned();
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      alloc: &mut Allocator| {
+                    let desc_set = res.allocate_desc_set(
+                        &binding_descs,
+                        &inputs,
+                        stage_flags,
+                    )?;
+                    inner.store(Some(desc_set));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            let priority = Priority::primary(ResolveOrder::DescriptorSet);
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
         }
 
         pub fn load_compute_shader(
