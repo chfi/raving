@@ -17,6 +17,7 @@ export let line_pipeline = load_compute_shader("shaders/text_lines.comp.spv",
 export let line_desc_set = desc_set_var("line_desc_set");
 export let line_count = atomic_int("line_count");
 
+
 export let font_image = allocate_image("font_image",
                                        1024,
                                        8,
@@ -31,6 +32,16 @@ export let font_image_view = image_view_for(font_image);
 
 export let bg_image = image_var("bg_image");
 export let out_image = image_var("out_image");
+export let out_view = image_var("out_view");
+
+export let text_buffer = buffer_var("text_buffer");
+export let line_buffer = buffer_var("line_buffer");
+
+let line_inputs = [vk::binding::input::image_view(0, font_image_view),
+                   vk::binding::input::buffer(1, text_buffer),
+                   vk::binding::input::buffer(2, line_buffer),
+                   vk::binding::input::image_view(3, out_view)];
+
 
 fn init() {
   let init_batch = batch_builder();

@@ -161,6 +161,10 @@ fn main() -> Result<()> {
 
     builder.bind_image_var("bg_image", example_state.fill_image);
     builder.bind_image_var("out_image", line_renderer.out_image);
+    builder.bind_image_view_var("out_image", line_renderer.out_view);
+
+    builder.bind_buffer_var("text_buffer", line_renderer.text_buffer);
+    builder.bind_buffer_var("line_buffer", line_renderer.line_buffer);
 
     log::warn!("binding descriptor set variables");
     builder.bind_desc_set_var("bg_desc_set", example_state.fill_set);
@@ -302,7 +306,6 @@ fn main() -> Result<()> {
                 ) as Box<_>;
 
                 let batches = [&bg_batch, &text_batch, &copy_batch];
-                // let batches = [&main_batch, &text_batch, &copy_batch];
 
                 let deps = vec![
                     None,

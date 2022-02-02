@@ -212,11 +212,14 @@ impl BatchBuilder {
 
 #[derive(Default)]
 pub struct ModuleBuilder {
+    resolvers: [Vec<WithAllocators<()>>; 10],
+
     image_resolvers: Vec<WithAllocators<()>>,
     image_view_resolvers: Vec<WithAllocators<()>>,
 
     buffer_resolvers: Vec<WithAllocators<()>>,
     pipeline_resolvers: Vec<WithAllocators<()>>,
+
     desc_set_resolvers: Vec<WithAllocators<()>>,
 
     image_vars: FxHashMap<String, Resolvable<ImageIx>>,
@@ -359,6 +362,14 @@ pub fn create_engine() -> rhai::Engine {
 }
 
 impl ModuleBuilder {
+    pub fn int_cell(&self, k: &str) -> Option<&Arc<AtomicCell<i64>>> {
+        self.ints.get(k)
+    }
+
+    pub fn float_cell(&self, k: &str) -> Option<&Arc<AtomicCell<f32>>> {
+        self.floats.get(k)
+    }
+
     pub fn set_int(&mut self, k: &str, v: i64) {
         let cell = self.ints.get(k).unwrap();
         cell.store(v);
@@ -421,6 +432,18 @@ impl ModuleBuilder {
                     resolvable
                 },
             );
+
+            /*
+            let res = arcres.clone();
+            engine.register_fn(
+                "input_image_view",
+                move |binding: i64,
+                      view: Resolvable<ImageViewIx>|
+                      -> Resolvable<BindingInput> {
+                    //
+                },
+            );
+            */
 
             let res = arcres.clone();
             engine.register_fn("atomic_int", move |name: &str| {
@@ -737,18 +760,24 @@ impl ModuleBuilder {
     }
 }
 
+// pub enum ResolvePriority {
+//     Buffer = 0,
+// }
+
 #[derive(Clone)]
 pub struct Resolvable<T: Copy> {
+    priority: u64,
     value: Arc<AtomicCell<Option<T>>>,
 }
 
 impl<T: Copy> Resolvable<T> {
     pub fn new(value: Arc<AtomicCell<Option<T>>>) -> Self {
-        Self { value }
+        Self { value, priority: 0 }
     }
 
     pub fn empty() -> Self {
         Self {
+            priority: 10,
             value: Arc::new(AtomicCell::new(None)),
         }
     }
@@ -782,3 +811,339 @@ pub type WithAllocators<T> = Box<
         + Send
         + Sync,
 >;
+
+pub mod resolver {
+
+    use crossbeam::atomic::AtomicCell;
+    use gpu_allocator::vulkan::Allocator;
+    use std::{collections::BTreeMap, sync::Arc};
+
+    use crate::vk::resource::index::*;
+    use crate::vk::{context::VkContext, GpuResources};
+
+    use super::WithAllocators;
+
+    pub struct Resolvable<T: Copy> {
+        priority: Priority,
+        value: Arc<AtomicCell<Option<T>>>,
+    }
+
+    impl<T: Copy> Resolvable<T> {
+        pub fn get(&self) -> Option<T> {
+            self.value.load()
+        }
+
+        pub fn priority(&self) -> Priority {
+            self.priority
+        }
+
+        pub fn priority_type(&self) -> ResolveType {
+            self.priority.ty
+        }
+    }
+
+    pub struct Resolvers {
+        resolvers: BTreeMap<Priority, Vec<WithAllocators<()>>>,
+    }
+
+    impl Resolvers {
+        pub fn and_then<
+            T: Copy + Send + Sync + 'static,
+            U: Copy + Send + Sync + 'static,
+        >(
+            &mut self,
+            f: impl FnOnce(T) -> U + Send + Sync + 'static,
+            r: Resolvable<T>,
+        ) -> Resolvable<U> {
+            let priority = Priority {
+                ty: r.priority_type(),
+                secondary: true,
+            };
+
+            let cell = Arc::new(AtomicCell::new(None));
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |_: &VkContext,
+                      _: &mut GpuResources,
+                      _: &mut Allocator| {
+                    let t = r.get().unwrap();
+                    let u = f(t);
+                    inner.store(Some(u));
+                    Ok(())
+                },
+            ) as WithAllocators<()>;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
+        }
+
+        pub fn create_image_view(
+            &mut self,
+            image_ix: Resolvable<ImageIx>,
+            name: Option<&str>,
+        ) -> Resolvable<ImageViewIx> {
+            let priority = Priority {
+                ty: ResolveType::ImageView,
+                secondary: false,
+            };
+
+            let cell = Arc::new(AtomicCell::new(None));
+            let name = name.map(String::from);
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      _: &mut Allocator| {
+                    let image = image_ix.value.load().unwrap();
+                    let view = res.create_image_view_for_image(ctx, image)?;
+                    inner.store(Some(view));
+                    Ok(())
+                },
+            ) as WithAllocators<()>;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
+        }
+
+        pub fn allocate_image(
+            &mut self,
+            width: u32,
+            height: u32,
+            format: ash::vk::Format,
+            usage: ash::vk::ImageUsageFlags,
+            name: Option<&str>,
+        ) -> Resolvable<ImageIx> {
+            let priority = Priority {
+                ty: ResolveType::Image,
+                secondary: false,
+            };
+
+            let cell = Arc::new(AtomicCell::new(None));
+            let name = name.map(String::from);
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      alloc: &mut Allocator| {
+                    let img = res.allocate_image(
+                        ctx,
+                        alloc,
+                        width,
+                        height,
+                        format,
+                        usage,
+                        name.as_ref().map(|s| s.as_str()),
+                    )?;
+                    inner.store(Some(img));
+                    Ok(())
+                },
+            ) as WithAllocators<()>;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    #[repr(u64)]
+    pub enum ResolveType {
+        Buffer = 0,
+        Image = 1,
+        ImageView = 2,
+        Sampler = 3,
+        SampledImage = 4,
+        BindingInput = 5,
+        DescriptorSet = 6,
+        Other = 7,
+    }
+
+    #[derive(Clone, Copy)]
+    pub struct Priority {
+        ty: ResolveType,
+        secondary: bool,
+    }
+
+    impl Priority {
+        pub const fn as_primary(&self) -> Self {
+            Self {
+                secondary: false,
+                ..*self
+            }
+        }
+
+        pub const fn as_secondary(&self) -> Self {
+            Self {
+                secondary: true,
+                ..*self
+            }
+        }
+
+        pub const fn as_i32(&self) -> i32 {
+            let i = self.ty as i32;
+            (i << 1) | self.secondary as i32
+        }
+
+        pub const fn as_u64(&self) -> u64 {
+            let i = self.ty as u64;
+            (i << 1) | self.secondary as u64
+        }
+    }
+
+    impl PartialEq for Priority {
+        fn eq(&self, other: &Priority) -> bool {
+            self.as_u64() == other.as_u64()
+        }
+    }
+
+    impl Eq for Priority {}
+
+    impl PartialOrd for Priority {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.as_u64().partial_cmp(&other.as_u64())
+        }
+    }
+
+    impl Ord for Priority {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.as_u64().cmp(&other.as_u64())
+        }
+    }
+}
+
+pub mod frame {
+
+    use crossbeam::atomic::AtomicCell;
+    use gpu_allocator::vulkan::Allocator;
+    use rustc_hash::FxHashMap;
+    use std::{collections::BTreeMap, sync::Arc};
+
+    use crate::vk::resource::index::*;
+    use crate::vk::{context::VkContext, GpuResources};
+
+    // i'll likely replace this with a custom error type; this alias
+    // makes that easier in the future
+    pub type Result<T> = anyhow::Result<T>;
+
+    pub type ResolverFn = Box<
+        dyn FnOnce(&VkContext, &mut GpuResources, &mut Allocator) -> Result<()>
+            + Send
+            + Sync,
+    >;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[repr(u64)]
+    pub enum ResolveOrder {
+        Buffer = 0,
+        Image = 1,
+        ImageView = 2,
+        Sampler = 3,
+        SampledImage = 4,
+        BindingInput = 5,
+        DescriptorSet = 6,
+        Other = 7,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Priority {
+        order: ResolveOrder,
+        secondary: bool,
+    }
+
+    impl Priority {
+        pub fn as_index(&self) -> usize {
+            let a = self.order as usize;
+            let b = self.secondary as usize;
+            (a << 1) | b
+        }
+
+        pub fn primary(order: ResolveOrder) -> Self {
+            Self {
+                order,
+                secondary: false,
+            }
+        }
+
+        pub fn secondary(order: ResolveOrder) -> Self {
+            Self {
+                order,
+                secondary: true,
+            }
+        }
+
+        pub fn is_primary(&self) -> bool {
+            !self.secondary
+        }
+
+        pub fn is_secondary(&self) -> bool {
+            self.secondary
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Resolvable<T: Copy> {
+        value: Arc<AtomicCell<Option<T>>>,
+        priority: Priority,
+    }
+
+    // impl<T: Copy> Resolvable<T> {
+    //     pub fn
+    // }
+
+    pub struct FrameBuilder {
+        resolvers: BTreeMap<Priority, Vec<ResolverFn>>,
+    }
+
+    impl FrameBuilder {
+        pub fn add_resolvable<F, T>(
+            &mut self,
+            priority: Priority,
+            f: F,
+        ) -> Resolvable<T>
+        where
+            T: Copy + Send + Sync + 'static,
+            F: FnOnce(
+                    &VkContext,
+                    &mut GpuResources,
+                    &mut Allocator,
+                ) -> Result<T>
+                + Send
+                + Sync
+                + 'static,
+        {
+            let cell = Arc::new(AtomicCell::new(None));
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      alloc: &mut Allocator| {
+                    let val = f(ctx, res, alloc)?;
+                    inner.store(Some(val));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
+        }
+    }
+}
