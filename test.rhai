@@ -12,10 +12,6 @@ let line_bindings = [vk::binding::storage_image(0),
 export let line_pipeline = load_compute_shader("shaders/text_lines.comp.spv",
                                                line_bindings,
                                                16);
-// export let line_desc_set = desc_set_var("line_desc_set");
-
-// export let line_count = atomic_int("line_count");
-
 
 export let font_image = allocate_image("font_image",
                                        1024,
@@ -28,13 +24,22 @@ export let font_image = allocate_image("font_image",
 
 export let font_image_view = image_view_for(font_image);
 
-
 export let out_image = image_var("out_image");
 export let out_view = image_view_var("out_view");
 
-export let text_buffer = buffer_var("text_buffer");
-export let line_buffer = buffer_var("line_buffer");
+export let text_buffer = allocate_buffer("text_buffer",
+                                         vk::MemoryLocation::CPU_TO_GPU,
+                                         1,
+                                         256 * 256,
+                                         vk::BufferUsageFlags::TRANSFER_DST
+                                         | vk::BufferUsageFlags::STORAGE_BUFFER);
 
+export let line_buffer = allocate_buffer("line_buffer",
+                                         vk::MemoryLocation::CPU_TO_GPU,
+                                         1,
+                                         256 * 4 * 2,
+                                         vk::BufferUsageFlags::TRANSFER_DST
+                                         | vk::BufferUsageFlags::STORAGE_BUFFER);
 
 let bg_inputs = [#{ type: "image_view", binding: 0, view: out_view }];
 
@@ -104,7 +109,6 @@ fn background(w, h) {
 
 fn draw_at(x, y, w, h) {
   let batch = batch_builder();
-  // let l = self::line_count.get();
   let line_count = 1;
   let img = self::out_image.get();
 

@@ -1,8 +1,8 @@
-use engine::script::console::frame::FrameBuilder;
+use engine::script::console::frame::{FrameBuilder, Resolvable};
 use engine::script::console::BatchBuilder;
 use engine::vk::{
-    BatchInput, DescSetIx, FrameResources, GpuResources, ImageIx, ImageViewIx,
-    PipelineIx, VkEngine,
+    BatchInput, BufferIx, DescSetIx, FrameResources, GpuResources, ImageIx,
+    ImageViewIx, PipelineIx, VkEngine,
 };
 
 use engine::vk::util::*;
@@ -41,40 +41,31 @@ fn main() -> Result<()> {
 
     let mut engine = VkEngine::new(&window)?;
 
-    let example_state = engine.with_allocators(|ctx, res, alloc| {
-        let fill_image = res.allocate_image(
+    let (out_image, out_view) = engine.with_allocators(|ctx, res, alloc| {
+        let out_image = res.allocate_image(
             ctx,
             alloc,
             width,
             height,
             vk::Format::R8G8B8A8_UNORM,
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
-            Some("outer-fill_image"),
+            Some("out_image"),
         )?;
 
-        let fill_view = res.create_image_view_for_image(ctx, fill_image)?;
+        let out_view = res.create_image_view_for_image(ctx, out_image)?;
 
-        Ok(ExampleState {
-            fill_image,
-            fill_view,
-        })
+        Ok((out_image, out_view))
     })?;
 
     log::warn!("MODULE BUILDER");
 
     let mut builder = FrameBuilder::from_script("test.rhai")?;
 
-    let mut line_renderer = LineRenderer::new(&mut engine)?;
+    builder.bind_var("out_image", out_image)?;
+    builder.bind_var("out_view", out_view)?;
 
-    let lines = ["hello world", "e", "l", "l", "o     world", "???"];
-
-    line_renderer.update_lines(&mut engine.resources, lines)?;
-
-    builder.bind_var("out_image", example_state.fill_image)?;
-    builder.bind_var("out_view", example_state.fill_view)?;
-
-    builder.bind_var("text_buffer", line_renderer.text_buffer)?;
-    builder.bind_var("line_buffer", line_renderer.line_buffer)?;
+    // builder.bind_var("text_buffer", line_renderer.text_buffer)?;
+    // builder.bind_var("line_buffer", line_renderer.line_buffer)?;
 
     engine.with_allocators(|ctx, res, alloc| {
         builder.resolve(ctx, res, alloc)?;
@@ -82,11 +73,29 @@ fn main() -> Result<()> {
     })?;
     log::warn!("is resolved: {}", builder.is_resolved());
 
+    let text_buffer = builder
+        .module
+        .get_var_value::<Resolvable<BufferIx>>("text_buffer")
+        .unwrap();
+    let text_buffer = text_buffer.get_unwrap();
+
+    let line_buffer = builder
+        .module
+        .get_var_value::<Resolvable<BufferIx>>("line_buffer")
+        .unwrap();
+    let line_buffer = line_buffer.get_unwrap();
+
+    let mut line_renderer =
+        LineRenderer::new(&mut engine, text_buffer, line_buffer)?;
+
+    let lines = ["hello world", "e", "l", "l", "o     world", "???"];
+
+    line_renderer.update_lines(&mut engine.resources, lines)?;
+
     let mut rhai_engine = engine::script::console::create_batch_engine();
 
     let arc_module = Arc::new(builder.module.clone());
 
-    // let arc_module: Arc<rhai::Module> = module.into();
     rhai_engine.register_static_module("self", arc_module.clone());
 
     let init = rhai::Func::<(), BatchBuilder>::create_from_ast(
@@ -114,13 +123,6 @@ fn main() -> Result<()> {
             builder.ast.clone_functions_only(),
             "draw_at",
         );
-
-    {
-        let e = example_state;
-        let res = &engine.resources;
-
-        engine.set_debug_object_name(res[e.fill_image].image, "fill_image")?;
-    }
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
@@ -150,13 +152,7 @@ fn main() -> Result<()> {
               res: &GpuResources,
               input: &BatchInput,
               cmd: vk::CommandBuffer| {
-            copy_batch(
-                example_state.fill_image,
-                input.swapchain_image.unwrap(),
-                dev,
-                res,
-                cmd,
-            )
+            copy_batch(out_image, input.swapchain_image.unwrap(), dev, res, cmd)
         },
     ) as Box<_>;
 

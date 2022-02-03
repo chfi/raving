@@ -58,21 +58,25 @@ pub mod vk {
 
     #[rhai_mod(name = "BufferUsageFlags")]
     pub mod buffer_usage {
-        macro_rules! flag {
-            ($f:ident) => {
-                pub const $f: vk::BufferUsageFlags = vk::BufferUsageFlags::$f;
-            };
-        }
 
-        flag!(TRANSFER_SRC);
-        flag!(TRANSFER_DST);
-        flag!(UNIFORM_TEXEL_BUFFER);
-        flag!(STORAGE_TEXEL_BUFFER);
-        flag!(UNIFORM_BUFFER);
-        flag!(STORAGE_BUFFER);
-        flag!(INDEX_BUFFER);
-        flag!(VERTEX_BUFFER);
-        flag!(INDIRECT_BUFFER);
+        pub const TRANSFER_SRC: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::TRANSFER_SRC;
+        pub const TRANSFER_DST: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::TRANSFER_DST;
+        pub const UNIFORM_TEXEL_BUFFER: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::UNIFORM_TEXEL_BUFFER;
+        pub const STORAGE_TEXEL_BUFFER: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::STORAGE_TEXEL_BUFFER;
+        pub const UNIFORM_BUFFER: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::UNIFORM_BUFFER;
+        pub const STORAGE_BUFFER: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::STORAGE_BUFFER;
+        pub const INDEX_BUFFER: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::INDEX_BUFFER;
+        pub const VERTEX_BUFFER: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::VERTEX_BUFFER;
+        pub const INDIRECT_BUFFER: ash::vk::BufferUsageFlags =
+            ash::vk::BufferUsageFlags::INDIRECT_BUFFER;
 
         #[rhai_fn(name = "|", global)]
         pub fn or(
@@ -150,6 +154,16 @@ pub mod vk {
         ty!(UNIFORM_TEXEL_BUFFER);
         ty!(UNIFORM_BUFFER_DYNAMIC);
         ty!(INPUT_ATTACHMENT);
+    }
+
+    #[rhai_mod(name = "MemoryLocation")]
+    pub mod memory_location {
+        use gpu_allocator::MemoryLocation as Loc;
+
+        pub const GPU_ONLY: Loc = Loc::GpuOnly;
+        pub const UNKNOWN: Loc = Loc::Unknown;
+        pub const CPU_TO_GPU: Loc = Loc::CpuToGpu;
+        pub const GPU_TO_CPU: Loc = Loc::CpuToGpu;
     }
 
     #[rhai_mod(name = "ShaderStageFlags")]

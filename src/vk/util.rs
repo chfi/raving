@@ -89,56 +89,19 @@ impl LineRenderer {
         Ok(())
     }
 
-    pub fn new(engine: &mut VkEngine) -> Result<Self> {
-        let result = engine.with_allocators(|ctx, res, alloc| {
-            let usage = vk::BufferUsageFlags::TRANSFER_DST
-                | vk::BufferUsageFlags::STORAGE_BUFFER;
+    pub fn new(
+        _engine: &mut VkEngine,
+        text_buffer: BufferIx,
+        line_buffer: BufferIx,
+    ) -> Result<Self> {
+        Ok(Self {
+            text_buffer,
+            text_len: 0,
 
-            let text_buffer = res.allocate_buffer(
-                ctx,
-                alloc,
-                gpu_allocator::MemoryLocation::CpuToGpu,
-                1,
-                256 * 256,
-                usage,
-                Some("lines:text_data_buffer"),
-            )?;
-
-            let line_buffer = res.allocate_buffer(
-                ctx,
-                alloc,
-                gpu_allocator::MemoryLocation::CpuToGpu,
-                1,
-                256 * 4 * 2, // 256 * 2 u32s
-                usage,
-                Some("lines:line_data_buffer"),
-            )?;
-
-            Ok(Self {
-                text_buffer,
-                text_len: 0,
-
-                line_buffer,
-                line_count: 0,
-            })
-        })?;
-
-        {
-            let res = &engine.resources;
-            engine.set_debug_object_name(
-                res[result.text_buffer].buffer,
-                "lines:text_data_buffer",
-            )?;
-        }
-
-        Ok(result)
+            line_buffer,
+            line_count: 0,
+        })
     }
-}
-
-#[derive(Clone, Copy)]
-pub struct ExampleState {
-    pub fill_image: ImageIx,
-    pub fill_view: ImageViewIx,
 }
 
 pub fn copy_batch(

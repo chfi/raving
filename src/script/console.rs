@@ -354,6 +354,7 @@ pub mod frame {
 
     use crossbeam::atomic::AtomicCell;
     use gpu_allocator::vulkan::Allocator;
+    use gpu_allocator::MemoryLocation;
     use parking_lot::Mutex;
     use rustc_hash::FxHashMap;
     use std::any::TypeId;
@@ -544,40 +545,25 @@ pub mod frame {
                 let v = var.value.take().unwrap();
                 var.value.store(Some(v.clone()));
                 v
-
-                /*
-                if var.ty == TypeId::of::<ImageIx>() {
-                    let v = var.value.take().unwrap();
-                    var.value.store(Some(v.clone()));
-                    let i: ImageIx = v.cast();
-                    rhai::Dynamic::from(i)
-                } else if var.ty == TypeId::of::<ImageViewIx>() {
-                    let v = var.value.take().unwrap();
-                    var.value.store(Some(v.clone()));
-                    let i: ImageViewIx = v.cast();
-                    rhai::Dynamic::from(i)
-                } else if var.ty == TypeId::of::<BufferIx>() {
-                    let v = var.value.take().unwrap();
-                    var.value.store(Some(v.clone()));
-                    let i: BufferIx = v.cast();
-                    rhai::Dynamic::from(i)
-                } else if var.ty == TypeId::of::<PipelineIx>() {
-                    let v = var.value.take().unwrap();
-                    var.value.store(Some(v.clone()));
-                    let i: PipelineIx = v.cast();
-                    rhai::Dynamic::from(i)
-                } else if var.ty == TypeId::of::<DescSetIx>() {
-                    let v = var.value.take().unwrap();
-                    var.value.store(Some(v.clone()));
-                    let i: DescSetIx = v.cast();
-                    rhai::Dynamic::from(i)
-                } else {
-                    let v = var.value.take().unwrap();
-                    var.value.store(Some(v.clone()));
-                    v
-                }
-                */
             });
+
+            let b = builder.clone();
+            engine.register_fn(
+                "allocate_buffer",
+                move |name: &str,
+                      location: MemoryLocation,
+                      elem_size: i64,
+                      elems: i64,
+                      usage: ash::vk::BufferUsageFlags| {
+                    b.lock().allocate_buffer(
+                        elem_size,
+                        elems,
+                        location,
+                        usage,
+                        Some(name),
+                    )
+                },
+            );
 
             let b = builder.clone();
             engine.register_fn(
@@ -700,11 +686,42 @@ pub mod frame {
 
         pub fn allocate_buffer(
             &mut self,
-            size: u64,
+            elem_size: i64,
+            size: i64,
+            location: gpu_allocator::MemoryLocation,
             usage: ash::vk::BufferUsageFlags,
             name: Option<&str>,
-        ) -> Resolvable<ImageIx> {
-            todo!();
+        ) -> Resolvable<BufferIx> {
+            let priority = Priority::primary(ResolveOrder::Buffer);
+
+            let cell = Arc::new(AtomicCell::new(None));
+            let name = name.map(String::from);
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      alloc: &mut Allocator| {
+                    let buf = res.allocate_buffer(
+                        ctx,
+                        alloc,
+                        location,
+                        elem_size as usize,
+                        size as usize,
+                        usage,
+                        name.as_ref().map(|s| s.as_str()),
+                    )?;
+                    inner.store(Some(buf));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
         }
 
         pub fn allocate_image(
