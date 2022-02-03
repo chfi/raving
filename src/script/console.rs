@@ -1030,6 +1030,7 @@ pub mod frame {
     use crossbeam::atomic::AtomicCell;
     use gpu_allocator::vulkan::Allocator;
     use rustc_hash::FxHashMap;
+    use std::any::TypeId;
     use std::collections::HashMap;
     use std::{collections::BTreeMap, sync::Arc};
 
@@ -1128,7 +1129,8 @@ pub mod frame {
 
     #[derive(Clone)]
     pub struct BindableVar {
-        ty: ResolveOrder,
+        // ty: ResolveOrder,
+        ty: TypeId,
         value: Arc<AtomicCell<Option<rhai::Dynamic>>>,
     }
 
@@ -1143,6 +1145,41 @@ pub mod frame {
     }
 
     impl FrameBuilder {
+        pub fn new_var<T>(&mut self, k: &str) -> BindableVar
+        where
+            T: std::any::Any + Clone + Send + Sync,
+        {
+            let ty = TypeId::of::<T>();
+            let value = Arc::new(AtomicCell::new(None));
+
+            let var = BindableVar { ty, value };
+            self.variables.insert(k.to_string(), var.clone());
+
+            var
+        }
+
+        pub fn bind_var<T>(&mut self, k: &str, v: T) -> anyhow::Result<()>
+        where
+            T: std::any::Any + Clone + Send + Sync,
+        {
+            use anyhow::{anyhow, bail};
+
+            let var = self.variables.get(k).ok_or(anyhow!(
+                "attempted to bind nonexistent variable '{}'",
+                k
+            ))?;
+
+            let expected_ty = TypeId::of::<T>();
+
+            if var.ty != expected_ty {
+                bail!("attempted to bind value of incorrect type to variable '{}'", k);
+            }
+
+            var.value.store(Some(rhai::Dynamic::from(v)));
+
+            Ok(())
+        }
+
         pub fn allocate_buffer(
             &mut self,
             size: u64,
