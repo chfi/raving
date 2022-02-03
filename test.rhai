@@ -1,4 +1,6 @@
 
+
+
 let bg_bindings = [vk::binding::storage_image(0)];
 export let bg_pipeline = load_compute_shader("shaders/trig_color.comp.spv",
                                       bg_bindings,
@@ -60,6 +62,12 @@ export let line_desc_set = create_desc_set(vk::ShaderStageFlags::COMPUTE,
 
 export let line_count = atomic_int(1);
 
+// let fill_bindings = [vk::binding::storage_image(0)]
+export let fill_pipeline = load_compute_shader("shaders/fill_color.comp.spv",
+                                               bg_bindings,
+                                               4 * 8);
+
+
 
 fn init() {
   let init_batch = batch_builder();
@@ -102,6 +110,34 @@ fn init() {
   init_batch.initialize_buffer_with(line_buf, line_data);
 
   init_batch
+}
+
+fn fill_rect(batch, x, y, w, h) {
+  let img = self::out_image.get();
+
+  let pc = blob();
+  pc.append_float(1.0);
+  pc.append_float(0.0);
+  pc.append_float(0.0);
+  pc.append_float(1.0);
+  pc.append_int(x);
+  pc.append_int(y);
+  pc.append_int(w);
+  pc.append_int(h);
+
+  print(pc);
+
+  let x_size = 16;
+  let y_size = 16;
+
+  let x_groups = (w / x_size) + w % x_size;
+  let y_groups = (h / y_size) + h % y_size;
+
+  batch.dispatch_compute(self::fill_pipeline.get(),
+                         self::bg_desc_set.get(),
+                         pc, x_groups, y_groups, 1);
+
+  batch
 }
 
 fn background(w, h, t) {
@@ -166,6 +202,9 @@ fn draw_at(w, h, t) {
   batch.dispatch_compute(self::line_pipeline.get(),
                          self::line_desc_set.get(),
                          pc, 80, line_count, 1);
+
+  batch = fill_rect(batch, 200, 300, 50, 130);
+  batch = fill_rect(batch, 500, 130, 150, 100);
 
   batch.transition_image(img,
                          vk::AccessFlags::SHADER_WRITE,
