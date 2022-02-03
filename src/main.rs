@@ -1,3 +1,4 @@
+use engine::script::console::frame::FrameBuilder;
 use engine::script::console::{BatchBuilder, ModuleBuilder, Resolvable};
 use engine::vk::{
     BatchInput, DescSetIx, FrameResources, GpuResources, ImageIx, ImageViewIx,
@@ -125,12 +126,15 @@ fn main() -> Result<()> {
     })?;
 
     log::warn!("MODULE BUILDER");
-    let (mut builder, module) = ModuleBuilder::from_script("test.rhai")?;
 
-    engine.with_allocators(|ctx, res, alloc| {
-        builder.resolve(ctx, res, alloc)?;
-        Ok(())
-    })?;
+    let mut builder = FrameBuilder::from_script("test.rhai")?;
+
+    // let (mut builder, module) = ModuleBuilder::from_script("test.rhai")?;
+
+    // engine.with_allocators(|ctx, res, alloc| {
+    //     builder.resolve(ctx, res, alloc)?;
+    //     Ok(())
+    // })?;
 
     let font_image = module
         .get_var_value::<Resolvable<ImageIx>>("font_image")
@@ -171,7 +175,7 @@ fn main() -> Result<()> {
     builder.bind_desc_set_var("line_desc_set", line_renderer.set);
     log::warn!("is resolved: {}", builder.is_resolved());
 
-    let mut rhai_engine = engine::script::console::create_engine();
+    let mut rhai_engine = engine::script::console::create_batch_engine();
 
     let arc_module: Arc<rhai::Module> = module.into();
     rhai_engine.register_static_module("self", arc_module.clone());
@@ -183,7 +187,7 @@ fn main() -> Result<()> {
         "init",
     );
 
-    let mut rhai_engine = engine::script::console::create_engine();
+    let mut rhai_engine = engine::script::console::create_batch_engine();
     rhai_engine.register_static_module("self", arc_module.clone());
 
     let draw_background =
@@ -193,7 +197,7 @@ fn main() -> Result<()> {
             "background",
         );
 
-    let mut rhai_engine = engine::script::console::create_engine();
+    let mut rhai_engine = engine::script::console::create_batch_engine();
     rhai_engine.register_static_module("self", arc_module);
 
     let draw_at =

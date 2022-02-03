@@ -15,7 +15,8 @@ export let line_pipeline = load_compute_shader("shaders/text_lines.comp.spv",
                                                line_bindings,
                                                16);
 export let line_desc_set = desc_set_var("line_desc_set");
-export let line_count = atomic_int("line_count");
+
+// export let line_count = atomic_int("line_count");
 
 
 export let font_image = allocate_image("font_image",
@@ -98,7 +99,8 @@ fn background(w, h) {
 
 fn draw_at(x, y, w, h) {
   let batch = batch_builder();
-  let l = self::line_count.get();
+  // let l = self::line_count.get();
+  let line_count = 1;
   let img = self::out_image.get();
 
   let pc = blob();
@@ -117,7 +119,7 @@ fn draw_at(x, y, w, h) {
 
   batch.dispatch_compute(self::line_pipeline.get(),
                          self::line_desc_set.get(),
-                         pc, 80, l, 1);
+                         pc, 80, line_count, 1);
 
   batch.transition_image(img,
                          vk::AccessFlags::SHADER_WRITE,

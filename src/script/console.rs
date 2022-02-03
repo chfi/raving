@@ -238,8 +238,7 @@ pub struct ModuleBuilder {
     pub script_ast: rhai::AST,
 }
 
-/// the minimal engine
-pub fn create_engine() -> rhai::Engine {
+pub fn create_batch_engine() -> rhai::Engine {
     let mut engine = rhai::Engine::new();
 
     engine.register_type_with_name::<ash::vk::Format>("Format");
@@ -382,7 +381,7 @@ impl ModuleBuilder {
 
     pub fn from_script(path: &str) -> anyhow::Result<(Self, rhai::Module)> {
         let (module, ast, arcres) = {
-            let mut engine = create_engine();
+            let mut engine = create_batch_engine();
 
             let result = Self::default();
             let arcres = Arc::new(Mutex::new(result));
@@ -1029,6 +1028,7 @@ pub mod frame {
 
     use crossbeam::atomic::AtomicCell;
     use gpu_allocator::vulkan::Allocator;
+    use parking_lot::Mutex;
     use rustc_hash::FxHashMap;
     use std::any::TypeId;
     use std::collections::HashMap;
@@ -1129,22 +1129,175 @@ pub mod frame {
 
     #[derive(Clone)]
     pub struct BindableVar {
-        // ty: ResolveOrder,
         ty: TypeId,
         value: Arc<AtomicCell<Option<rhai::Dynamic>>>,
     }
 
-    // impl<T: Copy> Resolvable<T> {
-    //     pub fn
-    // }
-
+    #[derive(Default)]
     pub struct FrameBuilder {
         resolvers: BTreeMap<Priority, Vec<ResolverFn>>,
         variables: HashMap<String, BindableVar>,
         // variables: HashMap
+        ast: rhai::AST,
+        module: rhai::Module,
     }
 
     impl FrameBuilder {
+        pub fn from_script(path: &str) -> anyhow::Result<Self> {
+            use anyhow::anyhow;
+
+            let builder = {
+                let result = Self::default();
+                let result = Arc::new(Mutex::new(result));
+
+                let engine = Self::create_engine(result.clone());
+
+                let path = std::path::PathBuf::from(path);
+                let ast = engine.compile_file(path)?;
+
+                let module = rhai::Module::eval_ast_as_new(
+                    rhai::Scope::new(),
+                    &ast,
+                    &engine,
+                )?;
+
+                std::mem::drop(engine);
+
+                let mutex = Arc::try_unwrap(result).map_err(|_| {
+                    anyhow!(
+                        "More than one Arc owner in FrameBuilder::from_script"
+                    )
+                })?;
+                let mut result = mutex.into_inner();
+
+                result.ast = ast;
+                result.module = module;
+
+                result
+            };
+
+            for (name, var) in builder.module.iter_var() {
+                log::warn!("{} - {:?}", name, var);
+            }
+
+            Ok(builder)
+        }
+
+        fn create_engine(builder: Arc<Mutex<Self>>) -> rhai::Engine {
+            let mut engine = super::create_batch_engine();
+
+            engine.register_type_with_name::<BindableVar>("BindableVar");
+
+            engine.register_fn("get", |var: BindableVar| {
+                let v = var.value.take().unwrap();
+                var.value.store(Some(v.clone()));
+                v
+
+                /*
+                if var.ty == TypeId::of::<ImageIx>() {
+                    let v = var.value.take().unwrap();
+                    var.value.store(Some(v.clone()));
+                    let i: ImageIx = v.cast();
+                    rhai::Dynamic::from(i)
+                } else if var.ty == TypeId::of::<ImageViewIx>() {
+                    let v = var.value.take().unwrap();
+                    var.value.store(Some(v.clone()));
+                    let i: ImageViewIx = v.cast();
+                    rhai::Dynamic::from(i)
+                } else if var.ty == TypeId::of::<BufferIx>() {
+                    let v = var.value.take().unwrap();
+                    var.value.store(Some(v.clone()));
+                    let i: BufferIx = v.cast();
+                    rhai::Dynamic::from(i)
+                } else if var.ty == TypeId::of::<PipelineIx>() {
+                    let v = var.value.take().unwrap();
+                    var.value.store(Some(v.clone()));
+                    let i: PipelineIx = v.cast();
+                    rhai::Dynamic::from(i)
+                } else if var.ty == TypeId::of::<DescSetIx>() {
+                    let v = var.value.take().unwrap();
+                    var.value.store(Some(v.clone()));
+                    let i: DescSetIx = v.cast();
+                    rhai::Dynamic::from(i)
+                } else {
+                    let v = var.value.take().unwrap();
+                    var.value.store(Some(v.clone()));
+                    v
+                }
+                */
+            });
+
+            let b = builder.clone();
+            engine.register_fn(
+                "allocate_image",
+                move |name: &str,
+                      width: i64,
+                      height: i64,
+                      format: ash::vk::Format,
+                      usage: ash::vk::ImageUsageFlags| {
+                    b.lock().allocate_image(
+                        width as u32,
+                        height as u32,
+                        format,
+                        usage,
+                        Some(name),
+                    )
+                },
+            );
+
+            let b = builder.clone();
+            engine.register_fn(
+                "image_view_for",
+                move |image: Resolvable<ImageIx>| {
+                    b.lock().create_image_view(image)
+                },
+            );
+
+            let b = builder.clone();
+            engine.register_fn(
+                "load_compute_shader",
+                move |path: &str, bindings: rhai::Array, pc_size: i64| {
+                    let bindings = bindings
+                        .into_iter()
+                        .map(|b| b.cast::<BindingDesc>())
+                        .collect::<Vec<_>>();
+
+                    b.lock().load_compute_shader(
+                        path,
+                        &bindings,
+                        pc_size as usize,
+                    )
+                },
+            );
+
+            let b = builder.clone();
+            engine.register_fn("buffer_var", move |name: &str| {
+                b.lock().new_var::<BufferIx>(name)
+            });
+
+            let b = builder.clone();
+            engine.register_fn("image_var", move |name: &str| {
+                b.lock().new_var::<ImageIx>(name)
+            });
+
+            let b = builder.clone();
+            engine.register_fn("image_view_var", move |name: &str| {
+                b.lock().new_var::<ImageViewIx>(name)
+            });
+
+            let b = builder.clone();
+            engine.register_fn("pipeline_var", move |name: &str| {
+                b.lock().new_var::<PipelineIx>(name)
+            });
+
+            let b = builder.clone();
+            engine.register_fn("desc_set_var", move |name: &str| {
+                b.lock().new_var::<DescSetIx>(name)
+            });
+
+            engine
+        }
+
         pub fn new_var<T>(&mut self, k: &str) -> BindableVar
         where
             T: std::any::Any + Clone + Send + Sync,
