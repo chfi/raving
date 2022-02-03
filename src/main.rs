@@ -1,5 +1,5 @@
 use engine::script::console::frame::FrameBuilder;
-use engine::script::console::{BatchBuilder, ModuleBuilder, Resolvable};
+use engine::script::console::BatchBuilder;
 use engine::vk::{
     BatchInput, DescSetIx, FrameResources, GpuResources, ImageIx, ImageViewIx,
     PipelineIx, VkEngine,
@@ -140,14 +140,14 @@ fn main() -> Result<()> {
     dbg!();
 
     log::warn!("is resolved: {}", builder.is_resolved());
-    // log::warn!("binding pipeline variable");
-    // builder.bind_pipeline_var("pipeline", line_renderer.pipeline);
 
     builder.bind_var("out_image", example_state.fill_image)?;
     builder.bind_var("out_view", example_state.fill_view)?;
 
     builder.bind_var("text_buffer", line_renderer.text_buffer)?;
     builder.bind_var("line_buffer", line_renderer.line_buffer)?;
+
+    builder.bind_var("bg_desc_set", example_state.fill_set)?;
 
     engine.with_allocators(|ctx, res, alloc| {
         builder.resolve(ctx, res, alloc)?;
@@ -203,6 +203,7 @@ fn main() -> Result<()> {
         engine.set_debug_object_name(res[e.fill_image].image, "fill_image")?;
         engine.set_debug_object_name(res[e.flip_image].image, "flip_image")?;
     }
+    dbg!();
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
@@ -226,6 +227,7 @@ fn main() -> Result<()> {
         [new_frame(), new_frame()]
     };
 
+    dbg!();
     let copy_batch = Box::new(
         move |dev: &Device,
               res: &GpuResources,
@@ -237,14 +239,18 @@ fn main() -> Result<()> {
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
+    dbg!();
     let start = std::time::Instant::now();
 
     {
+        dbg!();
         let init_builder = init()?;
 
+        dbg!();
         let fence =
             engine.submit_batches_fence(init_builder.init_fn.as_slice())?;
 
+        dbg!();
         engine.block_on_fence(fence)?;
     }
 

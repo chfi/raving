@@ -14,8 +14,6 @@ pub mod vk {
 
     use ash::vk;
 
-    pub const HELLO: i64 = 42;
-
     pub mod pipeline {
         use crate::vk::descriptor::BindingDesc;
 
@@ -156,20 +154,23 @@ pub mod vk {
 
     #[rhai_mod(name = "ShaderStageFlags")]
     pub mod shader_stage_flags {
-        macro_rules! flag {
-            ($f:ident) => {
-                pub const $f: vk::ShaderStageFlags = vk::ShaderStageFlags::$f;
-            };
-        }
 
-        flag!(COMPUTE);
-        flag!(VERTEX);
-        flag!(TESSELLATION_CONTROL);
-        flag!(TESSELLATION_EVALUATION);
-        flag!(GEOMETRY);
-        flag!(FRAGMENT);
-        flag!(ALL_GRAPHICS);
-        flag!(ALL);
+        pub const COMPUTE: ash::vk::ShaderStageFlags =
+            ash::vk::ShaderStageFlags::COMPUTE;
+        pub const VERTEX: ash::vk::ShaderStageFlags =
+            ash::vk::ShaderStageFlags::VERTEX;
+        pub const TESSELLATION_CONTROL: ash::vk::ShaderStageFlags =
+            ash::vk::ShaderStageFlags::TESSELLATION_CONTROL;
+        pub const TESSELLATION_EVALUATION: ash::vk::ShaderStageFlags =
+            ash::vk::ShaderStageFlags::TESSELLATION_EVALUATION;
+        pub const GEOMETRY: ash::vk::ShaderStageFlags =
+            ash::vk::ShaderStageFlags::GEOMETRY;
+        pub const FRAGMENT: ash::vk::ShaderStageFlags =
+            ash::vk::ShaderStageFlags::FRAGMENT;
+        pub const ALL_GRAPHICS: ash::vk::ShaderStageFlags =
+            ash::vk::ShaderStageFlags::ALL_GRAPHICS;
+        pub const ALL: ash::vk::ShaderStageFlags =
+            ash::vk::ShaderStageFlags::ALL;
     }
 
     #[rhai_mod(name = "PipelineStageFlags")]
