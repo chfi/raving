@@ -893,7 +893,7 @@ pub mod resolver {
             };
 
             let cell = Arc::new(AtomicCell::new(None));
-            let name = name.map(String::from);
+            // let name = name.map(String::from);
             let inner = cell.clone();
 
             let resolver = Box::new(
@@ -1030,6 +1030,7 @@ pub mod frame {
     use crossbeam::atomic::AtomicCell;
     use gpu_allocator::vulkan::Allocator;
     use rustc_hash::FxHashMap;
+    use std::collections::HashMap;
     use std::{collections::BTreeMap, sync::Arc};
 
     use crate::vk::descriptor::{BindingDesc, BindingInput};
@@ -1125,12 +1126,19 @@ pub mod frame {
         }
     }
 
+    #[derive(Clone)]
+    pub struct BindableVar {
+        ty: ResolveOrder,
+        value: Arc<AtomicCell<Option<rhai::Dynamic>>>,
+    }
+
     // impl<T: Copy> Resolvable<T> {
     //     pub fn
     // }
 
     pub struct FrameBuilder {
         resolvers: BTreeMap<Priority, Vec<ResolverFn>>,
+        variables: HashMap<String, BindableVar>,
         // variables: HashMap
     }
 
@@ -1187,8 +1195,31 @@ pub mod frame {
         pub fn create_image_view(
             &mut self,
             image_ix: Resolvable<ImageIx>,
+            // name: Option<&str>,
         ) -> Resolvable<ImageViewIx> {
-            todo!();
+            let priority = Priority::primary(ResolveOrder::ImageView);
+
+            let cell = Arc::new(AtomicCell::new(None));
+            // let name = name.map(String::from);
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      _: &mut Allocator| {
+                    let image = image_ix.value.load().unwrap();
+                    let view = res.create_image_view_for_image(ctx, image)?;
+                    inner.store(Some(view));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
         }
 
         pub fn create_desc_set(
@@ -1265,7 +1296,36 @@ pub mod frame {
             bindings: &[BindingDesc],
             pc_size: usize,
         ) -> Resolvable<PipelineIx> {
-            todo!();
+            let priority = Priority::primary(ResolveOrder::Other);
+
+            let cell = Arc::new(AtomicCell::new(None));
+            // let name = name.map(String::from);
+            let inner = cell.clone();
+
+            let shader_path = shader_path.to_string();
+            let bindings = Vec::from(bindings);
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      _: &mut Allocator| {
+                    let pipeline = res.load_compute_shader_runtime(
+                        ctx,
+                        &shader_path,
+                        &bindings,
+                        pc_size,
+                    )?;
+                    inner.store(Some(pipeline));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
         }
 
         pub fn resolve_and_then<
