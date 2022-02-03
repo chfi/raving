@@ -4,8 +4,6 @@ export let bg_pipeline = load_compute_shader("shaders/trig_color.comp.spv",
                                       bg_bindings,
                                       8);
 
-export let bg_desc_set = desc_set_var("bg_desc_set");
-
 let line_bindings = [vk::binding::storage_image(0),
                      vk::binding::storage_buffer(1),
                      vk::binding::storage_buffer(2),
@@ -36,6 +34,14 @@ export let out_view = image_view_var("out_view");
 
 export let text_buffer = buffer_var("text_buffer");
 export let line_buffer = buffer_var("line_buffer");
+
+
+let bg_inputs = [#{ type: "image_view", binding: 0, view: out_view }];
+
+export let bg_desc_set = create_desc_set(vk::ShaderStageFlags::COMPUTE,
+                                         bg_bindings,
+                                         bg_inputs);
+
 
 let line_inputs = [#{ type: "image_view", binding: 0, view: font_image_view },
                    #{ type: "buffer", binding: 1, buffer: text_buffer },

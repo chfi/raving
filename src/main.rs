@@ -42,29 +42,6 @@ fn main() -> Result<()> {
     let mut engine = VkEngine::new(&window)?;
 
     let example_state = engine.with_allocators(|ctx, res, alloc| {
-        let fill_bindings = [BindingDesc::StorageImage { binding: 0 }];
-        let flip_bindings = [
-            BindingDesc::StorageImage { binding: 0 },
-            BindingDesc::StorageImage { binding: 1 },
-        ];
-
-        let fill_pc_size = std::mem::size_of::<[i32; 2]>();
-        let flip_pc_size = std::mem::size_of::<[i32; 2]>();
-
-        let fill_pipeline = res.load_compute_shader_runtime(
-            ctx,
-            "shaders/trig_color.comp.spv",
-            &fill_bindings,
-            fill_pc_size,
-        )?;
-
-        let flip_pipeline = res.load_compute_shader_runtime(
-            ctx,
-            "shaders/flip.comp.spv",
-            &flip_bindings,
-            flip_pc_size,
-        )?;
-
         let fill_image = res.allocate_image(
             ctx,
             alloc,
@@ -74,54 +51,12 @@ fn main() -> Result<()> {
             vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
             Some("outer-fill_image"),
         )?;
-        let flip_image = res.allocate_image(
-            ctx,
-            alloc,
-            width,
-            height,
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
-            Some("flip_image"),
-        )?;
 
         let fill_view = res.create_image_view_for_image(ctx, fill_image)?;
-        let flip_view = res.create_image_view_for_image(ctx, flip_image)?;
-
-        let fill_inputs = [BindingInput::ImageView {
-            binding: 0,
-            view: fill_view,
-        }];
-        let flip_inputs = [
-            BindingInput::ImageView {
-                binding: 0,
-                view: fill_view,
-            },
-            BindingInput::ImageView {
-                binding: 1,
-                view: flip_view,
-            },
-        ];
-
-        let fill_set = res.allocate_desc_set(
-            &fill_bindings,
-            &fill_inputs,
-            vk::ShaderStageFlags::COMPUTE,
-        )?;
-        let flip_set = res.allocate_desc_set(
-            &flip_bindings,
-            &flip_inputs,
-            vk::ShaderStageFlags::COMPUTE,
-        )?;
 
         Ok(ExampleState {
-            fill_pipeline,
-            fill_set,
             fill_image,
             fill_view,
-
-            flip_pipeline,
-            flip_set,
-            flip_image,
         })
     })?;
 
@@ -129,17 +64,11 @@ fn main() -> Result<()> {
 
     let mut builder = FrameBuilder::from_script("test.rhai")?;
 
-    // let (mut builder, module) = ModuleBuilder::from_script("test.rhai")?;
-
     let mut line_renderer = LineRenderer::new(&mut engine)?;
 
     let lines = ["hello world", "e", "l", "l", "o     world", "???"];
 
     line_renderer.update_lines(&mut engine.resources, lines)?;
-
-    dbg!();
-
-    log::warn!("is resolved: {}", builder.is_resolved());
 
     builder.bind_var("out_image", example_state.fill_image)?;
     builder.bind_var("out_view", example_state.fill_view)?;
@@ -147,16 +76,10 @@ fn main() -> Result<()> {
     builder.bind_var("text_buffer", line_renderer.text_buffer)?;
     builder.bind_var("line_buffer", line_renderer.line_buffer)?;
 
-    builder.bind_var("bg_desc_set", example_state.fill_set)?;
-
     engine.with_allocators(|ctx, res, alloc| {
         builder.resolve(ctx, res, alloc)?;
         Ok(())
     })?;
-
-    log::warn!("binding descriptor set variables");
-    // builder.bind_desc_set_var("bg_desc_set", example_state.fill_set);
-    // builder.bind_desc_set_var("line_desc_set", line_renderer.set);
     log::warn!("is resolved: {}", builder.is_resolved());
 
     let mut rhai_engine = engine::script::console::create_batch_engine();
@@ -192,18 +115,12 @@ fn main() -> Result<()> {
             "draw_at",
         );
 
-    dbg!();
-
-    dbg!();
-
     {
         let e = example_state;
         let res = &engine.resources;
 
         engine.set_debug_object_name(res[e.fill_image].image, "fill_image")?;
-        engine.set_debug_object_name(res[e.flip_image].image, "flip_image")?;
     }
-    dbg!();
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
@@ -233,7 +150,13 @@ fn main() -> Result<()> {
               res: &GpuResources,
               input: &BatchInput,
               cmd: vk::CommandBuffer| {
-            copy_batch(example_state, dev, res, input, cmd)
+            copy_batch(
+                example_state.fill_image,
+                input.swapchain_image.unwrap(),
+                dev,
+                res,
+                cmd,
+            )
         },
     ) as Box<_>;
 
