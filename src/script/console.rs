@@ -1138,11 +1138,37 @@ pub mod frame {
         resolvers: BTreeMap<Priority, Vec<ResolverFn>>,
         variables: HashMap<String, BindableVar>,
         // variables: HashMap
-        ast: rhai::AST,
-        module: rhai::Module,
+        pub ast: rhai::AST,
+        pub module: rhai::Module,
     }
 
     impl FrameBuilder {
+        pub fn resolve(
+            &mut self,
+            ctx: &VkContext,
+            res: &mut GpuResources,
+            alloc: &mut Allocator,
+        ) -> anyhow::Result<bool> {
+            // TODO check that all variables have been bound
+
+            for (priority, resolvers) in self.resolvers.iter_mut() {
+                log::warn!("{:?} - {} resolvers", priority, resolvers.len());
+
+                for f in resolvers.drain(..) {
+                    f(ctx, res, alloc)?;
+                }
+            }
+
+            Ok(self.is_resolved())
+        }
+
+        pub fn is_resolved(&self) -> bool {
+            let no_resolvers = self.resolvers.values().all(|v| v.is_empty());
+
+            // let no_unbound = self.variables.values()
+            no_resolvers
+        }
+
         pub fn from_script(path: &str) -> anyhow::Result<Self> {
             use anyhow::anyhow;
 

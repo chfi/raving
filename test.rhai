@@ -4,7 +4,7 @@ export let bg_pipeline = load_compute_shader("shaders/trig_color.comp.spv",
                                       bg_bindings,
                                       8);
 
-export let bg_desc_set = desc_set_var("bg_desc_set");
+// export let bg_desc_set = desc_set_var("bg_desc_set");
 
 let line_bindings = [vk::binding::storage_image(0),
                      vk::binding::storage_buffer(1),
@@ -14,7 +14,7 @@ let line_bindings = [vk::binding::storage_image(0),
 export let line_pipeline = load_compute_shader("shaders/text_lines.comp.spv",
                                                line_bindings,
                                                16);
-export let line_desc_set = desc_set_var("line_desc_set");
+// export let line_desc_set = desc_set_var("line_desc_set");
 
 // export let line_count = atomic_int("line_count");
 
@@ -31,7 +31,6 @@ export let font_image = allocate_image("font_image",
 export let font_image_view = image_view_for(font_image);
 
 
-export let bg_image = image_var("bg_image");
 export let out_image = image_var("out_image");
 export let out_view = image_var("out_view");
 
@@ -44,9 +43,9 @@ let line_inputs = [{ type: "image_view", binding: 0, view: font_image_view },
                    { type: "image_view", binding: 3, view: out_view }];
 
 
-let line_desc_set_ = create_desc_set(vk::ShaderStageFlags::COMPUTE,
-                                     line_bindings,
-                                     line_inputs);
+let line_desc_set = create_desc_set(vk::ShaderStageFlags::COMPUTE,
+                                    line_bindings,
+                                    line_inputs);
 
 
 fn init() {
@@ -62,7 +61,7 @@ fn init() {
 
 fn background(w, h) {
   let batch = batch_builder();
-  let img = self::bg_image.get();
+  let img = self::out_image.get();
 
   let pc = blob();
   pc.append_int(w);

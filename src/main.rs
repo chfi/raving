@@ -131,27 +131,7 @@ fn main() -> Result<()> {
 
     // let (mut builder, module) = ModuleBuilder::from_script("test.rhai")?;
 
-    // engine.with_allocators(|ctx, res, alloc| {
-    //     builder.resolve(ctx, res, alloc)?;
-    //     Ok(())
-    // })?;
-
-    let font_image = module
-        .get_var_value::<Resolvable<ImageIx>>("font_image")
-        .and_then(|r| r.get())
-        .unwrap();
-    let font_image_view = module
-        .get_var_value::<Resolvable<ImageViewIx>>("font_image_view")
-        .and_then(|r| r.get())
-        .unwrap();
-
-    let mut line_renderer = LineRenderer::new(
-        &mut engine,
-        font_image,
-        font_image_view,
-        example_state.fill_image,
-        example_state.fill_view,
-    )?;
+    let mut line_renderer = LineRenderer::new(&mut engine)?;
 
     let lines = ["hello world", "e", "l", "l", "o     world", "???"];
 
@@ -163,27 +143,32 @@ fn main() -> Result<()> {
     // log::warn!("binding pipeline variable");
     // builder.bind_pipeline_var("pipeline", line_renderer.pipeline);
 
-    builder.bind_image_var("bg_image", example_state.fill_image);
-    builder.bind_image_var("out_image", line_renderer.out_image);
-    builder.bind_image_view_var("out_image", line_renderer.out_view);
+    builder.bind_var("out_image", example_state.fill_image)?;
+    builder.bind_var("out_view", example_state.fill_view)?;
 
-    builder.bind_buffer_var("text_buffer", line_renderer.text_buffer);
-    builder.bind_buffer_var("line_buffer", line_renderer.line_buffer);
+    builder.bind_var("text_buffer", line_renderer.text_buffer)?;
+    builder.bind_var("line_buffer", line_renderer.line_buffer)?;
+
+    engine.with_allocators(|ctx, res, alloc| {
+        builder.resolve(ctx, res, alloc)?;
+        Ok(())
+    })?;
 
     log::warn!("binding descriptor set variables");
-    builder.bind_desc_set_var("bg_desc_set", example_state.fill_set);
-    builder.bind_desc_set_var("line_desc_set", line_renderer.set);
+    // builder.bind_desc_set_var("bg_desc_set", example_state.fill_set);
+    // builder.bind_desc_set_var("line_desc_set", line_renderer.set);
     log::warn!("is resolved: {}", builder.is_resolved());
 
     let mut rhai_engine = engine::script::console::create_batch_engine();
 
-    let arc_module: Arc<rhai::Module> = module.into();
+    let arc_module = Arc::new(builder.module.clone());
+
+    // let arc_module: Arc<rhai::Module> = module.into();
     rhai_engine.register_static_module("self", arc_module.clone());
 
-    builder.set_int("line_count", lines.len() as i64);
     let init = rhai::Func::<(), BatchBuilder>::create_from_ast(
         rhai_engine,
-        builder.script_ast.clone_functions_only(),
+        builder.ast.clone_functions_only(),
         "init",
     );
 
@@ -193,7 +178,7 @@ fn main() -> Result<()> {
     let draw_background =
         rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
             rhai_engine,
-            builder.script_ast.clone_functions_only(),
+            builder.ast.clone_functions_only(),
             "background",
         );
 
@@ -203,7 +188,7 @@ fn main() -> Result<()> {
     let draw_at =
         rhai::Func::<(i64, i64, i64, i64), BatchBuilder>::create_from_ast(
             rhai_engine,
-            builder.script_ast.clone_functions_only(),
+            builder.ast.clone_functions_only(),
             "draw_at",
         );
 

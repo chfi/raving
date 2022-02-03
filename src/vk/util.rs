@@ -9,14 +9,6 @@ use anyhow::{anyhow, bail, Result};
 
 #[derive(Clone, Copy)]
 pub struct LineRenderer {
-    pub pipeline: PipelineIx,
-    pub out_image: ImageIx,
-    pub out_view: ImageViewIx,
-    pub set: DescSetIx,
-
-    pub font_image: ImageIx,
-    pub font_view: ImageViewIx,
-
     pub text_buffer: BufferIx,
     text_len: usize,
 
@@ -97,46 +89,8 @@ impl LineRenderer {
         Ok(())
     }
 
-    // font has to be 8x8 monospace, in a png, for now
-    pub fn new(
-        engine: &mut VkEngine,
-        // font_img_path: &str,
-        font_image: ImageIx,
-        font_view: ImageViewIx,
-        out_image: ImageIx,
-        out_view: ImageViewIx,
-    ) -> Result<Self> {
-        // dst dims, start pos
-        let pc_size = std::mem::size_of::<[i32; 4]>();
-
-        let bindings = [
-            BindingDesc::StorageImage { binding: 0 },
-            BindingDesc::StorageBuffer { binding: 1 },
-            BindingDesc::StorageBuffer { binding: 2 },
-            BindingDesc::StorageImage { binding: 3 },
-        ];
-
+    pub fn new(engine: &mut VkEngine) -> Result<Self> {
         let result = engine.with_allocators(|ctx, res, alloc| {
-            let pipeline = res.load_compute_shader_runtime(
-                ctx,
-                "shaders/text_lines.comp.spv",
-                &bindings,
-                pc_size,
-            )?;
-
-            // let font_image = res.allocate_image(
-            //     ctx,
-            //     alloc,
-            //     1024,
-            //     8,
-            //     vk::Format::R8G8B8A8_UNORM,
-            //     vk::ImageUsageFlags::STORAGE
-            //         | vk::ImageUsageFlags::SAMPLED
-            //         | vk::ImageUsageFlags::TRANSFER_DST,
-            //     Some("lines:font_image"),
-            // )?;
-            // let font_view = res.create_image_view_for_image(ctx, font_image)?;
-
             let usage = vk::BufferUsageFlags::TRANSFER_DST
                 | vk::BufferUsageFlags::STORAGE_BUFFER;
 
@@ -160,41 +114,7 @@ impl LineRenderer {
                 Some("lines:line_data_buffer"),
             )?;
 
-            let inputs = [
-                BindingInput::ImageView {
-                    binding: 0,
-                    view: font_view,
-                },
-                BindingInput::Buffer {
-                    binding: 1,
-                    buffer: text_buffer,
-                },
-                BindingInput::Buffer {
-                    binding: 2,
-                    buffer: line_buffer,
-                },
-                BindingInput::ImageView {
-                    binding: 3,
-                    view: out_view,
-                },
-            ];
-
-            let set = res.allocate_desc_set(
-                &bindings,
-                &inputs,
-                vk::ShaderStageFlags::COMPUTE,
-            )?;
-
             Ok(Self {
-                pipeline,
-                set,
-
-                out_image,
-                out_view,
-
-                font_image,
-                font_view,
-
                 text_buffer,
                 text_len: 0,
 
@@ -205,18 +125,6 @@ impl LineRenderer {
 
         {
             let res = &engine.resources;
-            engine.set_debug_object_name(
-                res[result.pipeline].0,
-                "lines:pipeline",
-            )?;
-            engine.set_debug_object_name(
-                res[result.set],
-                "lines:descriptor_set",
-            )?;
-            engine.set_debug_object_name(
-                res[result.font_image].image,
-                "lines:font_image",
-            )?;
             engine.set_debug_object_name(
                 res[result.text_buffer].buffer,
                 "lines:text_data_buffer",
