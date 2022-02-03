@@ -98,15 +98,13 @@ fn init() {
 
   text_data.write_le(0, 4, offset);
 
-  // buf.append_str_tmp("wha the fucklacoehu");
-  // print(buf);
   init_batch.initialize_buffer_with(text_buf, text_data);
   init_batch.initialize_buffer_with(line_buf, line_data);
 
   init_batch
 }
 
-fn background(w, h) {
+fn background(w, h, t) {
   let batch = batch_builder();
   let img = self::out_image.get();
 
@@ -143,14 +141,17 @@ fn background(w, h) {
   batch
 }
 
-fn draw_at(x, y, w, h) {
+fn draw_at(w, h, t) {
   let batch = batch_builder();
   let img = self::out_image.get();
   let line_count = self::line_count.get();
 
+  let x = 400.0 + 200.0 * t.sin();
+  let y = 300.0 + 160.0 * t.cos();
+
   let pc = blob();
-  pc.append_int(x);
-  pc.append_int(y);
+  pc.append_int(x.to_int());
+  pc.append_int(y.to_int());
   pc.append_int(w);
   pc.append_int(h);
 

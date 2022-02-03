@@ -108,7 +108,7 @@ fn main() -> Result<()> {
     rhai_engine.register_static_module("self", arc_module.clone());
 
     let draw_background =
-        rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
+        rhai::Func::<(i64, i64, f32), BatchBuilder>::create_from_ast(
             rhai_engine,
             builder.ast.clone_functions_only(),
             "background",
@@ -117,12 +117,11 @@ fn main() -> Result<()> {
     let mut rhai_engine = engine::script::console::create_batch_engine();
     rhai_engine.register_static_module("self", arc_module);
 
-    let draw_at =
-        rhai::Func::<(i64, i64, i64, i64), BatchBuilder>::create_from_ast(
-            rhai_engine,
-            builder.ast.clone_functions_only(),
-            "draw_at",
-        );
+    let draw_at = rhai::Func::<(i64, i64, f32), BatchBuilder>::create_from_ast(
+        rhai_engine,
+        builder.ast.clone_functions_only(),
+        "draw_at",
+    );
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
@@ -146,7 +145,6 @@ fn main() -> Result<()> {
         [new_frame(), new_frame()]
     };
 
-    dbg!();
     let copy_batch = Box::new(
         move |dev: &Device,
               res: &GpuResources,
@@ -158,18 +156,14 @@ fn main() -> Result<()> {
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    dbg!();
     let start = std::time::Instant::now();
 
     {
-        dbg!();
         let init_builder = init()?;
 
-        dbg!();
         let fence =
             engine.submit_batches_fence(init_builder.init_fn.as_slice())?;
 
-        dbg!();
         engine.block_on_fence(fence)?;
     }
 
@@ -182,29 +176,21 @@ fn main() -> Result<()> {
             Event::MainEventsCleared => {
                 let t = start.elapsed().as_secs_f32();
 
-                let r = (t.sin() + 1.0) / 2.0;
-                let b = (t.cos() + 1.0) / 2.0;
-
-                let color = [r, 1.0, b, 1.0];
-
                 let f_ix = engine.current_frame_number();
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
 
-                let x = 400.0 + 200.0 * t.sin();
-                let y = 300.0 + 160.0 * t.cos();
-
-                let bg_batch = draw_background(800, 600).unwrap();
+                let bg_batch = draw_background(800, 600, t).unwrap();
                 let bg_batch_fn = bg_batch.build();
                 let bg_rhai_batch = bg_batch_fn.clone();
 
-                let batch = draw_at(x as i64, y as i64, 800, 600).unwrap();
+                let batch = draw_at(800, 600, t).unwrap();
                 let batch_fn = batch.build();
                 let rhai_batch = batch_fn.clone();
 
                 let bg_batch = Box::new(
                     move |dev: &Device,
                           res: &GpuResources,
-                          input: &BatchInput,
+                          _input: &BatchInput,
                           cmd: vk::CommandBuffer| {
                         bg_rhai_batch(dev, res, cmd);
                     },
@@ -213,7 +199,7 @@ fn main() -> Result<()> {
                 let text_batch = Box::new(
                     move |dev: &Device,
                           res: &GpuResources,
-                          input: &BatchInput,
+                          _input: &BatchInput,
                           cmd: vk::CommandBuffer| {
                         rhai_batch(dev, res, cmd);
                     },
