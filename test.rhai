@@ -58,6 +58,8 @@ export let line_desc_set = create_desc_set(vk::ShaderStageFlags::COMPUTE,
                                            line_bindings,
                                            line_inputs);
 
+export let line_count = atomic_int(1);
+
 
 fn init() {
   let init_batch = batch_builder();
@@ -66,6 +68,40 @@ fn init() {
   init_batch.load_image_from_file("8x8font.png",
                                   img,
                                   vk::ImageLayout::GENERAL);
+
+  let text_buf = self::text_buffer.get();
+  let line_buf = self::line_buffer.get();
+
+  let text_data = blob();
+  let line_data = blob();
+
+
+  let lines = ["this is the first line",
+               "here's another",
+               "  . . .",
+               "",
+               "yes"];
+
+  let offset = 0;
+
+  text_data.append_int(0);
+
+  self::line_count.set(lines.len());
+
+  for line in lines {
+    line_data.append_int(offset);
+    offset += line.len();
+    line_data.append_int(offset);
+
+    text_data.append_str_tmp(line);
+  }
+
+  text_data.write_le(0, 4, offset);
+
+  // buf.append_str_tmp("wha the fucklacoehu");
+  // print(buf);
+  init_batch.initialize_buffer_with(text_buf, text_data);
+  init_batch.initialize_buffer_with(line_buf, line_data);
 
   init_batch
 }
@@ -109,8 +145,8 @@ fn background(w, h) {
 
 fn draw_at(x, y, w, h) {
   let batch = batch_builder();
-  let line_count = 1;
   let img = self::out_image.get();
+  let line_count = self::line_count.get();
 
   let pc = blob();
   pc.append_int(x);

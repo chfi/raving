@@ -629,15 +629,19 @@ impl BufferRes {
         }
     }
 
+    pub fn size_bytes(&self) -> usize {
+        self.len * self.elem_size
+    }
+
     pub fn upload_to_self_bytes(
         &mut self,
-        device: &Device,
         ctx: &VkContext,
         allocator: &mut Allocator,
         src: &[u8],
         cmd: vk::CommandBuffer,
     ) -> Result<Self> {
         // assert!(!self.host_writable());
+        let device = ctx.device();
 
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
         let location = MemoryLocation::CpuToGpu;

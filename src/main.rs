@@ -88,7 +88,7 @@ fn main() -> Result<()> {
     let mut line_renderer =
         LineRenderer::new(&mut engine, text_buffer, line_buffer)?;
 
-    let lines = ["hello world", "e", "l", "l", "o     world", "???"];
+    let lines = ["XXXXX YYYYY", "e", "l", "l", "o     world", "???"];
 
     line_renderer.update_lines(&mut engine.resources, lines)?;
 

@@ -151,6 +151,40 @@ impl BatchBuilder {
         self.init_fn.push(f);
     }
 
+    pub fn initialize_buffer_with(
+        &mut self,
+        dst: BufferIx,
+        data: Vec<u8>,
+        // repeat: bool,
+    ) {
+        let staging_bufs = self.staging_buffers.clone();
+
+        let f = Arc::new(
+            move |ctx: &VkContext,
+                  res: &mut GpuResources,
+                  alloc: &mut Allocator,
+                  cmd: vk::CommandBuffer| {
+                let buffer = &mut res[dst];
+                // let buf_size = buffer.size_bytes();
+
+                let staging = buffer.upload_to_self_bytes(
+                    ctx,
+                    alloc,
+                    data.as_slice(),
+                    cmd,
+                )?;
+
+                let stg_ix = res.insert_buffer(staging);
+
+                staging_bufs.lock().push(stg_ix);
+
+                Ok(())
+            },
+        ) as InitFn;
+
+        self.init_fn.push(f);
+    }
+
     pub fn transition_image(
         &mut self,
         image: ImageIx,
@@ -270,8 +304,26 @@ pub fn create_batch_engine() -> rhai::Engine {
         set.value.load().unwrap()
     });
 
+    engine.register_fn("atomic_int", |v: i64| Arc::new(AtomicCell::new(v)));
+    engine.register_fn("atomic_float", |v: f32| Arc::new(AtomicCell::new(v)));
     engine.register_fn("get", |v: Arc<AtomicCell<i64>>| v.load());
     engine.register_fn("get", |v: Arc<AtomicCell<f32>>| v.load());
+    engine
+        .register_fn("set", |c: &mut Arc<AtomicCell<i64>>, v: i64| c.store(v));
+    engine
+        .register_fn("set", |c: &mut Arc<AtomicCell<f32>>, v: f32| c.store(v));
+
+    engine.register_fn("append_str_tmp", |blob: &mut Vec<u8>, text: &str| {
+        let mut write_u32 = |u: u32| {
+            for b in u.to_le_bytes() {
+                blob.push(b);
+            }
+        };
+
+        for &b in text.as_bytes() {
+            write_u32(b as u32);
+        }
+    });
 
     engine.register_fn("append_int", |blob: &mut Vec<u8>, v: i64| {
         let v = [v as i32];
@@ -292,6 +344,13 @@ pub fn create_batch_engine() -> rhai::Engine {
          dst_image: ImageIx,
          final_layout: vk::ImageLayout| {
             builder.load_image_from_file(file_path, dst_image, final_layout)
+        },
+    );
+
+    engine.register_fn(
+        "initialize_buffer_with",
+        |builder: &mut BatchBuilder, buffer: BufferIx, data: Vec<u8>| {
+            builder.initialize_buffer_with(buffer, data);
         },
     );
 
@@ -812,6 +871,7 @@ pub mod frame {
                       alloc: &mut Allocator| {
                     let mut inputs: Vec<BindingInput> = Vec::new();
 
+                    // TODO this has to be cleaned up a ton
                     for v in dyn_inputs {
                         let map: rhai::Map = v.cast();
 
