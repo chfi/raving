@@ -68,6 +68,11 @@ export let fill_pipeline = load_compute_shader("shaders/fill_color.comp.spv",
                                                4 * 8);
 
 
+// let curve_bindings = [vk::binding::storage_image(0)];
+export let curve_pipeline = load_compute_shader("shaders/curve.comp.spv",
+                                                bg_bindings,
+                                                4 * 8);
+
 
 fn init() {
   let init_batch = batch_builder();
@@ -125,15 +130,14 @@ fn fill_rect(batch, x, y, w, h) {
   pc.append_int(w);
   pc.append_int(h);
 
-  print(pc);
-
   let x_size = 16;
   let y_size = 16;
 
   let x_groups = (w / x_size) + w % x_size;
   let y_groups = (h / y_size) + h % y_size;
 
-  batch.dispatch_compute(self::fill_pipeline.get(),
+  // batch.dispatch_compute(self::fill_pipeline.get(),
+  batch.dispatch_compute(self::curve_pipeline.get(),
                          self::bg_desc_set.get(),
                          pc, x_groups, y_groups, 1);
 
