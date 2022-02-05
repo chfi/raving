@@ -10,12 +10,10 @@ use std::sync::Arc;
 
 use crate::vk::{
     context::VkContext, descriptor::BindingDesc, resource::index::*,
-    util::LineRenderer, GpuResources, VkEngine,
+    GpuResources, VkEngine,
 };
 
 use rhai::plugin::*;
-
-use super::vk as rvk;
 
 use frame::*;
 

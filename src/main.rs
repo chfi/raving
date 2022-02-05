@@ -64,33 +64,11 @@ fn main() -> Result<()> {
     builder.bind_var("out_image", out_image)?;
     builder.bind_var("out_view", out_view)?;
 
-    // builder.bind_var("text_buffer", line_renderer.text_buffer)?;
-    // builder.bind_var("line_buffer", line_renderer.line_buffer)?;
-
     engine.with_allocators(|ctx, res, alloc| {
         builder.resolve(ctx, res, alloc)?;
         Ok(())
     })?;
     log::warn!("is resolved: {}", builder.is_resolved());
-
-    let text_buffer = builder
-        .module
-        .get_var_value::<Resolvable<BufferIx>>("text_buffer")
-        .unwrap();
-    let text_buffer = text_buffer.get_unwrap();
-
-    let line_buffer = builder
-        .module
-        .get_var_value::<Resolvable<BufferIx>>("line_buffer")
-        .unwrap();
-    let line_buffer = line_buffer.get_unwrap();
-
-    let mut line_renderer =
-        LineRenderer::new(&mut engine, text_buffer, line_buffer)?;
-
-    let lines = ["XXXXX YYYYY", "e", "l", "l", "o     world", "???"];
-
-    line_renderer.update_lines(&mut engine.resources, lines)?;
 
     let mut rhai_engine = engine::script::console::create_batch_engine();
 
@@ -126,7 +104,8 @@ fn main() -> Result<()> {
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
 
-        let semaphore_count = 32;
+        // hardcoded for now
+        let semaphore_count = 3;
         let cmd_buf_count = 3;
 
         let mut new_frame = || {

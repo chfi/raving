@@ -1,108 +1,10 @@
-use crate::vk::descriptor::{BindingDesc, BindingInput};
-use crate::vk::{BatchInput, GpuResources, VkEngine};
+use crate::vk::{GpuResources, VkEngine};
 
 use super::resource::index::*;
 use ash::{vk, Device};
 
 #[allow(unused_imports)]
 use anyhow::{anyhow, bail, Result};
-
-#[derive(Clone, Copy)]
-pub struct LineRenderer {
-    pub text_buffer: BufferIx,
-    text_len: usize,
-
-    pub line_buffer: BufferIx,
-    line_count: usize,
-}
-
-impl LineRenderer {
-    pub fn update_lines<'a>(
-        &mut self,
-        res: &mut GpuResources,
-        lines: impl IntoIterator<Item = &'a str>,
-    ) -> Result<()> {
-        let mut line_intervals: Vec<(usize, usize)> = Vec::new();
-
-        let mut text_offset = 0;
-
-        {
-            let text_buffer = &mut res[self.text_buffer];
-
-            let mapped = text_buffer
-                .alloc
-                .mapped_slice_mut()
-                .ok_or(anyhow!("couldn't map text buffer memory!"))?;
-
-            let mut ix = 4;
-            let mut write_u32 = |u: u32| {
-                for (i, b) in u.to_le_bytes().into_iter().enumerate() {
-                    mapped[ix + i] = b;
-                }
-                ix += 4;
-            };
-
-            for text in lines.into_iter() {
-                let start = text_offset;
-                let end = start + text.len();
-                text_offset = end;
-
-                for &b in text.as_bytes() {
-                    write_u32(b as u32);
-                }
-
-                line_intervals.push((start, end));
-            }
-
-            for (i, b) in
-                (text_offset as u32).to_le_bytes().into_iter().enumerate()
-            {
-                mapped[i] = b;
-            }
-
-            self.text_len = text_offset;
-            self.line_count = line_intervals.len();
-        }
-
-        {
-            let line_buffer = &mut res[self.line_buffer];
-
-            let mapped = line_buffer
-                .alloc
-                .mapped_slice_mut()
-                .ok_or(anyhow!("couldn't map line buffer memory!"))?;
-
-            let mut ix = 0;
-            let mut write_u32 = |u: u32| {
-                for (i, b) in u.to_le_bytes().into_iter().enumerate() {
-                    mapped[ix + i] = b;
-                }
-                ix += 4;
-            };
-
-            for (start, end) in line_intervals {
-                write_u32(start as u32);
-                write_u32(end as u32);
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn new(
-        _engine: &mut VkEngine,
-        text_buffer: BufferIx,
-        line_buffer: BufferIx,
-    ) -> Result<Self> {
-        Ok(Self {
-            text_buffer,
-            text_len: 0,
-
-            line_buffer,
-            line_count: 0,
-        })
-    }
-}
 
 pub fn copy_batch(
     src: ImageIx,
