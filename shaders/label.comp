@@ -1,0 +1,78 @@
+#version 450
+
+layout (rgba8, set = 0, binding = 0) readonly uniform image2D font_img;
+
+layout (set = 0, binding = 1) readonly buffer TextData {
+  uint chars[];
+} text;
+
+struct Label {
+  ivec2 pos;
+  uint start;
+  uint len;
+};
+
+layout (set = 0, binding = 2) readonly buffer LabelData {
+  Label data[];
+} labels;
+
+/*
+layout (set = 0, binding = 2) readonly buffer LabelData {
+  // pixel position of the top-left corner of the first letter
+  ivec2 pos;
+  // offset into the `text.chars[]` array
+  uint label_start;
+  // length in the `text.chars[]` array
+  uint label_len;
+} labels[];
+
+*/
+
+layout (rgba8, set = 0, binding = 3) uniform image2D image_out;
+
+layout (push_constant) uniform Inputs {
+  int img_width;
+  int img_height;
+} inputs;
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+void main() {
+  uint char_ix  = gl_WorkGroupID.x;
+  uint label_ix = gl_WorkGroupID.y;
+
+  ivec2 pos = labels.data[label_ix].pos;
+
+  uint char_offset = labels.data[label_ix].start;
+  uint label_len = labels.data[label_ix].len;
+
+
+  if (char_ix >= label_len) {
+    return;
+  }
+
+  uint text_char_ix = char_offset + char_ix;
+
+  ivec2 local_pos = ivec2(gl_LocalInvocationID.xy);
+
+  int x_offset = pos.x + int(char_ix) * 8 + local_pos.x;
+  int y_offset = pos.y + int(label_ix) * 8 + local_pos.y;
+
+  ivec2 dst_px = ivec2(x_offset, y_offset);
+  vec4 out_col = vec4(1.0, 0.0, 0.0, 1.0);
+
+  uint char = min(text.chars[text_char_ix], 127);
+
+  ivec2 char_px = ivec2(char * 8 + local_pos.x, local_pos.y);
+
+  vec4 font_col = imageLoad(font_img, char_px);
+
+  // TODO this check is just for the specific font i'm currently using
+  if (font_col.r == 0.0 &&
+      x_offset <= inputs.img_width &&
+      y_offset <= inputs.img_height) {
+    imageStore(image_out, dst_px, vec4(1.0));
+  }
+
+
+}
