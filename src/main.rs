@@ -147,10 +147,12 @@ fn main() -> Result<()> {
     {
         let init_builder = init()?;
 
-        let fence =
-            engine.submit_batches_fence(init_builder.init_fn.as_slice())?;
+        if !init_builder.init_fn.is_empty() {
+            let fence =
+                engine.submit_batches_fence(init_builder.init_fn.as_slice())?;
 
-        engine.block_on_fence(fence)?;
+            engine.block_on_fence(fence)?;
+        }
     }
 
     event_loop.run(move |event, _, control_flow| {
@@ -169,6 +171,7 @@ fn main() -> Result<()> {
                 let bg_batch_fn = bg_batch.build();
                 let bg_rhai_batch = bg_batch_fn.clone();
 
+                // let fg_batch = draw_background(800, 600, t).unwrap();
                 let fg_batch = draw_foreground(800, 600, t).unwrap();
                 let fg_batch_fn = fg_batch.build();
                 let fg_rhai_batch = fg_batch_fn.clone();
