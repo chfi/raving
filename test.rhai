@@ -181,7 +181,7 @@ fn background(w, h, t) {
   batch
 }
 
-fn draw_at(w, h, t) {
+fn foreground(w, h, t) {
   let batch = batch_builder();
   let img = self::out_image.get();
   let line_count = self::line_count.get();

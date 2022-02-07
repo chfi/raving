@@ -17,9 +17,15 @@ use winit::{event_loop::EventLoop, window::WindowBuilder};
 
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 
 fn main() -> Result<()> {
+    let mut args = std::env::args();
+
+    let _ = args.next().unwrap();
+
+    let script_path = args.next().ok_or(anyhow!("Provide a script path"))?;
+
     // let args: Args = argh::from_env();
     // let _logger = set_up_logger(&args).unwrap();
 
@@ -59,7 +65,7 @@ fn main() -> Result<()> {
 
     log::warn!("MODULE BUILDER");
 
-    let mut builder = FrameBuilder::from_script("test.rhai")?;
+    let mut builder = FrameBuilder::from_script(&script_path)?;
 
     builder.bind_var("out_image", out_image)?;
     builder.bind_var("out_view", out_view)?;
@@ -95,11 +101,12 @@ fn main() -> Result<()> {
     let mut rhai_engine = engine::script::console::create_batch_engine();
     rhai_engine.register_static_module("self", arc_module);
 
-    let draw_at = rhai::Func::<(i64, i64, f32), BatchBuilder>::create_from_ast(
-        rhai_engine,
-        builder.ast.clone_functions_only(),
-        "draw_at",
-    );
+    let draw_foreground =
+        rhai::Func::<(i64, i64, f32), BatchBuilder>::create_from_ast(
+            rhai_engine,
+            builder.ast.clone_functions_only(),
+            "foreground",
+        );
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
@@ -162,9 +169,9 @@ fn main() -> Result<()> {
                 let bg_batch_fn = bg_batch.build();
                 let bg_rhai_batch = bg_batch_fn.clone();
 
-                let batch = draw_at(800, 600, t).unwrap();
-                let batch_fn = batch.build();
-                let rhai_batch = batch_fn.clone();
+                let fg_batch = draw_foreground(800, 600, t).unwrap();
+                let fg_batch_fn = fg_batch.build();
+                let fg_rhai_batch = fg_batch_fn.clone();
 
                 let bg_batch = Box::new(
                     move |dev: &Device,
@@ -175,16 +182,16 @@ fn main() -> Result<()> {
                     },
                 ) as Box<_>;
 
-                let text_batch = Box::new(
+                let fg_batch = Box::new(
                     move |dev: &Device,
                           res: &GpuResources,
                           _input: &BatchInput,
                           cmd: vk::CommandBuffer| {
-                        rhai_batch(dev, res, cmd);
+                        fg_rhai_batch(dev, res, cmd);
                     },
                 ) as Box<_>;
 
-                let batches = [&bg_batch, &text_batch, &copy_batch];
+                let batches = [&bg_batch, &fg_batch, &copy_batch];
 
                 let deps = vec![
                     None,
