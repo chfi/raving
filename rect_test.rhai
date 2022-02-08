@@ -107,11 +107,15 @@ fn append_rect(buf, x, y, w, h) {
   buf.append_int(w);
   buf.append_int(h);
 
-  buf.append_float(0.7);
-  buf.append_float(0.6);
-  buf.append_float(0.7);
+  // buf.append_float(0.7);
+  // buf.append_float(0.6);
+  // buf.append_float(0.7);
+  buf.append_float(1.0);
+  buf.append_float(1.0);
+  buf.append_float(1.0);
   buf.append_float(1.0);
 
+  print("appending rectangle to buffer");
   print(buf);
 
   buf
@@ -133,6 +137,8 @@ fn init() {
 
   let prefix = "label ";
 
+  // rect_data = append_rect(rect_data, 0, 0, 100, 50);
+
   for i in 0..5 {
     let line = prefix + i.to_string();
 
@@ -150,6 +156,7 @@ fn init() {
 
     init_batch.initialize_buffer_with(text_buf, text_data);
     init_batch.initialize_buffer_with(line_buf, line_data);
+
 
     rect_data = append_rect(rect_data, 40, 50 + 100 * i, 100, 50);
     rect_data = append_rect(rect_data, 180, 40 + 100 * i, 560, 70);
@@ -217,18 +224,14 @@ fn foreground(w, h, t) {
   let y_size = 8;
 
   let x_groups = (w / x_size) + w % x_size;
-  let y_groups = (h / y_size) + h % y_size;
+  // let y_groups = (h / y_size) + h % y_size;
+  // let z_groups = 2;
+
+  let y_groups = 16;
   let z_groups = 1;
 
-  batch.dispatch_compute(self::rect_pipeline.get(),
-                         self::rect_desc_set.get(),
-                         pc,
-                         x_groups,
-                         y_groups,
-                         z_groups);
 
 
-  /*
   for i in 0..5 {
 
     let set = self::line_desc_sets[i].get();
@@ -249,19 +252,27 @@ fn foreground(w, h, t) {
                            set,
                            pc, 80, 1, 1);
 
-    batch.transition_image(img,
-                           vk::AccessFlags::SHADER_WRITE,
-                           vk::PipelineStageFlags::COMPUTE_SHADER,
-                           vk::AccessFlags::SHADER_WRITE,
-                           vk::PipelineStageFlags::COMPUTE_SHADER,
-                           vk::ImageLayout::GENERAL,
-                           vk::ImageLayout::GENERAL);
+    // batch.transition_image(img,
+    //                        vk::AccessFlags::SHADER_WRITE,
+    //                        vk::PipelineStageFlags::COMPUTE_SHADER,
+    //                        vk::AccessFlags::SHADER_WRITE,
+    //                        vk::PipelineStageFlags::COMPUTE_SHADER,
+    //                        vk::ImageLayout::GENERAL,
+    //                        vk::ImageLayout::GENERAL);
   }
+
+
+  batch.dispatch_compute(self::rect_pipeline.get(),
+                         self::rect_desc_set.get(),
+                         pc,
+                         x_groups,
+                         y_groups,
+                         z_groups);
+
 
   // batch = fill_rect(batch, 200, 300, 50, 130);
   // batch = fill_rect(batch, 500, 130, 150, 100);
 
-  */
   batch.transition_image(img,
                          vk::AccessFlags::SHADER_WRITE,
                          vk::PipelineStageFlags::COMPUTE_SHADER,

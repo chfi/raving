@@ -794,13 +794,13 @@ impl VkEngine {
     }
 
     pub fn set_debug_object_name<T: ash::vk::Handle>(
-        &self,
+        ctx: &VkContext,
         object: T,
         name: &str,
     ) -> Result<()> {
         use std::ffi::CString;
 
-        if let Some(utils) = self.context.debug_utils() {
+        if let Some(utils) = ctx.debug_utils() {
             let name = CString::new(name)?;
 
             let debug_name_info = vk::DebugUtilsObjectNameInfoEXT::builder()
@@ -811,7 +811,7 @@ impl VkEngine {
 
             unsafe {
                 utils.debug_utils_set_object_name(
-                    self.context.device().handle(),
+                    ctx.device().handle(),
                     &debug_name_info,
                 )?;
             }

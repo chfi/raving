@@ -85,7 +85,13 @@ impl GpuResources {
         let buffer = BufferRes::allocate(
             ctx, allocator, location, usage, elem_size, len, name,
         )?;
+
+        if let Some(name) = name {
+            VkEngine::set_debug_object_name(ctx, buffer.buffer, name)?;
+        }
+
         let ix = self.buffers.insert(buffer);
+
         Ok(BufferIx(ix))
     }
 
@@ -102,6 +108,11 @@ impl GpuResources {
         let image = ImageRes::allocate_2d(
             ctx, allocator, width, height, format, usage, name,
         )?;
+
+        if let Some(name) = name {
+            VkEngine::set_debug_object_name(ctx, image.image, name)?;
+        }
+
         let ix = self.images.insert(image);
         Ok(ImageIx(ix))
     }
@@ -142,8 +153,6 @@ impl GpuResources {
 
         use BindingDesc as Desc;
         use BindingInput as In;
-
-        use parking_lot::Mutex;
 
         let mut img_infos = Vec::new();
         let mut buf_infos = Vec::new();
@@ -648,12 +657,14 @@ impl BufferRes {
 
         log::warn!("src: {:?}", src);
 
+        let len = src.len().min(self.size_bytes());
+
         let mut staging = Self::allocate_for_type::<u8>(
             ctx,
             allocator,
             location,
             staging_usage,
-            src.len(),
+            len,
             Some("tmp staging buffer"),
         )?;
 
@@ -670,7 +681,7 @@ impl BufferRes {
             cmd,
             staging.buffer,
             self.buffer,
-            src.len(),
+            len,
             None,
             None,
         );

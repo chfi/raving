@@ -12,8 +12,10 @@ use ash::{vk, Device};
 use engine::vk::descriptor::{BindingDesc, BindingInput};
 use flexi_logger::{Duplicate, FileSpec, Logger};
 use winit::event::{Event, WindowEvent};
-// use winit::platform::unix::*;
 use winit::{event_loop::EventLoop, window::WindowBuilder};
+
+#[cfg(target_os = "linux")]
+use winit::platform::unix::*;
 
 use std::sync::Arc;
 
@@ -35,7 +37,35 @@ fn main() -> Result<()> {
         .duplicate_to_stderr(Duplicate::Debug)
         .start()?;
 
-    let event_loop = EventLoop::new();
+    // let event_loop = EventLoop::new();
+
+    let event_loop: EventLoop<()>;
+
+    #[cfg(target_os = "linux")]
+    {
+        use winit::platform::unix::EventLoopExtUnix;
+        event_loop = EventLoop::new_x11()?;
+        // event_loop = if args.force_x11 || !instance_exts.wayland_surface {
+        //     if let Ok(ev_loop) = EventLoop::new_x11() {
+        //         log::debug!("Using X11 event loop");
+        //         ev_loop
+        //     } else {
+        //         error!(
+        //             "Error initializing X11 window, falling back to default"
+        //         );
+        //         EventLoop::new()
+        //     }
+        // } else {
+        //     log::debug!("Using default event loop");
+        //     EventLoop::new()
+        // };
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        log::debug!("Using default event loop");
+        event_loop = EventLoop::new();
+    }
 
     let width = 800;
     let height = 600;
@@ -148,6 +178,7 @@ fn main() -> Result<()> {
         let init_builder = init()?;
 
         if !init_builder.init_fn.is_empty() {
+            log::warn!("submitting init batches");
             let fence =
                 engine.submit_batches_fence(init_builder.init_fn.as_slice())?;
 
@@ -165,6 +196,7 @@ fn main() -> Result<()> {
                 let t = start.elapsed().as_secs_f32();
 
                 let f_ix = engine.current_frame_number();
+                println!("frame {}", f_ix);
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
 
                 let bg_batch = draw_background(800, 600, t).unwrap();
