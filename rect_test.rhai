@@ -3,6 +3,19 @@
 export let out_image = image_var("out_image");
 export let out_view = image_view_var("out_view");
 
+
+export let font_image = allocate_image("font_image",
+                                       1024,
+                                       8,
+                                       vk::Format::R8G8B8A8_UNORM,
+                                       vk::ImageUsageFlags::STORAGE
+                                       | vk::ImageUsageFlags::SAMPLED
+                                       | vk::ImageUsageFlags::TRANSFER_SRC
+                                       | vk::ImageUsageFlags::TRANSFER_DST);
+
+export let font_image_view = image_view_for(font_image);
+
+
 export let rect_buffer =
   allocate_buffer("rect_buffer",
                   vk::MemoryLocation::CPU_TO_GPU,
@@ -37,6 +50,57 @@ let rect_inputs =
 export let rect_desc_set =
   create_desc_set(vk::ShaderStageFlags::COMPUTE, rect_binds, rect_inputs);
 
+
+let line_bindings = [vk::binding::storage_image(0),
+                     vk::binding::storage_buffer(1),
+                     vk::binding::storage_buffer(2),
+                     vk::binding::storage_image(3)];
+
+export let line_pipeline = load_compute_shader("shaders/text_lines.comp.spv",
+                                               line_bindings,
+                                               16);
+
+
+export let line_desc_sets = [];
+
+export let text_buffers = [];
+export let line_buffers = [];
+
+for i in 0..5 {
+  let text = allocate_buffer("text_buffer",
+                             vk::MemoryLocation::CPU_TO_GPU,
+                             1,
+                             256 * 256,
+                             vk::BufferUsageFlags::TRANSFER_DST
+                             | vk::BufferUsageFlags::STORAGE_BUFFER);
+
+  let line = allocate_buffer("line_buffer",
+                             vk::MemoryLocation::CPU_TO_GPU,
+                             1,
+                             256 * 4 * 2,
+                             vk::BufferUsageFlags::TRANSFER_DST
+                             | vk::BufferUsageFlags::STORAGE_BUFFER);
+
+  text_buffers.push(text);
+  line_buffers.push(line);
+
+  let line_inputs = [#{ type: "image_view", binding: 0, view: font_image_view },
+                     #{ type: "buffer", binding: 1, buffer: text },
+                     #{ type: "buffer", binding: 2, buffer: line },
+                     #{ type: "image_view", binding: 3, view: out_view }];
+
+
+  let set = create_desc_set(vk::ShaderStageFlags::COMPUTE,
+                            line_bindings,
+                            line_inputs);
+
+  line_desc_sets.push(set);
+
+}
+
+
+
+
 fn append_rect(buf, x, y, w, h) {
   buf.append_int(x);
   buf.append_int(y);
@@ -56,10 +120,37 @@ fn append_rect(buf, x, y, w, h) {
 fn init() {
   let init_batch = batch_builder();
 
+
+  init_batch.load_image_from_file("8x8font.png",
+                                  self::font_image.get(),
+                                  vk::ImageLayout::GENERAL);
+
   let rect_buf = self::rect_buffer.get();
   let rect_data = blob();
 
+  let text_bufs = self::text_buffers;
+  let line_bufs = self::line_buffers;
+
+  let prefix = "label ";
+
   for i in 0..5 {
+    let line = prefix + i.to_string();
+
+    let text_buf = text_bufs[i].get();
+    let line_buf = line_bufs[i].get();
+
+    let text_data = blob();
+    let line_data = blob();
+
+    text_data.append_int(line.len());
+    text_data.append_str_tmp(line);
+
+    line_data.append_int(0);
+    line_data.append_int(line.len());
+
+    init_batch.initialize_buffer_with(text_buf, text_data);
+    init_batch.initialize_buffer_with(line_buf, line_data);
+
     rect_data = append_rect(rect_data, 40, 50 + 100 * i, 100, 50);
     rect_data = append_rect(rect_data, 180, 40 + 100 * i, 560, 70);
   }
@@ -135,6 +226,28 @@ fn foreground(w, h, t) {
                          x_groups,
                          y_groups,
                          z_groups);
+
+
+  for i in 0..5 {
+
+    let set = self::line_desc_sets[i].get();
+
+    let x = 50;
+    let y = 71 + 100 * i;
+
+    // rect_data = append_rect(rect_data, 40, 50 + 100 * i, 100, 50);
+    // rect_data = append_rect(rect_data, 180, 40 + 100 * i, 560, 70);
+
+    let pc = blob();
+    pc.append_int(x.to_int());
+    pc.append_int(y.to_int());
+    pc.append_int(w);
+    pc.append_int(h);
+
+    batch.dispatch_compute(self::line_pipeline.get(),
+                           set,
+                           pc, 80, 1, 1);
+  }
 
   // batch = fill_rect(batch, 200, 300, 50, 130);
   // batch = fill_rect(batch, 500, 130, 150, 100);
