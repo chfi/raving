@@ -338,13 +338,7 @@ impl VkEngine {
             }
         };
 
-        // let x_size = 16;
-        // let y_size = 16;
-
-        // let x_groups = (width / x_size) + width % x_size;
-        // let y_groups = (height / y_size) + height % y_size;
-
-        unsafe { device.cmd_dispatch(cmd, groups.0, groups.1, groups.0) };
+        unsafe { device.cmd_dispatch(cmd, groups.0, groups.1, groups.2) };
 
         cmd
     }
