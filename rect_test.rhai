@@ -228,6 +228,7 @@ fn foreground(w, h, t) {
                          z_groups);
 
 
+  /*
   for i in 0..5 {
 
     let set = self::line_desc_sets[i].get();
@@ -247,11 +248,20 @@ fn foreground(w, h, t) {
     batch.dispatch_compute(self::line_pipeline.get(),
                            set,
                            pc, 80, 1, 1);
+
+    batch.transition_image(img,
+                           vk::AccessFlags::SHADER_WRITE,
+                           vk::PipelineStageFlags::COMPUTE_SHADER,
+                           vk::AccessFlags::SHADER_WRITE,
+                           vk::PipelineStageFlags::COMPUTE_SHADER,
+                           vk::ImageLayout::GENERAL,
+                           vk::ImageLayout::GENERAL);
   }
 
   // batch = fill_rect(batch, 200, 300, 50, 130);
   // batch = fill_rect(batch, 500, 130, 150, 100);
 
+  */
   batch.transition_image(img,
                          vk::AccessFlags::SHADER_WRITE,
                          vk::PipelineStageFlags::COMPUTE_SHADER,

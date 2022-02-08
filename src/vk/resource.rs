@@ -646,6 +646,8 @@ impl BufferRes {
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
         let location = MemoryLocation::CpuToGpu;
 
+        log::warn!("src: {:?}", src);
+
         let mut staging = Self::allocate_for_type::<u8>(
             ctx,
             allocator,
@@ -656,8 +658,9 @@ impl BufferRes {
         )?;
 
         if let Some(stg) = staging.alloc.mapped_slice_mut() {
-            log::warn!("in mapped slice!");
-            stg.clone_from_slice(src);
+            log::warn!("src.len() {}", src.len());
+            log::warn!("stg.len() {}", stg.len());
+            stg[..src.len()].clone_from_slice(src);
         } else {
             bail!("couldn't map staging buffer memory");
         }

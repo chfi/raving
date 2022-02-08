@@ -29,7 +29,8 @@ void main() {
   ivec2 r_pos = rects.data[rect_ix].pos;
   ivec2 r_dims = rects.data[rect_ix].dims;
 
-  vec4 color = rects.data[rect_ix].color;
+  // vec4 color = rects.data[rect_ix].color;
+  vec4 color = vec4(0.3, 0.3, 0.3, 1.0);
 
   ivec2 pixel = global;
 
