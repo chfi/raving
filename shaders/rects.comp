@@ -10,7 +10,7 @@ layout (set = 0, binding = 0) readonly buffer RectData {
   Rect data[];
 } rects;
 
-layout (rgba8, set = 0, binding = 2) writeonly uniform image2D image_out;
+layout (rgba8, set = 0, binding = 1) writeonly uniform image2D image_out;
 
 layout (push_constant) uniform Inputs {
   int img_width;
@@ -21,7 +21,7 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 
 void main() {
-  uint rect_ix = gl_WorkGroupID.x;
+  uint rect_ix = gl_WorkGroupID.z;
 
   ivec2 global = ivec2(gl_GlobalInvocationID.xy);
   ivec2 local_pos = ivec2(gl_LocalInvocationID.xy);
@@ -31,12 +31,12 @@ void main() {
 
   vec4 color = rects.data[rect_ix].color;
 
-  ivec2 pixel = r_pos + local_pos;
+  ivec2 pixel = global;
 
-  if (global.x >= r_dims.x
-      || pixel.x >= inputs.img_width
-      || global.y >= r_dims.y
-      || pixel.y >= inputs.img_height) {
+  if (pixel.x >= r_pos.x + r_dims.x
+      || pixel.y >= r_pos.y + r_dims.y
+      || pixel.x < r_pos.x
+      || pixel.y < r_pos.y) {
     return;
   }
 
