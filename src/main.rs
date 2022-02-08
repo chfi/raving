@@ -1,21 +1,17 @@
-use engine::script::console::frame::{FrameBuilder, Resolvable};
+use engine::script::console::frame::FrameBuilder;
 use engine::script::console::BatchBuilder;
-use engine::vk::{
-    BatchInput, BufferIx, DescSetIx, FrameResources, GpuResources, ImageIx,
-    ImageViewIx, PipelineIx, VkEngine,
-};
+use engine::vk::{BatchInput, FrameResources, GpuResources, VkEngine};
 
 use engine::vk::util::*;
 
 use ash::{vk, Device};
 
-use engine::vk::descriptor::{BindingDesc, BindingInput};
 use flexi_logger::{Duplicate, FileSpec, Logger};
 use winit::event::{Event, WindowEvent};
 use winit::{event_loop::EventLoop, window::WindowBuilder};
 
-#[cfg(target_os = "linux")]
-use winit::platform::unix::*;
+// #[cfg(target_os = "linux")]
+// use winit::platform::unix::*;
 
 use std::sync::Arc;
 
@@ -29,7 +25,6 @@ fn main() -> Result<()> {
     let script_path = args.next().ok_or(anyhow!("Provide a script path"))?;
 
     // let args: Args = argh::from_env();
-    // let _logger = set_up_logger(&args).unwrap();
 
     let spec = "debug";
     let _logger = Logger::try_with_env_or_str(spec)?
@@ -37,8 +32,7 @@ fn main() -> Result<()> {
         .duplicate_to_stderr(Duplicate::Debug)
         .start()?;
 
-    // let event_loop = EventLoop::new();
-
+    /*
     let event_loop: EventLoop<()>;
 
     #[cfg(target_os = "linux")]
@@ -64,8 +58,11 @@ fn main() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         log::debug!("Using default event loop");
-        event_loop = EventLoop::new();
+        let event_loop = EventLoop::new();
     }
+    */
+
+    let event_loop = EventLoop::new();
 
     let width = 800;
     let height = 600;
@@ -196,14 +193,12 @@ fn main() -> Result<()> {
                 let t = start.elapsed().as_secs_f32();
 
                 let f_ix = engine.current_frame_number();
-                println!("frame {}", f_ix);
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
 
                 let bg_batch = draw_background(800, 600, t).unwrap();
                 let bg_batch_fn = bg_batch.build();
                 let bg_rhai_batch = bg_batch_fn.clone();
 
-                // let fg_batch = draw_background(800, 600, t).unwrap();
                 let fg_batch = draw_foreground(800, 600, t).unwrap();
                 let fg_batch_fn = fg_batch.build();
                 let fg_rhai_batch = fg_batch_fn.clone();

@@ -231,17 +231,10 @@ fn foreground(w, h, t) {
 
 
   for i in 0..5 {
-
-
-
-
     let set = self::line_desc_sets[i].get();
 
     let x = 50;
     let y = 71 + 100 * i;
-
-    // rect_data = append_rect(rect_data, 40, 50 + 100 * i, 100, 50);
-    // rect_data = append_rect(rect_data, 180, 40 + 100 * i, 560, 70);
 
     let pc = blob();
     pc.append_int(x.to_int());
@@ -251,20 +244,11 @@ fn foreground(w, h, t) {
 
     batch.dispatch_compute(self::line_pipeline.get(),
                            set,
-                           pc, 80, 1, 1);
-
-    // batch.transition_image(img,
-    //                        vk::AccessFlags::SHADER_WRITE,
-    //                        vk::PipelineStageFlags::COMPUTE_SHADER,
-    //                        vk::AccessFlags::SHADER_WRITE,
-    //                        vk::PipelineStageFlags::COMPUTE_SHADER,
-    //                        vk::ImageLayout::GENERAL,
-    //                        vk::ImageLayout::GENERAL);
+                           pc,
+                           80,
+                           1,
+                           1);
   }
-
-
-  // batch = fill_rect(batch, 200, 300, 50, 130);
-  // batch = fill_rect(batch, 500, 130, 150, 100);
 
   batch.transition_image(img,
                          vk::AccessFlags::SHADER_WRITE,
