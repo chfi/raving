@@ -193,6 +193,8 @@ fn main() -> Result<()> {
                 let t = start.elapsed().as_secs_f32();
 
                 let f_ix = engine.current_frame_number();
+                // dbg!(t);
+                // dbg!(f_ix);
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
 
                 let bg_batch = draw_background(800, 600, t).unwrap();
@@ -229,11 +231,15 @@ fn main() -> Result<()> {
                     Some(vec![(1, vk::PipelineStageFlags::COMPUTE_SHADER)]),
                 ];
 
+                // dbg!();
                 let render_success = engine
                     .draw_from_batches(frame, &batches, deps.as_slice(), 2)
                     .unwrap();
 
+                // dbg!();
+
                 if !render_success {
+                    dbg!();
                     _dirty_swapchain = true;
                 }
             }

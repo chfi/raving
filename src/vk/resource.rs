@@ -294,6 +294,37 @@ impl GpuResources {
             ash::util::read_spv(&mut file)
         }?;
 
+        let (desc_sets, push_const) = {
+            let result = rspirv_reflect::Reflection::new_from_spirv(
+                bytemuck::cast_slice(&comp_src),
+            )
+            .and_then(|i| {
+                let sets = i.get_descriptor_sets()?;
+                let pcs = i.get_push_constant_range()?;
+                Ok((sets, pcs))
+            });
+
+            match result {
+                Ok((sets, pcs)) => {
+                    log::warn!("sets: {:?}", sets);
+                    if let Some(pcs) = &pcs {
+                        log::warn!(
+                            "push constants: ({}, {})",
+                            pcs.offset,
+                            pcs.size
+                        );
+                    }
+                    (sets, pcs)
+                }
+                Err(err) => {
+                    anyhow::bail!("SPIR-V reflection error: {:?}", err);
+                }
+            }
+        };
+
+        // .unwrap();
+        // dbg!(info.get_descriptor_sets().unwrap());
+
         let create_info = vk::ShaderModuleCreateInfo::builder()
             .code(&comp_src)
             .build();

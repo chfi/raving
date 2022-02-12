@@ -41,6 +41,7 @@ let rect_binds = [vk::binding::storage_buffer(0),
                   vk::binding::storage_image(1)];
 
 export let rect_pipeline =
+  // load_compute_shader("shaders/rects.comp.spv.old", rect_binds, 8);
   load_compute_shader("shaders/rects.comp.spv", rect_binds, 8);
 
 let rect_inputs =

@@ -582,6 +582,7 @@ impl VkEngine {
         let device = self.context.device();
 
         // let frame_n = self.frame_number;
+        // dbg!(self.frame_number);
         // let f_ix = frame_n % FRAME_OVERLAP;
 
         if frame.executing.load() {
@@ -608,7 +609,10 @@ impl VkEngine {
 
             match result {
                 Ok((img_index, _)) => img_index,
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return Ok(false),
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    log::warn!("error out of date");
+                    return Ok(false);
+                }
                 Err(error) => bail!(
                     "Error while acquiring next swapchain image: {}",
                     error
@@ -772,7 +776,8 @@ impl VkEngine {
 
         match result {
             Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                return Ok(true);
+                log::warn!("swapchain surface suboptimal");
+                return Ok(false);
             }
             Err(error) => panic!("Failed to present queue: {}", error),
             _ => {}
@@ -783,6 +788,7 @@ impl VkEngine {
         };
 
         self.frame_number += 1;
+        dbg!(self.frame_number);
 
         Ok(true)
     }

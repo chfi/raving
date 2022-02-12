@@ -3,7 +3,10 @@ use crossbeam::atomic::AtomicCell;
 use gpu_allocator::vulkan::Allocator;
 use parking_lot::Mutex;
 
-use std::sync::Arc;
+use rhai::NativeCallContext;
+use rspirv_reflect::Reflection;
+
+use std::{any::TypeId, sync::Arc};
 
 use crate::vk::{
     context::VkContext, resource::index::*, GpuResources, VkEngine,
@@ -345,6 +348,46 @@ pub fn create_batch_engine() -> rhai::Engine {
             builder.initialize_buffer_with(buffer, data);
         },
     );
+
+    let arg_types = [
+        TypeId::of::<BatchBuilder>(),
+        TypeId::of::<rhai::FnPtr>(),
+        TypeId::of::<BufferIx>(),
+        TypeId::of::<Vec<rhai::Dynamic>>(),
+    ];
+    engine.register_raw_fn(
+        "initialize_buffer_with",
+        &arg_types,
+        move |ctx: NativeCallContext, args: &mut [&'_ mut rhai::Dynamic]| {
+            let batch = args.get_mut(0).unwrap();
+            // let batch = args[0].write_lock::<BatchBuilder>().unwrap();
+
+            let fn_ptr: rhai::FnPtr = args.get(1).unwrap().clone_cast();
+            let buffer: BufferIx = args.get(2).unwrap().clone_cast();
+            let vals: rhai::Array = std::mem::take(args[3]).cast();
+
+            let mut output: Vec<u8> = Vec::new();
+
+            for val in vals {
+                let entry: Vec<u8> =
+                    fn_ptr.call_within_context(&ctx, (val,))?;
+                output.extend(entry);
+            }
+
+            Ok(())
+        },
+    );
+
+    /*
+    engine.register_fn(
+        "initialize_buffer_with",
+        |builder: &mut BatchBuilder,
+         buffer: BufferIx,
+         elems: Vec<rhai::Dynamic>| {
+            builder.initialize_buffer_with(buffer, data);
+        },
+    );
+    */
 
     engine.register_fn(
         "transition_image",
