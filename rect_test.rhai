@@ -100,22 +100,17 @@ for i in 0..5 {
 }
 
 
-
-
-fn append_rect(buf, x, y, w, h) {
-  buf.append_int(x);
-  buf.append_int(y);
-  buf.append_int(w);
-  buf.append_int(h);
+fn rect_blob(rect) {
+  let buf = blob();
+  buf.append_int(rect.x);
+  buf.append_int(rect.y);
+  buf.append_int(rect.w);
+  buf.append_int(rect.h);
 
   buf.append_float(0.6);
   buf.append_float(0.55);
   buf.append_float(0.6);
   buf.append_float(1.0);
-
-  print("appending rectangle to buffer");
-  print(buf);
-
   buf
 }
 
@@ -135,6 +130,8 @@ fn init() {
 
   let prefix = "label ";
 
+  let rects = [];
+
   for i in 0..5 {
     let line = prefix + i.to_string();
 
@@ -153,11 +150,11 @@ fn init() {
     init_batch.initialize_buffer_with(text_buf, text_data);
     init_batch.initialize_buffer_with(line_buf, line_data);
 
-    rect_data = append_rect(rect_data, 40, 50 + 100 * i, 100, 50);
-    rect_data = append_rect(rect_data, 180, 40 + 100 * i, 560, 70);
+    rects.push(#{ x: 40,  y: 50 + 100 * i, w: 100, h: 50 });
+    rects.push(#{ x: 180, y: 40 + 100 * i, w: 560, h: 70 });
   }
 
-  init_batch.initialize_buffer_with(rect_buf, rect_data);
+  init_batch.initialize_buffer_with(Fn("rect_blob"), rect_buf, rects);
 
   init_batch
 }

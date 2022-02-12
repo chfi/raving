@@ -788,7 +788,6 @@ impl VkEngine {
         };
 
         self.frame_number += 1;
-        dbg!(self.frame_number);
 
         Ok(true)
     }
