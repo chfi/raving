@@ -543,8 +543,8 @@ pub mod frame {
 
     #[derive(Clone)]
     pub struct BindableVar {
-        pub(super) ty: TypeId,
-        pub(super) value: Arc<AtomicCell<Option<rhai::Dynamic>>>,
+        pub(crate) ty: TypeId,
+        pub(crate) value: Arc<AtomicCell<Option<rhai::Dynamic>>>,
     }
 
     #[derive(Default)]

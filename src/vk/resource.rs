@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use ash::{vk, Device};
 
 use gpu_allocator::{
@@ -138,12 +140,114 @@ impl GpuResources {
     pub fn allocate_desc_set_new(
         &mut self,
         stage_flags: vk::ShaderStageFlags,
-        descriptors: &[rspirv_reflect::DescriptorInfo],
+        descriptors: &BTreeMap<u32, rspirv_reflect::DescriptorInfo>,
         inputs: &[rhai::Map],
     ) -> Result<DescSetIx> {
         //
+        use std::any::TypeId;
 
-        todo!();
+        use crate::script::console::frame::{BindableVar, Resolvable};
+
+        #[rustfmt::skip]
+        macro_rules! get_and_cast {
+            ($map:ident, $field:literal, $type:ty) => {
+                {
+                    let val = $map.get($field).unwrap();
+
+                    if val.type_id() == TypeId::of::<BindableVar>() {
+                        let var = val.clone_cast::<BindableVar>();
+                        let bufdyn = var.value.take();
+                        var.value.store(bufdyn.clone());
+                        let res =
+                            bufdyn.unwrap().cast::<$type>();
+                        res
+                    } else {
+                        let res = val.clone_cast::<Resolvable<$type>>();
+                        res.get_unwrap()
+                    }
+                }
+            };
+        }
+
+        let mut builder = DescriptorBuilder::begin();
+
+        for input in inputs {
+            let binding = input
+                .get("binding")
+                .ok_or(anyhow!("input record is missing `binding` field"))?;
+
+            let binding = binding.as_int().map_err(|e| anyhow!("{}", e))?;
+            let binding = binding as u32;
+
+            let info = descriptors
+                .get(&binding)
+                .ok_or(anyhow!("descriptors missing binding: {}", binding))?;
+
+            let ash_ty = vk::DescriptorType::from_raw(info.ty.0 as i32);
+
+            use rspirv_reflect::DescriptorType as Ty;
+
+            if matches!(
+                info.ty,
+                Ty::STORAGE_BUFFER
+                    | Ty::UNIFORM_BUFFER
+                    | Ty::STORAGE_BUFFER_DYNAMIC
+                    | Ty::UNIFORM_BUFFER_DYNAMIC
+            ) {
+                let buf_ix = get_and_cast!(input, "buffer", BufferIx);
+
+                let buffer = &self.buffers[buf_ix.0];
+                let buf_info = vk::DescriptorBufferInfo::builder()
+                    .buffer(buffer.buffer)
+                    .offset(0)
+                    .range(vk::WHOLE_SIZE)
+                    .build();
+
+                let buffer_info = [buf_info];
+                builder.bind_buffer(binding, &buffer_info, ash_ty, stage_flags);
+            }
+
+            if matches!(
+                info.ty,
+                Ty::STORAGE_IMAGE
+                    | Ty::SAMPLED_IMAGE
+                    | Ty::COMBINED_IMAGE_SAMPLER
+            ) {
+                let layout = if info.ty == Ty::STORAGE_IMAGE {
+                    vk::ImageLayout::GENERAL
+                } else {
+                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+                };
+
+                let view_ix = get_and_cast!(input, "image_view", ImageViewIx);
+                let (view, _image_ix) = self.image_views[view_ix.0];
+
+                let img_info = vk::DescriptorImageInfo::builder()
+                    .image_layout(layout)
+                    .image_view(view)
+                    .build();
+
+                builder.bind_image(binding, &[img_info], ash_ty, stage_flags);
+            }
+
+            if matches!(info.ty, Ty::SAMPLER | Ty::COMBINED_IMAGE_SAMPLER) {
+                todo!();
+            }
+
+            if matches!(
+                info.ty,
+                Ty::UNIFORM_TEXEL_BUFFER | Ty::STORAGE_TEXEL_BUFFER
+            ) {
+                log::error!("Texel buffers not yet supported");
+            }
+        }
+
+        let set = builder
+            .build(&mut self.layout_cache, &mut self.descriptor_allocator)?;
+
+        let ix = self.descriptor_sets.insert(set);
+
+        Ok(DescSetIx(ix))
     }
 
     pub fn allocate_desc_set(
