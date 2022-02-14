@@ -222,6 +222,9 @@ impl std::hash::Hash for DescriptorLayoutInfo {
 pub struct DescriptorBuilder<'a> {
     bindings: Vec<vk::DescriptorSetLayoutBinding>,
     writes: Vec<vk::WriteDescriptorSetBuilder<'a>>,
+
+    image_infos: Vec<Vec<vk::DescriptorImageInfo>>,
+    buffer_infos: Vec<Vec<vk::DescriptorBufferInfo>>,
 }
 
 impl DescriptorAllocator {
@@ -445,16 +448,23 @@ impl<'a> DescriptorBuilder<'a> {
         Self {
             bindings: Vec::new(),
             writes: Vec::new(),
+
+            image_infos: Vec::new(),
+            buffer_infos: Vec::new(),
         }
     }
 
     pub(super) fn bind_buffer(
         &mut self,
         binding: u32,
-        buffer_info: &'a [vk::DescriptorBufferInfo],
+        buffer_info: &[vk::DescriptorBufferInfo],
         ty: vk::DescriptorType,
         stage_flags: vk::ShaderStageFlags,
     ) -> &mut Self {
+        let buffer_info = buffer_info.to_vec();
+        let ix = self.buffer_infos.len();
+        self.buffer_infos.push(buffer_info);
+
         let layout_binding = vk::DescriptorSetLayoutBinding::builder()
             .descriptor_count(1)
             .descriptor_type(ty)
@@ -463,6 +473,14 @@ impl<'a> DescriptorBuilder<'a> {
             .build();
 
         self.bindings.push(layout_binding);
+
+        let buffer_info = unsafe {
+            let slice = &self.buffer_infos[ix];
+            let len = slice.len();
+            let info: &[vk::DescriptorBufferInfo] =
+                std::slice::from_raw_parts(slice.as_ptr(), len);
+            info
+        };
 
         let write = vk::WriteDescriptorSet::builder()
             .descriptor_type(ty)
@@ -477,11 +495,14 @@ impl<'a> DescriptorBuilder<'a> {
     pub(super) fn bind_image(
         &mut self,
         binding: u32,
-        // image_info: std::sync::Arc<[vk::DescriptorImageInfo]>,
-        image_info: &'a [vk::DescriptorImageInfo],
+        image_info: &[vk::DescriptorImageInfo],
         ty: vk::DescriptorType,
         stage_flags: vk::ShaderStageFlags,
     ) -> &mut Self {
+        let image_info = image_info.to_vec();
+        let ix = self.image_infos.len();
+        self.image_infos.push(image_info);
+
         let layout_binding = vk::DescriptorSetLayoutBinding::builder()
             .descriptor_count(1)
             .descriptor_type(ty)
@@ -490,6 +511,14 @@ impl<'a> DescriptorBuilder<'a> {
             .build();
 
         self.bindings.push(layout_binding);
+
+        let image_info = unsafe {
+            let slice = &self.image_infos[ix];
+            let len = slice.len();
+            let info: &[vk::DescriptorImageInfo] =
+                std::slice::from_raw_parts(slice.as_ptr(), len);
+            info
+        };
 
         let write = vk::WriteDescriptorSet::builder()
             .descriptor_type(ty)

@@ -135,6 +135,17 @@ impl GpuResources {
         Ok(FenceIx(ix))
     }
 
+    pub fn allocate_desc_set_new(
+        &mut self,
+        stage_flags: vk::ShaderStageFlags,
+        descriptors: &[rspirv_reflect::DescriptorInfo],
+        inputs: &[rhai::Map],
+    ) -> Result<DescSetIx> {
+        //
+
+        todo!();
+    }
+
     pub fn allocate_desc_set(
         &mut self,
         bind_descs: &[BindingDesc],
@@ -154,7 +165,7 @@ impl GpuResources {
         use BindingDesc as Desc;
         use BindingInput as In;
 
-        let mut img_infos = Vec::new();
+        // let mut img_infos = Vec::new();
         let mut buf_infos = Vec::new();
 
         for (desc, input) in bind_descs.iter().zip(bind_inputs) {
@@ -194,7 +205,8 @@ impl GpuResources {
                             .image_view(view)
                             .build();
 
-                        let image_info = vec![img_info];
+                        let image_info = [img_info];
+                        /*
 
                         let (image_info, len) = {
                             let ix = img_infos.len();
@@ -207,8 +219,15 @@ impl GpuResources {
                         unsafe {
                             let info: &[vk::DescriptorImageInfo] =
                                 std::slice::from_raw_parts(image_info, len);
-                            builder.bind_image(binding, info, ty, stage_flags);
                         }
+                        */
+
+                        builder.bind_image(
+                            binding,
+                            &image_info,
+                            ty,
+                            stage_flags,
+                        );
                     } else {
                         bail!(
                             "Incompatible binding: {:?} vs {:?}",
@@ -613,6 +632,160 @@ impl GpuResources {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct ComputePipeline {
+    pipeline: PipelineIx,
+    bindings: Vec<BindingDesc>,
+    pc_range: (u32, u32),
+}
+
+impl ComputePipeline {
+    pub fn load_shader_file(
+        context: &VkContext,
+        resources: &mut GpuResources,
+        shader_path: &str,
+    ) -> Result<ComputePipeline> {
+        let comp_src = {
+            let mut file = std::fs::File::open(shader_path)?;
+            ash::util::read_spv(&mut file)
+        }?;
+
+        let (bindings, pc_range) = {
+            let result = rspirv_reflect::Reflection::new_from_spirv(
+                bytemuck::cast_slice(&comp_src),
+            )
+            .and_then(|i| {
+                let sets = i.get_descriptor_sets()?;
+                let pcs = i.get_push_constant_range()?;
+                Ok((sets, pcs))
+            });
+
+            match result {
+                Ok((sets, pcs)) => {
+                    // TODO support multiple sets!
+
+                    let mut bindings = Vec::new();
+                    if let Some(set0) = sets.get(&0) {
+                        for (binding, desc) in set0.iter() {
+                            // let ty =
+                            //     vk::DescriptorType::from_raw(desc.ty.0 as i32);
+
+                            // match ty {}
+                            // match desc.ty {}
+
+                            //
+                        }
+                    };
+
+                    let pcs = if let Some(pcs) = &pcs {
+                        log::warn!(
+                            "push constants: ({}, {})",
+                            pcs.offset,
+                            pcs.size
+                        );
+                        (pcs.offset, pcs.size)
+                    } else {
+                        (0, 0)
+                    };
+
+                    (bindings, pcs)
+                }
+                Err(err) => {
+                    anyhow::bail!("SPIR-V reflection error: {:?}", err);
+                }
+            }
+        };
+
+        // .unwrap();
+        // dbg!(info.get_descriptor_sets().unwrap());
+
+        let create_info = vk::ShaderModuleCreateInfo::builder()
+            .code(&comp_src)
+            .build();
+
+        let shader_module = unsafe {
+            context.device().create_shader_module(&create_info, None)
+        }?;
+
+        let pipeline_layout = {
+            let pc_range = vk::PushConstantRange::builder()
+                .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                .offset(pc_range.0 as u32)
+                .size(pc_range.1 as u32)
+                .build();
+
+            let pc_ranges = [pc_range];
+
+            let bindings = BindingDesc::layout_bindings(
+                &bindings,
+                vk::ShaderStageFlags::COMPUTE,
+            )?;
+
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings)
+                .build();
+
+            let layout =
+                resources.layout_cache.get_descriptor_layout(&layout_info)?;
+            let layouts = [layout];
+
+            let layout_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(&layouts)
+                .push_constant_ranges(&pc_ranges)
+                .build();
+
+            unsafe {
+                context.device().create_pipeline_layout(&layout_info, None)
+            }
+        }?;
+
+        let entry_point = std::ffi::CString::new("main").unwrap();
+
+        let comp_state_info = vk::PipelineShaderStageCreateInfo::builder()
+            .stage(vk::ShaderStageFlags::COMPUTE)
+            .module(shader_module)
+            .name(&entry_point)
+            .build();
+
+        let pipeline_info = vk::ComputePipelineCreateInfo::builder()
+            .layout(pipeline_layout)
+            .stage(comp_state_info)
+            .build();
+
+        let pipeline_infos = [pipeline_info];
+
+        let result = unsafe {
+            context.device().create_compute_pipelines(
+                vk::PipelineCache::null(),
+                &pipeline_infos,
+                None,
+            )
+        };
+
+        let pipelines = match result {
+            Ok(pipelines) => pipelines,
+            Err((pipelines, err)) => {
+                log::warn!("{:?}", err);
+                pipelines
+            }
+        };
+
+        let pipeline = pipelines[0];
+
+        let ix = resources.pipelines.insert((pipeline, pipeline_layout));
+
+        unsafe {
+            context.device().destroy_shader_module(shader_module, None);
+        }
+
+        Ok(Self {
+            pipeline: PipelineIx(ix),
+            bindings,
+            pc_range,
+        })
     }
 }
 
