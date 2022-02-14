@@ -743,14 +743,11 @@ pub mod frame {
                       set_infos: rhai::Map,
                       set: i64,
                       inputs: rhai::Array| {
-                    // let bindings: Vec<BindingDesc> =
-                    //     binding_descs.into_iter().map(|b| b.cast()).collect();
-
                     let key = set.to_string();
 
                     let set_info = set_infos.get(key.as_str()).unwrap();
-                    // let set_info = set_info.read_lock::<BTreeMap<u32, rspirv_reflect::DescriptorInfo>>().unwrap();
-                    let set_info = set_info.clone_cast::<BTreeMap<u32, rspirv_reflect::DescriptorInfo>>();
+                    let set_info = set_info
+                              .clone_cast::<BTreeMap<u32, rspirv_reflect::DescriptorInfo>>();
 
                     let inputs = inputs
                         .into_iter()

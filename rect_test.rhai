@@ -32,16 +32,22 @@ export let bg_pipeline =
 
 let bg_inputs = [#{ type: "image_view", binding: 0, view: out_view }];
 
+let bg_set_infos = read_shader_descriptors("shaders/trig_color.comp.spv");
+
 export let bg_desc_set =
-  create_desc_set(vk::ShaderStageFlags::COMPUTE, bg_bindings, bg_inputs);
+create_desc_set(vk::ShaderStageFlags::COMPUTE,
+                bg_set_infos,
+                0,
+                [#{ binding: 0, image_view: out_view }]);
 
 
 
 let rect_binds = [vk::binding::storage_buffer(0),
                   vk::binding::storage_image(1)];
 
+let rect_set_infos = read_shader_descriptors("shaders/rects.comp.spv");
+
 export let rect_pipeline =
-  // load_compute_shader("shaders/rects.comp.spv.old", rect_binds, 8);
   load_compute_shader("shaders/rects.comp.spv", rect_binds, 8);
 
 let rect_inputs =
@@ -49,7 +55,11 @@ let rect_inputs =
       #{ type: "image_view", binding: 1, view: out_view } ];
 
 export let rect_desc_set =
-  create_desc_set(vk::ShaderStageFlags::COMPUTE, rect_binds, rect_inputs);
+  create_desc_set(vk::ShaderStageFlags::COMPUTE,
+                  rect_set_infos,
+                  0,
+                  [#{ binding: 0, buffer: rect_buffer },
+                   #{ binding: 1, image_view: out_view }]);
 
 
 let line_bindings = [vk::binding::storage_image(0),
@@ -91,11 +101,11 @@ for i in 0..5 {
                      #{ type: "image_view", binding: 3, view: out_view }];
 
 
-  let set = create_desc_set(vk::ShaderStageFlags::COMPUTE,
-                            line_bindings,
-                            line_inputs);
+  // let set = create_desc_set(vk::ShaderStageFlags::COMPUTE,
+  //                           line_bindings,
+  //                           line_inputs);
 
-  line_desc_sets.push(set);
+  // line_desc_sets.push(set);
 
 }
 
@@ -229,7 +239,7 @@ fn foreground(w, h, t) {
 
 
   for i in 0..5 {
-    let set = self::line_desc_sets[i].get();
+    // let set = self::line_desc_sets[i].get();
 
     let x = 50;
     let y = 71 + 100 * i;
@@ -240,12 +250,12 @@ fn foreground(w, h, t) {
     pc.append_int(w);
     pc.append_int(h);
 
-    batch.dispatch_compute(self::line_pipeline.get(),
-                           set,
-                           pc,
-                           80,
-                           1,
-                           1);
+    // batch.dispatch_compute(self::line_pipeline.get(),
+    //                        set,
+    //                        pc,
+    //                        80,
+    //                        1,
+    //                        1);
   }
 
   batch.transition_image(img,
