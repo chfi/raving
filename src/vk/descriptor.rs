@@ -219,9 +219,10 @@ impl std::hash::Hash for DescriptorLayoutInfo {
     }
 }
 
-pub struct DescriptorBuilder<'a> {
+pub struct DescriptorBuilder {
     bindings: Vec<vk::DescriptorSetLayoutBinding>,
-    writes: Vec<vk::WriteDescriptorSetBuilder<'a>>,
+    // writes: Vec<vk::WriteDescriptorSetBuilder<'a>>,
+    writes: Vec<vk::WriteDescriptorSet>,
 
     image_infos: Vec<Vec<vk::DescriptorImageInfo>>,
     buffer_infos: Vec<Vec<vk::DescriptorBufferInfo>>,
@@ -443,7 +444,7 @@ impl DescriptorLayoutCache {
     }
 }
 
-impl<'a> DescriptorBuilder<'a> {
+impl DescriptorBuilder {
     pub(super) fn begin() -> Self {
         Self {
             bindings: Vec::new(),
@@ -474,18 +475,13 @@ impl<'a> DescriptorBuilder<'a> {
 
         self.bindings.push(layout_binding);
 
-        let buffer_info = unsafe {
-            let slice = &self.buffer_infos[ix];
-            let len = slice.len();
-            let info: &[vk::DescriptorBufferInfo] =
-                std::slice::from_raw_parts(slice.as_ptr(), len);
-            info
-        };
+        let buffer_info = &self.buffer_infos[ix];
 
         let write = vk::WriteDescriptorSet::builder()
             .descriptor_type(ty)
             .buffer_info(buffer_info)
-            .dst_binding(binding);
+            .dst_binding(binding)
+            .build();
 
         self.writes.push(write);
 
@@ -512,18 +508,13 @@ impl<'a> DescriptorBuilder<'a> {
 
         self.bindings.push(layout_binding);
 
-        let image_info = unsafe {
-            let slice = &self.image_infos[ix];
-            let len = slice.len();
-            let info: &[vk::DescriptorImageInfo] =
-                std::slice::from_raw_parts(slice.as_ptr(), len);
-            info
-        };
+        let image_info = &self.image_infos[ix];
 
         let write = vk::WriteDescriptorSet::builder()
             .descriptor_type(ty)
             .image_info(image_info)
-            .dst_binding(binding);
+            .dst_binding(binding)
+            .build();
 
         self.writes.push(write);
 
@@ -542,21 +533,14 @@ impl<'a> DescriptorBuilder<'a> {
         let layout = layout_cache.get_descriptor_layout(&create_info)?;
 
         let set = allocator.allocate(layout)?;
-
-        let writes = self
-            .writes
-            .into_iter()
-            .map(|w| w.dst_set(set).build())
-            .collect::<Vec<_>>();
-
-        // for write in self.writes.iter_mut() {
-        //     write.dst_set = set;
-        // }
+        self.writes.iter_mut().for_each(|w| {
+            w.dst_set = set;
+        });
 
         unsafe {
             allocator
                 .device
-                .update_descriptor_sets(writes.as_slice(), &[]);
+                .update_descriptor_sets(self.writes.as_slice(), &[]);
         }
 
         Ok(set)

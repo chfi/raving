@@ -165,9 +165,6 @@ impl GpuResources {
         use BindingDesc as Desc;
         use BindingInput as In;
 
-        // let mut img_infos = Vec::new();
-        let mut buf_infos = Vec::new();
-
         for (desc, input) in bind_descs.iter().zip(bind_inputs) {
             let ty = match desc {
                 Desc::StorageImage { .. } => vk::DescriptorType::STORAGE_IMAGE,
@@ -205,26 +202,9 @@ impl GpuResources {
                             .image_view(view)
                             .build();
 
-                        let image_info = [img_info];
-                        /*
-
-                        let (image_info, len) = {
-                            let ix = img_infos.len();
-                            let len = image_info.len();
-                            img_infos.push(image_info);
-                            let info = img_infos[ix].as_ptr();
-                            (info, len)
-                        };
-
-                        unsafe {
-                            let info: &[vk::DescriptorImageInfo] =
-                                std::slice::from_raw_parts(image_info, len);
-                        }
-                        */
-
                         builder.bind_image(
                             binding,
-                            &image_info,
+                            &[img_info],
                             ty,
                             stage_flags,
                         );
@@ -247,26 +227,12 @@ impl GpuResources {
                             .range(vk::WHOLE_SIZE)
                             .build();
 
-                        let buffer_info = vec![buf_info];
-
-                        let (buffer_info, len) = {
-                            let ix = buf_infos.len();
-                            let len = buffer_info.len();
-                            buf_infos.push(buffer_info);
-                            let info = buf_infos[ix].as_ptr();
-                            (info, len)
-                        };
-
-                        unsafe {
-                            let infos: &[vk::DescriptorBufferInfo] =
-                                std::slice::from_raw_parts(buffer_info, len);
-                            builder.bind_buffer(
-                                binding,
-                                infos,
-                                ty,
-                                stage_flags,
-                            );
-                        }
+                        builder.bind_buffer(
+                            binding,
+                            &[buf_info],
+                            ty,
+                            stage_flags,
+                        );
                     } else {
                         bail!(
                             "Incompatible binding: {:?} vs {:?}",
