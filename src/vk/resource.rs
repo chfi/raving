@@ -137,7 +137,7 @@ impl GpuResources {
         Ok(FenceIx(ix))
     }
 
-    pub fn allocate_desc_set_new(
+    pub fn allocate_desc_set(
         &mut self,
         stage_flags: vk::ShaderStageFlags,
         descriptors: &BTreeMap<u32, rspirv_reflect::DescriptorInfo>,
@@ -250,7 +250,7 @@ impl GpuResources {
         Ok(DescSetIx(ix))
     }
 
-    pub fn allocate_desc_set(
+    pub fn allocate_desc_set_old(
         &mut self,
         bind_descs: &[BindingDesc],
         bind_inputs: &[BindingInput],

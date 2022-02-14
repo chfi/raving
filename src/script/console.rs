@@ -678,6 +678,47 @@ pub mod frame {
                 },
             );
 
+            engine.register_result_fn(
+                "read_shader_descriptors",
+                move |shader_path: &str| {
+                    let comp_src = {
+                        let mut file =
+                            std::fs::File::open(shader_path).unwrap();
+                        ash::util::read_spv(&mut file).unwrap()
+                    };
+
+                    let (sets, pcs) =
+                        rspirv_reflect::Reflection::new_from_spirv(
+                            bytemuck::cast_slice(&comp_src),
+                        )
+                        .and_then(|i| {
+                            let sets = i.get_descriptor_sets().unwrap();
+                            let pcs =
+                                i.get_push_constant_range().unwrap().unwrap();
+                            Ok((sets, pcs))
+                        })
+                        .unwrap();
+
+                    let mut result = rhai::Map::default();
+
+                    for (set, contents) in sets {
+                        let contents = rhai::Dynamic::from(contents);
+                        result.insert(set.to_string().into(), contents);
+                    }
+
+                    result.insert(
+                        "push_constant_offset".into(),
+                        rhai::Dynamic::from(pcs.offset),
+                    );
+                    result.insert(
+                        "push_constant_size".into(),
+                        rhai::Dynamic::from(pcs.size),
+                    );
+
+                    Ok(result)
+                },
+            );
+
             let b = builder.clone();
             engine.register_fn(
                 "load_compute_shader",
@@ -699,6 +740,32 @@ pub mod frame {
             engine.register_fn(
                 "create_desc_set",
                 move |stage_flags: ash::vk::ShaderStageFlags,
+                      set_infos: rhai::Map,
+                      set: i64,
+                      inputs: rhai::Array| {
+                    // let bindings: Vec<BindingDesc> =
+                    //     binding_descs.into_iter().map(|b| b.cast()).collect();
+
+                    let key = set.to_string();
+
+                    let set_info = set_infos.get(key.as_str()).unwrap();
+                    // let set_info = set_info.read_lock::<BTreeMap<u32, rspirv_reflect::DescriptorInfo>>().unwrap();
+                    let set_info = set_info.clone_cast::<BTreeMap<u32, rspirv_reflect::DescriptorInfo>>();
+
+                    let inputs = inputs
+                        .into_iter()
+                        .map(|map| map.cast::<rhai::Map>())
+                        .collect::<Vec<_>>();
+
+                    b.lock().create_desc_set(stage_flags, set_info, inputs)
+                },
+            );
+
+            /*
+            let b = builder.clone();
+            engine.register_fn(
+                "create_desc_set",
+                move |stage_flags: ash::vk::ShaderStageFlags,
                       binding_descs: rhai::Array,
                       inputs: rhai::Array| {
                     let bindings: Vec<BindingDesc> =
@@ -707,6 +774,7 @@ pub mod frame {
                     b.lock().create_desc_set(stage_flags, &bindings, inputs)
                 },
             );
+            */
 
             let b = builder.clone();
             engine.register_fn("buffer_var", move |name: &str| {
@@ -884,6 +952,37 @@ pub mod frame {
         pub fn create_desc_set(
             &mut self,
             stage_flags: ash::vk::ShaderStageFlags,
+            set_info: BTreeMap<u32, rspirv_reflect::DescriptorInfo>,
+            inputs: Vec<rhai::Map>,
+        ) -> Resolvable<DescSetIx> {
+            let cell = Arc::new(AtomicCell::new(None));
+            let inner = cell.clone();
+
+            let resolver = Box::new(
+                move |ctx: &VkContext,
+                      res: &mut GpuResources,
+                      alloc: &mut Allocator| {
+                    let desc_set =
+                        res.allocate_desc_set(stage_flags, &set_info, &inputs)?;
+                    inner.store(Some(desc_set));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            let priority = Priority::primary(ResolveOrder::DescriptorSet);
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
+        }
+
+        /*
+        pub fn create_desc_set_old(
+            &mut self,
+            stage_flags: ash::vk::ShaderStageFlags,
             binding_descs: &[BindingDesc],
             dyn_inputs: rhai::Array,
         ) -> Resolvable<DescSetIx> {
@@ -1003,6 +1102,7 @@ pub mod frame {
                 value: cell,
             }
         }
+        */
 
         pub fn load_compute_shader(
             &mut self,
