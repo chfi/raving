@@ -448,7 +448,7 @@ pub mod frame {
     use std::collections::HashMap;
     use std::{collections::BTreeMap, sync::Arc};
 
-    use crate::vk::descriptor::{BindingDesc, BindingInput};
+    use crate::vk::descriptor::BindingDesc;
     use crate::vk::resource::index::*;
     use crate::vk::{context::VkContext, GpuResources};
 

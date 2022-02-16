@@ -14,16 +14,14 @@ use thunderdome::Arena;
 use super::{
     context::VkContext,
     descriptor::{
-        BindingDesc, BindingInput, DescriptorAllocator, DescriptorBuilder,
+        BindingDesc, DescriptorAllocator, DescriptorBuilder,
         DescriptorLayoutCache,
     },
     VkEngine,
 };
 
-pub mod graph;
 pub mod index;
 
-use graph::*;
 pub use index::*;
 
 pub struct GpuResources {
@@ -239,112 +237,6 @@ impl GpuResources {
                 Ty::UNIFORM_TEXEL_BUFFER | Ty::STORAGE_TEXEL_BUFFER
             ) {
                 log::error!("Texel buffers not yet supported");
-            }
-        }
-
-        let set = builder
-            .build(&mut self.layout_cache, &mut self.descriptor_allocator)?;
-
-        let ix = self.descriptor_sets.insert(set);
-
-        Ok(DescSetIx(ix))
-    }
-
-    pub fn allocate_desc_set_old(
-        &mut self,
-        bind_descs: &[BindingDesc],
-        bind_inputs: &[BindingInput],
-        stage_flags: vk::ShaderStageFlags,
-    ) -> Result<DescSetIx> {
-        if bind_descs.is_empty() || bind_descs.len() != bind_inputs.len() {
-            bail!(
-                "Binding descriptions did not match inputs in length: {} vs {}",
-                bind_descs.len(),
-                bind_inputs.len()
-            );
-        }
-
-        let mut builder = DescriptorBuilder::begin();
-
-        use BindingDesc as Desc;
-        use BindingInput as In;
-
-        for (desc, input) in bind_descs.iter().zip(bind_inputs) {
-            let ty = match desc {
-                Desc::StorageImage { .. } => vk::DescriptorType::STORAGE_IMAGE,
-                Desc::SampledImage { .. } => {
-                    vk::DescriptorType::COMBINED_IMAGE_SAMPLER
-                }
-                Desc::UniformBuffer { .. } => {
-                    vk::DescriptorType::UNIFORM_BUFFER
-                }
-                Desc::StorageBuffer { .. } => {
-                    vk::DescriptorType::STORAGE_BUFFER
-                }
-            };
-
-            match *desc {
-                Desc::StorageImage { binding }
-                | Desc::SampledImage { binding } => {
-                    if input.binding() != binding {
-                        bail!("Binding descriptions and input order do not match: {} vs {}",
-                              binding,
-                              input.binding());
-                    }
-
-                    let layout = if matches!(*desc, Desc::StorageImage { .. }) {
-                        vk::ImageLayout::GENERAL
-                    } else {
-                        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-                    };
-
-                    if let In::ImageView { view, .. } = input {
-                        let (view, _image) = self.image_views[view.0];
-
-                        let img_info = vk::DescriptorImageInfo::builder()
-                            .image_layout(layout)
-                            .image_view(view)
-                            .build();
-
-                        builder.bind_image(
-                            binding,
-                            &[img_info],
-                            ty,
-                            stage_flags,
-                        );
-                    } else {
-                        bail!(
-                            "Incompatible binding: {:?} vs {:?}",
-                            desc,
-                            input
-                        );
-                    }
-                }
-                Desc::UniformBuffer { binding }
-                | Desc::StorageBuffer { binding } => {
-                    if let In::Buffer { buffer, .. } = input {
-                        let buffer = &self.buffers[buffer.0];
-
-                        let buf_info = vk::DescriptorBufferInfo::builder()
-                            .buffer(buffer.buffer)
-                            .offset(0)
-                            .range(vk::WHOLE_SIZE)
-                            .build();
-
-                        builder.bind_buffer(
-                            binding,
-                            &[buf_info],
-                            ty,
-                            stage_flags,
-                        );
-                    } else {
-                        bail!(
-                            "Incompatible binding: {:?} vs {:?}",
-                            desc,
-                            input
-                        );
-                    }
-                }
             }
         }
 

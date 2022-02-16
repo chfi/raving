@@ -132,42 +132,6 @@ impl BindingDesc {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum BindingInput {
-    Image {
-        binding: u32,
-        image: ImageIx,
-    },
-    ImageView {
-        binding: u32,
-        view: ImageViewIx,
-    },
-    SampledImage {
-        binding: u32,
-        view: ImageViewIx,
-        sampler: SamplerIx,
-    },
-    Buffer {
-        binding: u32,
-        buffer: BufferIx,
-    }, // Buffer { binding: u32, buffer: BufferIx }
-       // VertexBuffer { binding: u32, buffer: BufferIx }
-       // IndexBuffer { binding: u32, buffer: BufferIx }
-       // SampledImage
-       // Buffer
-}
-
-impl BindingInput {
-    pub fn binding(&self) -> u32 {
-        match *self {
-            Self::Image { binding, .. } => binding,
-            Self::ImageView { binding, .. } => binding,
-            Self::SampledImage { binding, .. } => binding,
-            Self::Buffer { binding, .. } => binding,
-        }
-    }
-}
-
 pub struct DescriptorAllocator {
     device: Device,
 
