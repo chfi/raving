@@ -5,7 +5,10 @@ use anyhow::{anyhow, bail, Result};
 
 use thunderdome::{Arena, Index};
 
-use super::{BufferRes, GpuResources, ImageRes};
+use super::{BufferRes, GpuResources, ImageRes, ShaderInfo};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ShaderIx(pub(super) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PipelineIx(pub(super) Index);
@@ -30,6 +33,14 @@ pub struct SemaphoreIx(pub(super) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FenceIx(pub Index);
+
+impl std::ops::Index<ShaderIx> for GpuResources {
+    type Output = ShaderInfo;
+
+    fn index(&self, i: ShaderIx) -> &Self::Output {
+        &self.shaders[i.0]
+    }
+}
 
 impl std::ops::Index<PipelineIx> for GpuResources {
     type Output = (vk::Pipeline, vk::PipelineLayout);
