@@ -19,7 +19,7 @@ use super::{
     context::VkContext,
     descriptor::{
         BindingDesc, DescriptorAllocator, DescriptorBuilder,
-        DescriptorLayoutCache,
+        DescriptorLayoutCache, DescriptorLayoutInfo,
     },
     VkEngine,
 };
@@ -57,6 +57,44 @@ pub struct ShaderInfo {
     push_constant_range: Option<(u32, u32)>,
 
     stage: vk::ShaderStageFlags,
+}
+
+impl ShaderInfo {
+    pub fn set_layout_info(&self, set_ix: u32) -> Result<DescriptorLayoutInfo> {
+        let set_info = self
+            .set_infos
+            .get(&set_ix)
+            .ok_or(anyhow!("Shader lacks set index {}", set_ix))?;
+
+        let mut bindings = set_info
+            .iter()
+            .map(|(binding, info)| {
+                let count = match info.binding_count {
+                    rspirv_reflect::BindingCount::One => 1,
+                    rspirv_reflect::BindingCount::StaticSized(n) => n as u32,
+                    rspirv_reflect::BindingCount::Unbounded => {
+                        log::warn!("unbounded binding count; set manually");
+                        0
+                    }
+                };
+
+                let ash_ty = vk::DescriptorType::from_raw(info.ty.0 as i32);
+
+                let binding = vk::DescriptorSetLayoutBinding::builder()
+                    .binding(*binding)
+                    .descriptor_count(count)
+                    .descriptor_type(ash_ty)
+                    .stage_flags(self.stage)
+                    .build();
+
+                binding
+            })
+            .collect::<Vec<_>>();
+
+        bindings.sort_by_key(|b| b.binding);
+
+        Ok(DescriptorLayoutInfo { bindings })
+    }
 }
 
 #[derive(Clone)]
@@ -323,6 +361,29 @@ impl GpuResources {
         let ix = self.shaders.insert(shader);
 
         Ok(ShaderIx(ix))
+    }
+
+    pub fn create_compute_pipeline(
+        &mut self,
+        context: &VkContext,
+        shader_ix: ShaderIx,
+    ) -> Result<PipelineIx> {
+        let shader = self[shader_ix].clone();
+
+        let create_info = vk::ShaderModuleCreateInfo::builder()
+            .code(&shader.spirv)
+            .build();
+
+        let shader_module = unsafe {
+            context.device().create_shader_module(&create_info, None)
+        }?;
+
+        let pipeline_layout = {
+            // let mut pc_range = vk::PushConstantRange::builder()
+        };
+
+        //
+        todo!();
     }
 
     pub fn load_compute_shader_runtime(

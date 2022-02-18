@@ -149,7 +149,7 @@ pub struct DescriptorLayoutCache {
 
 #[derive(Default)]
 pub struct DescriptorLayoutInfo {
-    bindings: Vec<vk::DescriptorSetLayoutBinding>,
+    pub bindings: Vec<vk::DescriptorSetLayoutBinding>,
 }
 
 impl PartialEq for DescriptorLayoutInfo {
