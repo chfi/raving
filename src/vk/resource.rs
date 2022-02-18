@@ -52,7 +52,10 @@ pub struct GpuResources {
 #[derive(Clone)]
 pub struct ShaderInfo {
     spirv: Vec<u32>,
+
     set_infos: BTreeMap<u32, BTreeMap<u32, DescriptorInfo>>,
+    push_constant_range: Option<(u32, u32)>,
+
     stage: vk::ShaderStageFlags,
 }
 
@@ -286,6 +289,40 @@ impl GpuResources {
         let ix = self.image_views.insert((view, image_ix));
 
         Ok(ImageViewIx(ix))
+    }
+
+    pub fn load_shader(
+        &mut self,
+        shader_path: &str,
+        stage: vk::ShaderStageFlags,
+    ) -> Result<ShaderIx> {
+        let spirv = {
+            let mut file = std::fs::File::open(shader_path)?;
+            ash::util::read_spv(&mut file)?
+        };
+
+        let (sets, pcs) = rspirv_reflect::Reflection::new_from_spirv(
+            bytemuck::cast_slice(&spirv),
+        )
+        .and_then(|i| {
+            let sets = i.get_descriptor_sets()?;
+            let pcs = i.get_push_constant_range()?;
+            Ok((sets, pcs))
+        })
+        .map_err(|e| anyhow!("{:?}", e))?;
+
+        let push_constant_range = pcs.map(|pc| (pc.offset, pc.size));
+
+        let shader = ShaderInfo {
+            spirv,
+            set_infos: sets,
+            push_constant_range,
+            stage,
+        };
+
+        let ix = self.shaders.insert(shader);
+
+        Ok(ShaderIx(ix))
     }
 
     pub fn load_compute_shader_runtime(
