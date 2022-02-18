@@ -147,7 +147,7 @@ pub struct DescriptorLayoutCache {
     layout_cache: HashMap<DescriptorLayoutInfo, vk::DescriptorSetLayout>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DescriptorLayoutInfo {
     pub bindings: Vec<vk::DescriptorSetLayoutBinding>,
 }
@@ -354,6 +354,26 @@ impl DescriptorLayoutCache {
             device,
             layout_cache: Default::default(),
         }
+    }
+
+    pub fn get_descriptor_layout_new(
+        &mut self,
+        layout_info: &DescriptorLayoutInfo,
+    ) -> Result<vk::DescriptorSetLayout> {
+        let info = vk::DescriptorSetLayoutCreateInfo::builder()
+            .bindings(layout_info.bindings.as_slice())
+            .build();
+
+        if let Some(v) = self.layout_cache.get(layout_info) {
+            return Ok(*v);
+        }
+
+        let layout =
+            unsafe { self.device.create_descriptor_set_layout(&info, None)? };
+
+        self.layout_cache.insert(layout_info.clone(), layout);
+
+        Ok(layout)
     }
 
     pub(super) fn get_descriptor_layout(
