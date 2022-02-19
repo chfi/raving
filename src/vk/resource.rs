@@ -201,7 +201,7 @@ impl GpuResources {
         Ok(FenceIx(ix))
     }
 
-    pub fn allocate_desc_set(
+    pub fn allocate_desc_set_dyn(
         &mut self,
         stage_flags: vk::ShaderStageFlags,
         descriptors: &BTreeMap<u32, rspirv_reflect::DescriptorInfo>,

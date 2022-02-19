@@ -959,8 +959,11 @@ pub mod frame {
                 move |ctx: &VkContext,
                       res: &mut GpuResources,
                       alloc: &mut Allocator| {
-                    let desc_set =
-                        res.allocate_desc_set(stage_flags, &set_info, &inputs)?;
+                    let desc_set = res.allocate_desc_set_dyn(
+                        stage_flags,
+                        &set_info,
+                        &inputs,
+                    )?;
                     inner.store(Some(desc_set));
                     Ok(())
                 },

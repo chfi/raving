@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use ash::{
     extensions::khr::{Surface, Swapchain},
@@ -9,6 +9,7 @@ use ash::{
 };
 
 use gpu_allocator::vulkan::Allocator;
+use rspirv_reflect::DescriptorInfo;
 use rustc_hash::FxHashMap;
 use winit::window::Window;
 
@@ -425,6 +426,99 @@ impl DescriptorLayoutCache {
         self.layout_cache.clear();
 
         Ok(())
+    }
+}
+
+pub struct DescriptorUpdateBuilder {
+    // bindings: Vec<vk::DescriptorSetLayoutBinding>,
+    set_info: BTreeMap<u32, DescriptorInfo>,
+    writes: Vec<vk::WriteDescriptorSet>,
+
+    image_infos: Vec<Vec<vk::DescriptorImageInfo>>,
+    buffer_infos: Vec<Vec<vk::DescriptorBufferInfo>>,
+}
+
+impl DescriptorUpdateBuilder {
+    pub fn new(set_info: &BTreeMap<u32, DescriptorInfo>) -> Self {
+        let set_info = set_info.clone();
+
+        Self {
+            set_info,
+            writes: Vec::new(),
+            image_infos: Vec::new(),
+            buffer_infos: Vec::new(),
+        }
+    }
+
+    pub fn bind_buffer(
+        &mut self,
+        binding: u32,
+        buffer_info: &[vk::DescriptorBufferInfo],
+    ) -> Option<&mut Self> {
+        let info = self.set_info.get(&binding)?;
+        let ty = vk::DescriptorType::from_raw(info.ty.0 as i32);
+
+        use rspirv_reflect::DescriptorType as Ty;
+
+        if !matches!(
+            info.ty,
+            Ty::UNIFORM_BUFFER
+                | Ty::STORAGE_BUFFER
+                | Ty::UNIFORM_BUFFER_DYNAMIC
+                | Ty::STORAGE_BUFFER_DYNAMIC,
+        ) {
+            return None;
+        }
+
+        let buffer_info = buffer_info.to_vec();
+        let ix = self.buffer_infos.len();
+        self.buffer_infos.push(buffer_info);
+
+        let buffer_info = &self.buffer_infos[ix];
+
+        let write = vk::WriteDescriptorSet::builder()
+            .descriptor_type(ty)
+            .buffer_info(buffer_info)
+            .dst_binding(binding)
+            .build();
+
+        self.writes.push(write);
+
+        Some(self)
+    }
+
+    pub fn bind_image(
+        &mut self,
+        binding: u32,
+        image_info: &[vk::DescriptorImageInfo],
+    ) -> Option<&mut Self> {
+        let info = self.set_info.get(&binding)?;
+        let ty = vk::DescriptorType::from_raw(info.ty.0 as i32);
+
+        use rspirv_reflect::DescriptorType as Ty;
+
+        if !matches!(
+            info.ty,
+            Ty::STORAGE_IMAGE | Ty::SAMPLED_IMAGE | Ty::COMBINED_IMAGE_SAMPLER,
+        ) {
+            return None;
+        }
+
+        let image_info = image_info.to_vec();
+        let ix = self.image_infos.len();
+        self.image_infos.push(image_info);
+
+        let image_info = &self.image_infos[ix];
+
+        let write = vk::WriteDescriptorSet::builder()
+            .descriptor_type(ty)
+            .image_info(image_info)
+            .dst_binding(binding)
+            .build();
+
+        self.writes.push(write);
+
+        Some(self)
     }
 }
 
