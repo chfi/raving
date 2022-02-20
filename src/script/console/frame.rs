@@ -307,6 +307,15 @@ impl FrameBuilder {
 
         let b = builder.clone();
         engine.register_fn(
+            "create_compute_pipeline",
+            move |shader: rhai::Dynamic| {
+                let shader = try_get_var::<ShaderIx>(&shader).unwrap();
+                b.lock().create_compute_pipeline(shader)
+            },
+        );
+
+        let b = builder.clone();
+        engine.register_fn(
             "load_compute_shader",
             move |path: &str, bindings: rhai::Array, pc_size: i64| {
                 let bindings = bindings
@@ -321,40 +330,18 @@ impl FrameBuilder {
 
         let b = builder.clone();
         engine.register_fn(
-                "create_desc_set",
-                move |stage_flags: ash::vk::ShaderStageFlags,
-                      set_infos: rhai::Map,
-                      set: i64,
-                      inputs: rhai::Array| {
-                    let key = set.to_string();
-
-                    let set_info = set_infos.get(key.as_str()).unwrap();
-                    let set_info = set_info
-                              .clone_cast::<BTreeMap<u32, rspirv_reflect::DescriptorInfo>>();
-
-                    let inputs = inputs
-                        .into_iter()
-                        .map(|map| map.cast::<rhai::Map>())
-                        .collect::<Vec<_>>();
-
-                    b.lock().create_desc_set(stage_flags, set_info, inputs)
-                },
-            );
-
-        /*
-        let b = builder.clone();
-        engine.register_fn(
             "create_desc_set",
-            move |stage_flags: ash::vk::ShaderStageFlags,
-                  binding_descs: rhai::Array,
+            move |shader: Resolvable<ShaderIx>,
+                  set: i64,
                   inputs: rhai::Array| {
-                let bindings: Vec<BindingDesc> =
-                    binding_descs.into_iter().map(|b| b.cast()).collect();
+                let inputs = inputs
+                    .into_iter()
+                    .map(|map| map.cast::<rhai::Map>())
+                    .collect::<Vec<_>>();
 
-                b.lock().create_desc_set(stage_flags, &bindings, inputs)
+                b.lock().create_desc_set(shader, set as u32, inputs)
             },
         );
-        */
 
         let b = builder.clone();
         engine.register_fn("buffer_var", move |name: &str| {
@@ -518,7 +505,7 @@ impl FrameBuilder {
 
     pub fn create_desc_set(
         &mut self,
-        shader: ShaderIx,
+        shader: Resolvable<ShaderIx>,
         set: u32,
         inputs: Vec<rhai::Map>,
     ) -> Resolvable<DescSetIx> {
@@ -531,6 +518,7 @@ impl FrameBuilder {
             input: &rhai::Map,
         ) -> Result<()> {
             use ash::vk::DescriptorType as Ty;
+
             let binding = input
                 .get("binding")
                 .and_then(|b| b.as_int().ok())
@@ -583,6 +571,8 @@ impl FrameBuilder {
             move |_ctx: &VkContext,
                   res: &mut GpuResources,
                   _alloc: &mut Allocator| {
+                let shader = shader.value.load().unwrap();
+
                 res.allocate_desc_set(shader, set, |res, builder| {
                     for input in inputs {
                         append_input(res, builder, &input)?;
