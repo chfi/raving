@@ -405,6 +405,11 @@ impl GpuResources {
         context: &VkContext,
         shader_ix: ShaderIx,
     ) -> Result<PipelineIx> {
+        if (*&self[shader_ix].stage & vk::ShaderStageFlags::COMPUTE).is_empty()
+        {
+            bail!("Tried to create a compute pipeline from shader {:?} which has stage flags {:?}", shader_ix, &self[shader_ix].stage);
+        }
+
         let shader = self[shader_ix].clone();
 
         let create_info = vk::ShaderModuleCreateInfo::builder()
@@ -416,11 +421,87 @@ impl GpuResources {
         }?;
 
         let pipeline_layout = {
-            // let mut pc_range = vk::PushConstantRange::builder()
+            let pc_range =
+                if let Some((offset, size)) = shader.push_constant_range {
+                    vk::PushConstantRange::builder()
+                        .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                        .offset(offset)
+                        .size(size)
+                        .build()
+                } else {
+                    // TODO not sure if this is correct!
+                    vk::PushConstantRange::builder()
+                        .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                        .offset(0)
+                        .size(0)
+                        .build()
+                };
+
+            let pc_ranges = [pc_range];
+
+            let layouts = shader
+                .set_infos
+                .keys()
+                .filter_map(|&set_ix| {
+                    let info = shader.set_layout_info(set_ix).ok()?;
+                    let layout = self
+                        .layout_cache
+                        .get_descriptor_layout_new(&info)
+                        .ok()?;
+                    Some(layout)
+                })
+                .collect::<Vec<_>>();
+
+            let layout_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(&layouts)
+                .push_constant_ranges(&pc_ranges)
+                .build();
+
+            unsafe {
+                context.device().create_pipeline_layout(&layout_info, None)
+            }
+        }?;
+
+        let entry_point = std::ffi::CString::new("main").unwrap();
+
+        let comp_state_info = vk::PipelineShaderStageCreateInfo::builder()
+            .stage(vk::ShaderStageFlags::COMPUTE)
+            .module(shader_module)
+            .name(&entry_point)
+            .build();
+
+        let pipeline_info = vk::ComputePipelineCreateInfo::builder()
+            .layout(pipeline_layout)
+            .stage(comp_state_info)
+            .build();
+
+        let pipeline_infos = [pipeline_info];
+
+        let result = unsafe {
+            context.device().create_compute_pipelines(
+                vk::PipelineCache::null(),
+                &pipeline_infos,
+                None,
+            )
         };
 
-        //
-        todo!();
+        let pipelines = match result {
+            Ok(pipelines) => pipelines,
+            Err((pipelines, err)) => {
+                log::warn!("{:?}", err);
+                pipelines
+            }
+        };
+
+        let pipeline = pipelines[0];
+
+        let ix = self.pipelines.insert((pipeline, pipeline_layout));
+
+        unsafe {
+            context.device().destroy_shader_module(shader_module, None);
+        }
+
+        Ok(PipelineIx(ix))
     }
 
     pub fn load_compute_shader_runtime(
