@@ -71,6 +71,14 @@ impl std::ops::IndexMut<ImageIx> for GpuResources {
     }
 }
 
+impl std::ops::Index<SamplerIx> for GpuResources {
+    type Output = vk::Sampler;
+
+    fn index(&self, i: SamplerIx) -> &Self::Output {
+        &self.samplers[i.0]
+    }
+}
+
 impl std::ops::Index<ImageViewIx> for GpuResources {
     type Output = (vk::ImageView, ImageIx);
 

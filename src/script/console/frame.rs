@@ -544,6 +544,19 @@ impl FrameBuilder {
                 builder.bind_buffer(binding, &buffer_info);
             }
 
+            let mut img_info = None;
+
+            if let Some(sampler_ix) = input
+                .get("sampler")
+                .and_then(|b| try_get_var::<SamplerIx>(b))
+            {
+                let sampler = res[sampler_ix];
+
+                img_info = Some(
+                    ash::vk::DescriptorImageInfo::builder().sampler(sampler),
+                );
+            }
+
             if let Some(img_view_ix) = input
                 .get("image_view")
                 .and_then(|b| try_get_var::<ImageViewIx>(b))
@@ -555,12 +568,18 @@ impl FrameBuilder {
                 };
 
                 let (view, _) = res[img_view_ix];
-                let img_info = ash::vk::DescriptorImageInfo::builder()
-                    .image_layout(layout)
-                    .image_view(view)
-                    .build();
 
-                builder.bind_image(binding, &[img_info]);
+                let info = img_info
+                    .unwrap_or(ash::vk::DescriptorImageInfo::builder())
+                    .image_layout(layout)
+                    .image_view(view);
+
+                img_info = Some(info);
+            }
+
+            if let Some(img_info) = img_info {
+                let info = img_info.build();
+                builder.bind_image(binding, &[info]);
             }
 
             Ok(())
