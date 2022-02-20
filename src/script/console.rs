@@ -263,6 +263,7 @@ pub fn create_batch_engine() -> rhai::Engine {
     engine.register_type_with_name::<ImageIx>("ImageIx");
     engine.register_type_with_name::<ImageViewIx>("ImageViewIx");
     engine.register_type_with_name::<BufferIx>("BufferIx");
+    engine.register_type_with_name::<ShaderIx>("ShaderIx");
     engine.register_type_with_name::<PipelineIx>("PipelineIx");
     engine.register_type_with_name::<DescSetIx>("DescSetIx");
 

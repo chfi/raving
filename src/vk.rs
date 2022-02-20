@@ -623,6 +623,10 @@ impl VkEngine {
         let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
 
         for (ix, &cmd) in frame.command_buffers.iter().enumerate() {
+            if batches.get(ix).is_none() {
+                break;
+            }
+
             let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 

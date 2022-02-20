@@ -119,21 +119,21 @@ fn main() -> Result<()> {
     rhai_engine.register_static_module("self", arc_module.clone());
 
     let draw_background =
-        rhai::Func::<(i64, i64, f32), BatchBuilder>::create_from_ast(
+        rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
             rhai_engine,
             builder.ast.clone_functions_only(),
             "background",
         );
 
-    let mut rhai_engine = engine::script::console::create_batch_engine();
-    rhai_engine.register_static_module("self", arc_module);
+    // let mut rhai_engine = engine::script::console::create_batch_engine();
+    // rhai_engine.register_static_module("self", arc_module);
 
-    let draw_foreground =
-        rhai::Func::<(i64, i64, f32), BatchBuilder>::create_from_ast(
-            rhai_engine,
-            builder.ast.clone_functions_only(),
-            "foreground",
-        );
+    // let draw_foreground =
+    //     rhai::Func::<(i64, i64, f32), BatchBuilder>::create_from_ast(
+    //         rhai_engine,
+    //         builder.ast.clone_functions_only(),
+    //         "foreground",
+    //     );
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
@@ -197,13 +197,13 @@ fn main() -> Result<()> {
                 // dbg!(f_ix);
                 let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
 
-                let bg_batch = draw_background(800, 600, t).unwrap();
+                let bg_batch = draw_background(800, 600).unwrap();
                 let bg_batch_fn = bg_batch.build();
                 let bg_rhai_batch = bg_batch_fn.clone();
 
-                let fg_batch = draw_foreground(800, 600, t).unwrap();
-                let fg_batch_fn = fg_batch.build();
-                let fg_rhai_batch = fg_batch_fn.clone();
+                // let fg_batch = draw_foreground(800, 600, t).unwrap();
+                // let fg_batch_fn = fg_batch.build();
+                // let fg_rhai_batch = fg_batch_fn.clone();
 
                 let bg_batch = Box::new(
                     move |dev: &Device,
@@ -214,26 +214,27 @@ fn main() -> Result<()> {
                     },
                 ) as Box<_>;
 
-                let fg_batch = Box::new(
-                    move |dev: &Device,
-                          res: &GpuResources,
-                          _input: &BatchInput,
-                          cmd: vk::CommandBuffer| {
-                        fg_rhai_batch(dev, res, cmd);
-                    },
-                ) as Box<_>;
+                // let fg_batch = Box::new(
+                //     move |dev: &Device,
+                //           res: &GpuResources,
+                //           _input: &BatchInput,
+                //           cmd: vk::CommandBuffer| {
+                //         fg_rhai_batch(dev, res, cmd);
+                //     },
+                // ) as Box<_>;
 
-                let batches = [&bg_batch, &fg_batch, &copy_batch];
+                // let batches = [&bg_batch, &fg_batch, &copy_batch];
+                let batches = [&bg_batch, &copy_batch];
 
                 let deps = vec![
                     None,
                     Some(vec![(0, vk::PipelineStageFlags::COMPUTE_SHADER)]),
-                    Some(vec![(1, vk::PipelineStageFlags::COMPUTE_SHADER)]),
+                    // Some(vec![(1, vk::PipelineStageFlags::COMPUTE_SHADER)]),
                 ];
 
                 // dbg!();
                 let render_success = engine
-                    .draw_from_batches(frame, &batches, deps.as_slice(), 2)
+                    .draw_from_batches(frame, &batches, deps.as_slice(), 1)
                     .unwrap();
 
                 // dbg!();

@@ -308,8 +308,7 @@ impl FrameBuilder {
         let b = builder.clone();
         engine.register_fn(
             "create_compute_pipeline",
-            move |shader: rhai::Dynamic| {
-                let shader = try_get_var::<ShaderIx>(&shader).unwrap();
+            move |shader: Resolvable<ShaderIx>| {
                 b.lock().create_compute_pipeline(shader)
             },
         );
@@ -495,11 +494,14 @@ impl FrameBuilder {
 
     pub fn create_compute_pipeline(
         &mut self,
-        shader: ShaderIx,
+        shader: Resolvable<ShaderIx>,
     ) -> Resolvable<PipelineIx> {
         self.add_resolvable(
             Priority::primary(ResolveOrder::Pipeline),
-            move |ctx, res, _alloc| res.create_compute_pipeline(ctx, shader),
+            move |ctx, res, _alloc| {
+                let shader = shader.get().unwrap();
+                res.create_compute_pipeline(ctx, shader)
+            },
         )
     }
 
