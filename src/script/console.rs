@@ -465,14 +465,16 @@ pub mod frame {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     #[repr(u64)]
     pub enum ResolveOrder {
-        Buffer = 0,
-        Image = 1,
-        ImageView = 2,
-        Sampler = 3,
-        SampledImage = 4,
-        BindingInput = 5,
-        DescriptorSet = 6,
-        Other = 7,
+        Shader = 0,
+        Pipeline = 1,
+        Buffer = 2,
+        Image = 3,
+        ImageView = 4,
+        Sampler = 5,
+        SampledImage = 6,
+        BindingInput = 7,
+        DescriptorSet = 8,
+        Other = 9,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -721,6 +723,14 @@ pub mod frame {
 
             let b = builder.clone();
             engine.register_fn(
+                "load_shader",
+                move |shader_path: &str, stage: ash::vk::ShaderStageFlags| {
+                    b.lock().load_shader(shader_path, stage)
+                },
+            );
+
+            let b = builder.clone();
+            engine.register_fn(
                 "load_compute_shader",
                 move |path: &str, bindings: rhai::Array, pc_size: i64| {
                     let bindings = bindings
@@ -937,6 +947,37 @@ pub mod frame {
                     Ok(())
                 },
             ) as ResolverFn;
+
+            self.resolvers.entry(priority).or_default().push(resolver);
+
+            Resolvable {
+                priority,
+                value: cell,
+            }
+        }
+
+        pub fn load_shader(
+            &mut self,
+            path: &str,
+            stage_flags: ash::vk::ShaderStageFlags,
+        ) -> Resolvable<ShaderIx> {
+            let cell = Arc::new(AtomicCell::new(None));
+            let inner = cell.clone();
+
+            let shader_path = path.to_string();
+
+            let resolver = Box::new(
+                move |_ctx: &VkContext,
+                      res: &mut GpuResources,
+                      _alloc: &mut Allocator| {
+                    let shader = res.load_shader(&shader_path, stage_flags)?;
+
+                    inner.store(Some(shader));
+                    Ok(())
+                },
+            ) as ResolverFn;
+
+            let priority = Priority::primary(ResolveOrder::Shader);
 
             self.resolvers.entry(priority).or_default().push(resolver);
 
