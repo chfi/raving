@@ -854,17 +854,13 @@ pub mod frame {
             usage: ash::vk::BufferUsageFlags,
             name: Option<&str>,
         ) -> Resolvable<BufferIx> {
-            let priority = Priority::primary(ResolveOrder::Buffer);
-
-            let cell = Arc::new(AtomicCell::new(None));
             let name = name.map(String::from);
-            let inner = cell.clone();
-
-            let resolver = Box::new(
+            self.add_resolvable(
+                Priority::primary(ResolveOrder::Buffer),
                 move |ctx: &VkContext,
                       res: &mut GpuResources,
                       alloc: &mut Allocator| {
-                    let buf = res.allocate_buffer(
+                    res.allocate_buffer(
                         ctx,
                         alloc,
                         location,
@@ -872,18 +868,9 @@ pub mod frame {
                         size as usize,
                         usage,
                         name.as_ref().map(|s| s.as_str()),
-                    )?;
-                    inner.store(Some(buf));
-                    Ok(())
+                    )
                 },
-            ) as ResolverFn;
-
-            self.resolvers.entry(priority).or_default().push(resolver);
-
-            Resolvable {
-                priority,
-                value: cell,
-            }
+            )
         }
 
         pub fn allocate_image(
@@ -894,17 +881,13 @@ pub mod frame {
             usage: ash::vk::ImageUsageFlags,
             name: Option<&str>,
         ) -> Resolvable<ImageIx> {
-            let priority = Priority::primary(ResolveOrder::Image);
-
-            let cell = Arc::new(AtomicCell::new(None));
             let name = name.map(String::from);
-            let inner = cell.clone();
-
-            let resolver = Box::new(
+            self.add_resolvable(
+                Priority::primary(ResolveOrder::Image),
                 move |ctx: &VkContext,
                       res: &mut GpuResources,
                       alloc: &mut Allocator| {
-                    let img = res.allocate_image(
+                    res.allocate_image(
                         ctx,
                         alloc,
                         width,
@@ -912,18 +895,9 @@ pub mod frame {
                         format,
                         usage,
                         name.as_ref().map(|s| s.as_str()),
-                    )?;
-                    inner.store(Some(img));
-                    Ok(())
+                    )
                 },
-            ) as ResolverFn;
-
-            self.resolvers.entry(priority).or_default().push(resolver);
-
-            Resolvable {
-                priority,
-                value: cell,
-            }
+            )
         }
 
         pub fn create_image_view(
@@ -933,27 +907,15 @@ pub mod frame {
         ) -> Resolvable<ImageViewIx> {
             let priority = Priority::primary(ResolveOrder::ImageView);
 
-            let cell = Arc::new(AtomicCell::new(None));
-            // let name = name.map(String::from);
-            let inner = cell.clone();
-
-            let resolver = Box::new(
+            self.add_resolvable(
+                priority,
                 move |ctx: &VkContext,
                       res: &mut GpuResources,
                       _: &mut Allocator| {
                     let image = image_ix.value.load().unwrap();
-                    let view = res.create_image_view_for_image(ctx, image)?;
-                    inner.store(Some(view));
-                    Ok(())
+                    res.create_image_view_for_image(ctx, image)
                 },
-            ) as ResolverFn;
-
-            self.resolvers.entry(priority).or_default().push(resolver);
-
-            Resolvable {
-                priority,
-                value: cell,
-            }
+            )
         }
 
         pub fn load_shader(
@@ -961,31 +923,19 @@ pub mod frame {
             path: &str,
             stage_flags: ash::vk::ShaderStageFlags,
         ) -> Resolvable<ShaderIx> {
-            let cell = Arc::new(AtomicCell::new(None));
-            let inner = cell.clone();
-
             let shader_path = path.to_string();
-
-            let resolver = Box::new(
-                move |_ctx: &VkContext,
-                      res: &mut GpuResources,
-                      _alloc: &mut Allocator| {
-                    let shader = res.load_shader(&shader_path, stage_flags)?;
-
-                    inner.store(Some(shader));
-                    Ok(())
+            self.add_resolvable(
+                Priority::primary(ResolveOrder::Shader),
+                move |_ctx, res, _alloc| {
+                    res.load_shader(&shader_path, stage_flags)
                 },
-            ) as ResolverFn;
-
-            let priority = Priority::primary(ResolveOrder::Shader);
-
-            self.resolvers.entry(priority).or_default().push(resolver);
-
-            Resolvable {
-                priority,
-                value: cell,
-            }
+            )
         }
+
+        // pub fn create_compute_pipeline(
+        //     &mut self,
+        //     shader: ShaderIx
+        //         )
 
         pub fn create_desc_set(
             &mut self,
@@ -993,31 +943,15 @@ pub mod frame {
             set_info: BTreeMap<u32, rspirv_reflect::DescriptorInfo>,
             inputs: Vec<rhai::Map>,
         ) -> Resolvable<DescSetIx> {
-            let cell = Arc::new(AtomicCell::new(None));
-            let inner = cell.clone();
-
-            let resolver = Box::new(
-                move |ctx: &VkContext,
-                      res: &mut GpuResources,
-                      alloc: &mut Allocator| {
-                    let desc_set = res.allocate_desc_set_dyn(
-                        stage_flags,
-                        &set_info,
-                        &inputs,
-                    )?;
-                    inner.store(Some(desc_set));
-                    Ok(())
-                },
-            ) as ResolverFn;
-
             let priority = Priority::primary(ResolveOrder::DescriptorSet);
-
-            self.resolvers.entry(priority).or_default().push(resolver);
-
-            Resolvable {
+            self.add_resolvable(
                 priority,
-                value: cell,
-            }
+                move |_ctx: &VkContext,
+                      res: &mut GpuResources,
+                      _alloc: &mut Allocator| {
+                    res.allocate_desc_set_dyn(stage_flags, &set_info, &inputs)
+                },
+            )
         }
 
         /*
@@ -1152,35 +1086,22 @@ pub mod frame {
             pc_size: usize,
         ) -> Resolvable<PipelineIx> {
             let priority = Priority::primary(ResolveOrder::Other);
-
-            let cell = Arc::new(AtomicCell::new(None));
-            // let name = name.map(String::from);
-            let inner = cell.clone();
-
             let shader_path = shader_path.to_string();
             let bindings = Vec::from(bindings);
 
-            let resolver = Box::new(
+            self.add_resolvable(
+                priority,
                 move |ctx: &VkContext,
                       res: &mut GpuResources,
                       _: &mut Allocator| {
-                    let pipeline = res.load_compute_shader_runtime(
+                    res.load_compute_shader_runtime(
                         ctx,
                         &shader_path,
                         &bindings,
                         pc_size,
-                    )?;
-                    inner.store(Some(pipeline));
-                    Ok(())
+                    )
                 },
-            ) as ResolverFn;
-
-            self.resolvers.entry(priority).or_default().push(resolver);
-
-            Resolvable {
-                priority,
-                value: cell,
-            }
+            )
         }
 
         pub fn resolve_and_then<
