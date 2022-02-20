@@ -298,6 +298,18 @@ impl FrameBuilder {
         );
 
         let b = builder.clone();
+        engine.register_fn("create_sampler", move |builder: rhai::Map| {
+            b.lock().add_resolvable(
+                Priority::primary(ResolveOrder::Sampler),
+                move |ctx, res, _alloc| {
+                    let sampler_info =
+                        crate::script::vk::sampler_create_info::build(builder)?;
+                    res.insert_sampler(ctx, sampler_info)
+                },
+            )
+        });
+
+        let b = builder.clone();
         engine.register_fn(
             "load_shader",
             move |shader_path: &str, stage: ash::vk::ShaderStageFlags| {

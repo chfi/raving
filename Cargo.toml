@@ -20,7 +20,7 @@ futures = { version = "0.3", features = ["thread-pool"] }
 futures-timer = { version = "3.0.2" }
 poll-promise = "0.1"
 
-rhai = { version = "1.4", features = ["sync", "f32_float"] }
+rhai = { version = "1.5", features = ["sync", "f32_float"] }
 bytemuck = { version = "1.7", features = ["derive"] }
 
 image = "0.23"

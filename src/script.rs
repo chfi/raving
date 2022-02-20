@@ -14,6 +14,103 @@ pub mod vk {
 
     use ash::vk;
 
+    #[rhai_mod(name = "SamplerCreateInfo")]
+    pub mod sampler_create_info {
+
+        #[rhai_fn(skip)]
+        pub(crate) fn build(
+            mut map: rhai::Map,
+        ) -> anyhow::Result<vk::SamplerCreateInfo> {
+            let mut info = vk::SamplerCreateInfo::default();
+
+            macro_rules! take_cast_set {
+                ($field:ident, $ty:ty) => {
+                    if let Some($field) = map
+                        .remove(stringify!(field))
+                        .and_then(|$field| $field.try_cast::<$ty>())
+                    {
+                        info.$field = $field;
+                    }
+                };
+            }
+
+            take_cast_set!(flags, vk::SamplerCreateFlags);
+            take_cast_set!(mag_filter, vk::Filter);
+            take_cast_set!(min_filter, vk::Filter);
+            take_cast_set!(mipmap_mode, vk::SamplerMipmapMode);
+            take_cast_set!(address_mode_u, vk::SamplerAddressMode);
+            take_cast_set!(address_mode_v, vk::SamplerAddressMode);
+            take_cast_set!(address_mode_w, vk::SamplerAddressMode);
+            take_cast_set!(mip_lod_bias, f32);
+            take_cast_set!(anisotropy_enable, u32);
+            take_cast_set!(max_anisotropy, f32);
+            take_cast_set!(compare_enable, u32);
+            take_cast_set!(compare_op, vk::CompareOp);
+            take_cast_set!(min_lod, f32);
+            take_cast_set!(max_lod, f32);
+            take_cast_set!(border_color, vk::BorderColor);
+            take_cast_set!(unnormalized_coordinates, u32);
+
+            Ok(info)
+        }
+    }
+
+    #[rhai_mod(name = "CompareOp")]
+    pub mod compare_op {
+        pub const NEVER: ash::vk::CompareOp = ash::vk::CompareOp::NEVER;
+        pub const LESS: ash::vk::CompareOp = ash::vk::CompareOp::LESS;
+        pub const EQUAL: ash::vk::CompareOp = ash::vk::CompareOp::EQUAL;
+        pub const LESS_OR_EQUAL: ash::vk::CompareOp =
+            ash::vk::CompareOp::LESS_OR_EQUAL;
+        pub const GREATER: ash::vk::CompareOp = ash::vk::CompareOp::GREATER;
+        pub const NOT_EQUAL: ash::vk::CompareOp = ash::vk::CompareOp::NOT_EQUAL;
+        pub const GREATER_OR_EQUAL: ash::vk::CompareOp =
+            ash::vk::CompareOp::GREATER_OR_EQUAL;
+        pub const ALWAYS: ash::vk::CompareOp = ash::vk::CompareOp::ALWAYS;
+    }
+
+    #[rhai_mod(name = "Filter")]
+    pub mod filter {
+        pub const NEAREST: ash::vk::Filter = ash::vk::Filter::NEAREST;
+        pub const LINEAR: ash::vk::Filter = ash::vk::Filter::LINEAR;
+    }
+
+    #[rhai_mod(name = "SamplerMipmapMode")]
+    pub mod sampler_mipmap_mode {
+        pub const NEAREST: ash::vk::SamplerMipmapMode =
+            ash::vk::SamplerMipmapMode::NEAREST;
+        pub const LINEAR: ash::vk::SamplerMipmapMode =
+            ash::vk::SamplerMipmapMode::LINEAR;
+    }
+
+    #[rhai_mod(name = "SamplerAddressMode")]
+    pub mod sampler_address_mode {
+        pub const REPEAT: ash::vk::SamplerAddressMode =
+            ash::vk::SamplerAddressMode::REPEAT;
+        pub const MIRRORED_REPEAT: ash::vk::SamplerAddressMode =
+            ash::vk::SamplerAddressMode::MIRRORED_REPEAT;
+        pub const CLAMP_TO_EDGE: ash::vk::SamplerAddressMode =
+            ash::vk::SamplerAddressMode::CLAMP_TO_EDGE;
+        pub const CLAMP_TO_BORDER: ash::vk::SamplerAddressMode =
+            ash::vk::SamplerAddressMode::CLAMP_TO_BORDER;
+    }
+
+    #[rhai_mod(name = "BorderColor")]
+    pub mod border_color {
+        pub const FLOAT_TRANSPARENT_BLACK: ash::vk::BorderColor =
+            ash::vk::BorderColor::FLOAT_TRANSPARENT_BLACK;
+        pub const INT_TRANSPARENT_BLACK: ash::vk::BorderColor =
+            ash::vk::BorderColor::INT_TRANSPARENT_BLACK;
+        pub const FLOAT_OPAQUE_BLACK: ash::vk::BorderColor =
+            ash::vk::BorderColor::FLOAT_OPAQUE_BLACK;
+        pub const INT_OPAQUE_BLACK: ash::vk::BorderColor =
+            ash::vk::BorderColor::INT_OPAQUE_BLACK;
+        pub const FLOAT_OPAQUE_WHITE: ash::vk::BorderColor =
+            ash::vk::BorderColor::FLOAT_OPAQUE_WHITE;
+        pub const INT_OPAQUE_WHITE: ash::vk::BorderColor =
+            ash::vk::BorderColor::INT_OPAQUE_WHITE;
+    }
+
     #[rhai_mod(name = "BufferUsageFlags")]
     pub mod buffer_usage {
 
