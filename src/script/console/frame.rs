@@ -7,7 +7,7 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::vk::descriptor::BindingDesc;
+use crate::vk::descriptor::{BindingDesc, DescriptorUpdateBuilder};
 use crate::vk::resource::index::*;
 use crate::vk::{context::VkContext, GpuResources};
 
@@ -106,6 +106,30 @@ impl<T: Copy> Resolvable<T> {
 pub struct BindableVar {
     pub(crate) ty: TypeId,
     pub(crate) value: Arc<AtomicCell<Option<rhai::Dynamic>>>,
+}
+
+pub fn try_get_var<T: Copy + std::any::Any + 'static>(
+    val: &rhai::Dynamic,
+) -> Option<T> {
+    let ty = val.type_id();
+
+    if ty == TypeId::of::<BindableVar>() {
+        let var: BindableVar = val.clone_cast();
+        if var.ty == TypeId::of::<T>() {
+            let val = var.value.take();
+            var.value.store(val.clone());
+            return val.and_then(|v| v.try_cast());
+        } else {
+            return None;
+        }
+    }
+
+    if ty == TypeId::of::<Resolvable<T>>() {
+        let res: Resolvable<T> = val.clone_cast();
+        return res.get();
+    }
+
+    None
 }
 
 #[derive(Default)]
@@ -492,8 +516,7 @@ impl FrameBuilder {
         )
     }
 
-    /*
-    pub fn create_desc_set_(
+    pub fn create_desc_set(
         &mut self,
         shader: ShaderIx,
         set: u32,
@@ -502,47 +525,76 @@ impl FrameBuilder {
         let priority = Priority::primary(ResolveOrder::DescriptorSet);
         use anyhow::anyhow;
 
-        #[rustfmt::skip]
-    macro_rules! get_and_cast {
-        ($map:ident, $field:literal, $type:ty) => {
-            {
-                let val = $map.get($field).unwrap();
+        fn append_input(
+            res: &GpuResources,
+            builder: &mut DescriptorUpdateBuilder,
+            input: &rhai::Map,
+        ) -> Result<()> {
+            use ash::vk::DescriptorType as Ty;
+            let binding = input
+                .get("binding")
+                .and_then(|b| b.as_int().ok())
+                .ok_or(anyhow!("input lacks binding field"))?;
 
-                if val.type_id() == TypeId::of::<BindableVar>() {
-                    let var = val.clone_cast::<BindableVar>();
-                    let bufdyn = var.value.take();
-                    var.value.store(bufdyn.clone());
-                    let res =
-                        bufdyn.unwrap().cast::<$type>();
-                    res
-                } else {
-                    let res = val.clone_cast::<Resolvable<$type>>();
-                    res.get_unwrap()
-                }
+            let binding = binding as u32;
+
+            let ty = builder
+                .binding_desc_type(binding)
+                .ok_or(anyhow!("descriptor set lacks binding {}", binding))?;
+
+            if let Some(buf_ix) =
+                input.get("buffer").and_then(|b| try_get_var::<BufferIx>(b))
+            {
+                let buffer = &res[buf_ix];
+                let buf_info = ash::vk::DescriptorBufferInfo::builder()
+                    .buffer(buffer.buffer)
+                    .offset(0)
+                    .range(ash::vk::WHOLE_SIZE)
+                    .build();
+
+                let buffer_info = [buf_info];
+                builder.bind_buffer(binding, &buffer_info);
             }
-        };
-    }
+
+            if let Some(img_view_ix) = input
+                .get("image_view")
+                .and_then(|b| try_get_var::<ImageViewIx>(b))
+            {
+                let layout = if ty == Ty::STORAGE_IMAGE {
+                    ash::vk::ImageLayout::GENERAL
+                } else {
+                    ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+                };
+
+                let (view, _) = res[img_view_ix];
+                let img_info = ash::vk::DescriptorImageInfo::builder()
+                    .image_layout(layout)
+                    .image_view(view)
+                    .build();
+
+                builder.bind_image(binding, &[img_info]);
+            }
+
+            Ok(())
+        }
 
         self.add_resolvable(
             priority,
             move |_ctx: &VkContext,
                   res: &mut GpuResources,
                   _alloc: &mut Allocator| {
-                res.allocate_desc_set(shader, set, |builder| {
+                res.allocate_desc_set(shader, set, |res, builder| {
                     for input in inputs {
-
+                        append_input(res, builder, &input)?;
                     }
 
                     Ok(())
                 })
-
-                // res.allocate_desc_set_dyn(stage_flags, &set_info, &inputs)
             },
         )
     }
-    */
 
-    pub fn create_desc_set(
+    pub fn create_desc_set_old(
         &mut self,
         stage_flags: ash::vk::ShaderStageFlags,
         set_info: BTreeMap<u32, rspirv_reflect::DescriptorInfo>,

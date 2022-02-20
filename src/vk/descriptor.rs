@@ -450,6 +450,15 @@ impl DescriptorUpdateBuilder {
         }
     }
 
+    pub fn binding_desc_type(
+        &self,
+        binding: u32,
+    ) -> Option<vk::DescriptorType> {
+        let info = self.set_info.get(&binding)?;
+        let ash_ty = vk::DescriptorType::from_raw(info.ty.0 as i32);
+        Some(ash_ty)
+    }
+
     pub fn bind_buffer(
         &mut self,
         binding: u32,
