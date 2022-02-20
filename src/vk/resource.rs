@@ -209,7 +209,7 @@ impl GpuResources {
         write_builder: F,
     ) -> Result<DescSetIx>
     where
-        F: FnOnce(&mut DescriptorUpdateBuilder),
+        F: FnOnce(&mut DescriptorUpdateBuilder) -> Result<()>,
     {
         let layout_info = self[shader_ix].set_layout_info(set)?;
 
