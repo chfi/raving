@@ -19,7 +19,7 @@ use super::{
     context::VkContext,
     descriptor::{
         BindingDesc, DescriptorAllocator, DescriptorBuilder,
-        DescriptorLayoutCache, DescriptorLayoutInfo,
+        DescriptorLayoutCache, DescriptorLayoutInfo, DescriptorUpdateBuilder,
     },
     VkEngine,
 };
@@ -51,6 +51,7 @@ pub struct GpuResources {
 
 #[derive(Clone)]
 pub struct ShaderInfo {
+    // name: String,
     spirv: Vec<u32>,
 
     set_infos: BTreeMap<u32, BTreeMap<u32, DescriptorInfo>>,
@@ -199,6 +200,42 @@ impl GpuResources {
         let fence = unsafe { ctx.device().create_fence(&fence_info, None) }?;
         let ix = self.fences.insert(fence);
         Ok(FenceIx(ix))
+    }
+
+    pub fn allocate_desc_set<F>(
+        &mut self,
+        shader_ix: ShaderIx,
+        set: u32,
+        write_builder: F,
+    ) -> Result<DescSetIx>
+    where
+        F: FnOnce(&mut DescriptorUpdateBuilder),
+    {
+        let layout_info = self[shader_ix].set_layout_info(set)?;
+
+        let layout =
+            self.layout_cache.get_descriptor_layout_new(&layout_info)?;
+
+        let desc_set = self.descriptor_allocator.allocate(layout)?;
+
+        let set_info = self[shader_ix].set_infos.get(&set).ok_or(anyhow!(
+            "Tried to allocate descriptor set {} for incompatible shader",
+            set
+        ))?;
+
+        let mut builder = DescriptorUpdateBuilder::new(set_info);
+
+        write_builder(&mut builder);
+
+        builder.apply(
+            &mut self.layout_cache,
+            &mut self.descriptor_allocator,
+            desc_set,
+        );
+
+        let ix = self.descriptor_sets.insert(desc_set);
+
+        Ok(DescSetIx(ix))
     }
 
     pub fn allocate_desc_set_dyn(

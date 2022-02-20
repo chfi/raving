@@ -37,18 +37,7 @@ void main() {
 
   // vec4 color = vec4(local_pos.x
 
-  float xxx = 3.1;
-  double tau = 2.0 * xxx;
-
-  float taauu = float(2) * 3.1415;
-
-  uint xx = global.x + 20;
-  uint yy = uint(global.y) + 5;
-
-  uvec2 aoeu = uvec2(xx, yy);
-
-  ivec2 pixel = ivec2(aoeu);
-  // ivec2 pixel = global;
+  ivec2 pixel = global;
 
   // imageStore(image_out, pixel,
 

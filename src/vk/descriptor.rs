@@ -520,6 +520,23 @@ impl DescriptorUpdateBuilder {
 
         Some(self)
     }
+
+    pub(super) fn apply(
+        mut self,
+        layout_cache: &mut DescriptorLayoutCache,
+        allocator: &mut DescriptorAllocator,
+        set: vk::DescriptorSet,
+    ) {
+        self.writes.iter_mut().for_each(|w| {
+            w.dst_set = set;
+        });
+
+        unsafe {
+            allocator
+                .device
+                .update_descriptor_sets(self.writes.as_slice(), &[]);
+        }
+    }
 }
 
 impl DescriptorBuilder {
