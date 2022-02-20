@@ -14,48 +14,6 @@ pub mod vk {
 
     use ash::vk;
 
-    pub mod pipeline {
-        use crate::vk::descriptor::BindingDesc;
-
-        pub struct ComputePipeline {
-            name: String,
-            src_path: String,
-
-            pipeline: PipelineIx,
-
-            bindings: Vec<BindingDesc>,
-            pc_size: u64,
-        }
-    }
-
-    pub mod binding {
-        use crate::vk::descriptor::BindingDesc;
-
-        pub fn storage_image(binding: i64) -> BindingDesc {
-            BindingDesc::StorageImage {
-                binding: binding as u32,
-            }
-        }
-
-        pub fn sampled_image(binding: i64) -> BindingDesc {
-            BindingDesc::SampledImage {
-                binding: binding as u32,
-            }
-        }
-
-        pub fn storage_buffer(binding: i64) -> BindingDesc {
-            BindingDesc::StorageBuffer {
-                binding: binding as u32,
-            }
-        }
-
-        pub fn uniform_buffer(binding: i64) -> BindingDesc {
-            BindingDesc::UniformBuffer {
-                binding: binding as u32,
-            }
-        }
-    }
-
     #[rhai_mod(name = "BufferUsageFlags")]
     pub mod buffer_usage {
 
