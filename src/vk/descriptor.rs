@@ -398,7 +398,10 @@ impl DescriptorUpdateBuilder {
 
         if !matches!(
             info.ty,
-            Ty::STORAGE_IMAGE | Ty::SAMPLED_IMAGE | Ty::COMBINED_IMAGE_SAMPLER,
+            Ty::SAMPLER
+                | Ty::STORAGE_IMAGE
+                | Ty::SAMPLED_IMAGE
+                | Ty::COMBINED_IMAGE_SAMPLER,
         ) {
             return None;
         }

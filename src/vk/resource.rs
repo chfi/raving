@@ -227,11 +227,13 @@ impl GpuResources {
 
         write_builder(self, &mut builder)?;
 
+        log::warn!("applying builder");
         builder.apply(
             &mut self.layout_cache,
             &mut self.descriptor_allocator,
             desc_set,
         );
+        log::warn!("applied builder");
 
         let ix = self.descriptor_sets.insert(desc_set);
 
