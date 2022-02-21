@@ -508,6 +508,43 @@ impl VkEngine {
         };
     }
 
+    pub fn submit_batches_fence_alt(
+        &mut self,
+        batches: &[&dyn Fn(
+            &VkContext,
+            &mut GpuResources,
+            &mut Allocator,
+            vk::CommandBuffer,
+        ) -> anyhow::Result<()>],
+    ) -> Result<FenceIx> {
+        let cmd = self.allocate_command_buffer()?;
+
+        let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            self.context
+                .device()
+                .begin_command_buffer(cmd, &cmd_begin_info)?;
+        }
+
+        let ctx = &self.context;
+        let dev = ctx.device();
+
+        let res = &mut self.resources;
+        let alloc = &mut self.allocator;
+
+        for batch in batches.iter() {
+            batch(ctx, res, alloc, cmd)?;
+        }
+
+        unsafe { dev.end_command_buffer(cmd) }?;
+
+        let fence_ix = self.submit_queue(cmd)?;
+
+        Ok(fence_ix)
+    }
+
     pub fn submit_batches_fence(
         &mut self,
         batches: &[Arc<
