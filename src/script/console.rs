@@ -427,6 +427,31 @@ pub fn create_batch_engine() -> rhai::Engine {
         },
     );
 
+    engine.register_result_fn(
+        "dispatch_compute",
+        |builder: &mut BatchBuilder,
+         pipeline: PipelineIx,
+         desc_set: DescSetIx,
+         push_constants: Vec<u8>,
+         groups: rhai::Map| {
+             let get = |name: &str| {
+                 let field = groups.get(name).ok_or(
+"`groups` map must have integer fields `x_groups`, `y_groups`, `z_groups`".into())?;
+                 field.as_int()
+             };
+
+             builder.dispatch_compute(
+                 pipeline,
+                 desc_set,
+                 push_constants,
+                 get("x_groups")?,
+                 get("y_groups")?,
+                 get("z_groups")?
+             );
+             Ok(())
+        },
+    );
+
     engine
 }
 

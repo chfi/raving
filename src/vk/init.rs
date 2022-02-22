@@ -14,7 +14,9 @@ use std::ffi::{CStr, CString};
 
 use anyhow::Result;
 
-use super::{context::*, debug::*, SwapchainProperties, SwapchainSupportDetails};
+use super::{
+    context::*, debug::*, SwapchainProperties, SwapchainSupportDetails,
+};
 
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -67,7 +69,10 @@ pub(super) fn instance_extensions(entry: &Entry) -> Result<InstanceExtensions> {
 }
 */
 
-pub(super) fn create_instance(entry: &Entry, window: &Window) -> Result<Instance> {
+pub(super) fn create_instance(
+    entry: &Entry,
+    window: &Window,
+) -> Result<Instance> {
     log::debug!("Creating instance");
     let app_name = CString::new("Gfaestus")?;
 
@@ -79,7 +84,8 @@ pub(super) fn create_instance(entry: &Entry, window: &Window) -> Result<Instance
         .api_version(vk::make_api_version(0, 1, 0, 0))
         .build();
 
-    let extension_names = ash_window::enumerate_required_extensions(window).unwrap();
+    let extension_names =
+        ash_window::enumerate_required_extensions(window).unwrap();
     log::debug!("Enumerated required instance extensions");
     let mut extension_names = extension_names
         .iter()
@@ -90,7 +96,8 @@ pub(super) fn create_instance(entry: &Entry, window: &Window) -> Result<Instance
         extension_names.push(DebugUtils::name().as_ptr());
     }
 
-    let phys_device_properties2 = CString::new("VK_KHR_get_physical_device_properties2")?;
+    let phys_device_properties2 =
+        CString::new("VK_KHR_get_physical_device_properties2")?;
     extension_names.push(phys_device_properties2.as_ptr());
 
     log::debug!("getting layer names and pointers");
@@ -102,7 +109,8 @@ pub(super) fn create_instance(entry: &Entry, window: &Window) -> Result<Instance
 
     if super::debug::ENABLE_VALIDATION_LAYERS {
         check_validation_layer_support(&entry);
-        instance_create_info = instance_create_info.enabled_layer_names(&layer_names_ptrs);
+        instance_create_info =
+            instance_create_info.enabled_layer_names(&layer_names_ptrs);
     }
 
     for ext in extension_names.iter() {
@@ -110,7 +118,8 @@ pub(super) fn create_instance(entry: &Entry, window: &Window) -> Result<Instance
         log::debug!("Loading instance extension {:?}", name);
     }
 
-    let instance = unsafe { entry.create_instance(&instance_create_info, None) }?;
+    let instance =
+        unsafe { entry.create_instance(&instance_create_info, None) }?;
 
     Ok(instance)
 }
@@ -125,10 +134,15 @@ pub(super) fn find_queue_families(
     let mut present_ix: Option<u32> = None;
     let mut compute_ix: Option<u32> = None;
 
-    let props = unsafe { instance.get_physical_device_queue_family_properties(device) };
+    let props =
+        unsafe { instance.get_physical_device_queue_family_properties(device) };
 
-    for (ix, family) in props.iter().filter(|fam| fam.queue_count > 0).enumerate() {
-        if family.queue_flags.contains(vk::QueueFlags::GRAPHICS) && graphics_ix.is_none() {
+    for (ix, family) in
+        props.iter().filter(|fam| fam.queue_count > 0).enumerate()
+    {
+        if family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+            && graphics_ix.is_none()
+        {
             graphics_ix = Some(ix as u32);
         }
 
@@ -139,14 +153,20 @@ pub(super) fn find_queue_families(
             compute_ix = Some(ix as u32);
         }
 
-        let supports_present =
-            unsafe { surface.get_physical_device_surface_support(device, ix as u32, surface_khr) }?;
+        let supports_present = unsafe {
+            surface.get_physical_device_surface_support(
+                device,
+                ix as u32,
+                surface_khr,
+            )
+        }?;
 
         if supports_present && present_ix.is_none() {
             present_ix = Some(ix as u32);
         }
 
-        if graphics_ix.is_some() && present_ix.is_some() && compute_ix.is_some() {
+        if graphics_ix.is_some() && present_ix.is_some() && compute_ix.is_some()
+        {
             break;
         }
     }
@@ -164,7 +184,8 @@ pub(super) fn device_supports_extensions(
 ) -> Result<bool> {
     let required_exts = required_device_extensions();
 
-    let extension_props = unsafe { instance.enumerate_device_extension_properties(device) }?;
+    let extension_props =
+        unsafe { instance.enumerate_device_extension_properties(device) }?;
 
     let mut result = true;
 
@@ -208,7 +229,8 @@ pub(super) fn device_is_suitable(
     }
 
     let swapchain_adequate = {
-        let details = SwapchainSupportDetails::new(device, surface, surface_khr)?;
+        let details =
+            SwapchainSupportDetails::new(device, surface, surface_khr)?;
         !details.formats.is_empty() && !details.present_modes.is_empty()
     };
 
@@ -245,7 +267,8 @@ pub(super) fn choose_physical_device(
                     CStr::from_ptr(props.device_name.as_ptr())
                 };
                 (name == device_name.as_c_str())
-                    && device_is_suitable(instance, surface, surface_khr, *dev).unwrap()
+                    && device_is_suitable(instance, surface, surface_khr, *dev)
+                        .unwrap()
             })
             .expect("No suitable physical device found!");
 
@@ -265,7 +288,10 @@ pub(super) fn choose_physical_device(
         devices
             .into_iter()
             .enumerate()
-            .find(|(_ix, dev)| device_is_suitable(instance, surface, surface_khr, *dev).unwrap())
+            .find(|(_ix, dev)| {
+                device_is_suitable(instance, surface, surface_khr, *dev)
+                    .unwrap()
+            })
             .expect("No suitable physical device found!")
     };
 
@@ -344,7 +370,10 @@ pub(super) fn create_swapchain_and_images(
             .image_color_space(props.format.color_space)
             .image_extent(props.extent)
             .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
+            .image_usage(
+                vk::ImageUsageFlags::COLOR_ATTACHMENT
+                    | vk::ImageUsageFlags::TRANSFER_DST,
+            )
             .image_sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         builder
@@ -356,7 +385,8 @@ pub(super) fn create_swapchain_and_images(
     };
 
     let swapchain = Swapchain::new(vk_context.instance(), vk_context.device());
-    let swapchain_khr = unsafe { swapchain.create_swapchain(&create_info, None) }?;
+    let swapchain_khr =
+        unsafe { swapchain.create_swapchain(&create_info, None) }?;
     let images = unsafe { swapchain.get_swapchain_images(swapchain_khr) }?;
 
     Ok((swapchain, swapchain_khr, props, images))
@@ -422,7 +452,8 @@ pub(super) fn create_logical_device(
         .map(|ext| ext.as_ptr())
         .collect::<Vec<_>>();
 
-    let available_features = unsafe { instance.get_physical_device_features(device) };
+    let available_features =
+        unsafe { instance.get_physical_device_features(device) };
 
     let mut device_features = vk::PhysicalDeviceFeatures::builder()
         .sampler_anisotropy(true)
@@ -452,7 +483,8 @@ pub(super) fn create_logical_device(
 
     let device_create_info = device_create_info_builder.build();
 
-    let device = unsafe { instance.create_device(device, &device_create_info, None) }?;
+    let device =
+        unsafe { instance.create_device(device, &device_create_info, None) }?;
 
     let graphics_queue = unsafe { device.get_device_queue(graphics_ix, 0) };
     // let present_queue = unsafe { device.get_device_queue(present_ix, 0) };
@@ -479,7 +511,10 @@ pub(super) fn find_memory_type(
     panic!("Failed to find suitable memory type");
 }
 
-fn device_supports_features(instance: &Instance, device: vk::PhysicalDevice) -> Result<bool> {
+fn device_supports_features(
+    instance: &Instance,
+    device: vk::PhysicalDevice,
+) -> Result<bool> {
     let features = unsafe { instance.get_physical_device_features(device) };
 
     let mut result = true;

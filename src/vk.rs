@@ -647,7 +647,7 @@ impl VkEngine {
             match result {
                 Ok((img_index, _)) => img_index,
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    log::warn!("error out of date");
+                    log::warn!("Swapchain out of date");
                     return Ok(false);
                 }
                 Err(error) => bail!(

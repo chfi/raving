@@ -10,7 +10,7 @@ layout (push_constant) uniform Inputs {
 } inputs;
 
 layout (set = 0, binding = 0) uniform sampler u_sampler;
-layout (set = 0, binding = 1) uniform texture2D u_file_img;
+layout (set = 0, binding = 1) uniform texture2D u_image_in;
 
 layout (rgba8, set = 0, binding = 2) writeonly uniform image2D image_out;
 
@@ -27,12 +27,9 @@ void main() {
 
   ivec2 dst = global + inputs.dst_offset;
 
-  float norm_x = float(global.x) / float(inputs.dst_width);
-  float norm_y = float(global.y) / float(inputs.dst_height);
+  vec2 src = vec2(global.x, global.y) / vec2(inputs.dst_width, inputs.dst_height);
 
-  vec2 src = vec2(norm_x, norm_y);
-
-  vec4 color = texture(sampler2D(u_file_img, u_sampler), src);
+  vec4 color = texture(sampler2D(u_image_in, u_sampler), src);
 
   if (color.a != 0.0) {
       imageStore(image_out, dst, color.bgra);

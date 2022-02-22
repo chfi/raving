@@ -227,13 +227,11 @@ impl GpuResources {
 
         write_builder(self, &mut builder)?;
 
-        log::warn!("applying builder");
         builder.apply(
             &mut self.layout_cache,
             &mut self.descriptor_allocator,
             desc_set,
         );
-        log::warn!("applied builder");
 
         let ix = self.descriptor_sets.insert(desc_set);
 
@@ -585,8 +583,6 @@ impl BufferRes {
         let staging_usage = vk::BufferUsageFlags::TRANSFER_SRC;
         let location = MemoryLocation::CpuToGpu;
 
-        log::warn!("src: {:?}", src);
-
         let len = src.len().min(self.size_bytes());
 
         let mut staging = Self::allocate_for_type::<u8>(
@@ -599,8 +595,6 @@ impl BufferRes {
         )?;
 
         if let Some(stg) = staging.alloc.mapped_slice_mut() {
-            log::warn!("src.len() {}", src.len());
-            log::warn!("stg.len() {}", stg.len());
             stg[..src.len()].clone_from_slice(src);
         } else {
             bail!("couldn't map staging buffer memory");
@@ -737,7 +731,6 @@ impl ImageRes {
         let bytes = pixel_bytes.into_iter().collect::<Vec<_>>();
 
         if let Some(stg) = staging.alloc.mapped_slice_mut() {
-            log::warn!("in mapped slice!");
             stg.clone_from_slice(&bytes);
         } else {
             bail!("couldn't map staging buffer memory");
