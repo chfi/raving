@@ -42,7 +42,8 @@ pub struct GpuResources {
     buffers: Arena<BufferRes>,
 
     images: Arena<ImageRes>,
-    image_views: Arena<(vk::ImageView, ImageIx)>,
+    // image_views: Arena<(vk::ImageView, ImageIx)>,
+    image_views: Arena<vk::ImageView>,
     samplers: Arena<vk::Sampler>,
 
     semaphores: Arena<vk::Semaphore>,
@@ -138,6 +139,34 @@ impl GpuResources {
         let ix = self.buffers.insert(buffer);
         BufferIx(ix)
     }
+
+    pub fn insert_buffer_at(
+        &mut self,
+        ctx: &VkContext,
+        alloc: &mut Allocator,
+        buffer: BufferRes,
+        ix: BufferIx,
+    ) -> Result<()> {
+        if let Some(_old_res) = self.buffers.insert_at(ix.0, buffer) {
+            self.free_buffer(ctx, alloc, ix)?;
+        }
+        Ok(())
+    }
+
+    /*
+    pub fn insert_image_at(
+        &mut self,
+        ctx: &VkContext,
+        alloc: &mut Allocator,
+        image: ImageRes,
+        ix: ImageIx,
+    ) -> Result<()> {
+        if let Some(_old_res) = self.images.insert_at(ix.0, image) {
+            self.free_image(ctx, alloc, ix)?;
+        }
+        Ok(())
+    }
+    */
 
     pub fn allocate_buffer(
         &mut self,
@@ -248,7 +277,7 @@ impl GpuResources {
         ))?;
 
         let view = img.create_image_view(ctx)?;
-        let ix = self.image_views.insert((view, image_ix));
+        let ix = self.image_views.insert(view);
 
         Ok(ImageViewIx(ix))
     }
@@ -476,7 +505,7 @@ impl GpuResources {
             }
         }
 
-        for (_ix, &(view, _)) in self.image_views.iter() {
+        for (_ix, &view) in self.image_views.iter() {
             unsafe {
                 device.destroy_image_view(view, None);
             }

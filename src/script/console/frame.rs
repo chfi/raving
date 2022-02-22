@@ -570,7 +570,7 @@ impl FrameBuilder {
                     ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
                 };
 
-                let (view, _) = res[img_view_ix];
+                let view = res[img_view_ix];
 
                 let info = ash::vk::DescriptorImageInfo::builder()
                     .image_layout(layout)

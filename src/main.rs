@@ -1,8 +1,8 @@
-use engine::script::console::frame::FrameBuilder;
-use engine::script::console::BatchBuilder;
-use engine::vk::{BatchInput, FrameResources, GpuResources, VkEngine};
+use raving::script::console::frame::FrameBuilder;
+use raving::script::console::BatchBuilder;
+use raving::vk::{BatchInput, FrameResources, GpuResources, VkEngine};
 
-use engine::vk::util::*;
+use raving::vk::util::*;
 
 use ash::{vk, Device};
 
@@ -103,7 +103,7 @@ fn main() -> Result<()> {
     })?;
     log::warn!("is resolved: {}", builder.is_resolved());
 
-    let mut rhai_engine = engine::script::console::create_batch_engine();
+    let mut rhai_engine = raving::script::console::create_batch_engine();
 
     let arc_module = Arc::new(builder.module.clone());
 
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
         "init",
     );
 
-    let mut rhai_engine = engine::script::console::create_batch_engine();
+    let mut rhai_engine = raving::script::console::create_batch_engine();
     rhai_engine.register_static_module("self", arc_module.clone());
 
     let draw_background =
@@ -195,7 +195,7 @@ fn main() -> Result<()> {
                 let f_ix = engine.current_frame_number();
                 // dbg!(t);
                 // dbg!(f_ix);
-                let frame = &mut frames[f_ix % engine::vk::FRAME_OVERLAP];
+                let frame = &mut frames[f_ix % raving::vk::FRAME_OVERLAP];
 
                 let bg_batch = draw_background(800, 600).unwrap();
                 let bg_batch_fn = bg_batch.build();

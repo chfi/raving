@@ -80,7 +80,7 @@ impl std::ops::Index<SamplerIx> for GpuResources {
 }
 
 impl std::ops::Index<ImageViewIx> for GpuResources {
-    type Output = (vk::ImageView, ImageIx);
+    type Output = vk::ImageView;
 
     fn index(&self, i: ImageViewIx) -> &Self::Output {
         &self.image_views[i.0]

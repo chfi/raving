@@ -540,40 +540,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
-name = "engine"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ash",
- "ash-window",
- "bstr",
- "bytemuck",
- "colorous",
- "crossbeam",
- "flexi_logger",
- "futures",
- "futures-timer",
- "gpu-allocator",
- "image",
- "lazy_static",
- "log",
- "nalgebra",
- "nalgebra-glm",
- "nalgebra-sparse",
- "num_cpus",
- "parking_lot",
- "poll-promise",
- "rand",
- "rayon",
- "rgb",
- "rhai",
- "rspirv-reflect",
- "rustc-hash",
- "thunderdome",
- "winit",
-]
-
-[[package]]
 name = "flexi_logger"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1392,6 +1358,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
 dependencies = [
  "rand_core",
+]
+
+[[package]]
+name = "raving"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ash",
+ "ash-window",
+ "bstr",
+ "bytemuck",
+ "colorous",
+ "crossbeam",
+ "flexi_logger",
+ "futures",
+ "futures-timer",
+ "gpu-allocator",
+ "image",
+ "lazy_static",
+ "log",
+ "nalgebra",
+ "nalgebra-glm",
+ "nalgebra-sparse",
+ "num_cpus",
+ "parking_lot",
+ "poll-promise",
+ "rand",
+ "rayon",
+ "rgb",
+ "rhai",
+ "rspirv-reflect",
+ "rustc-hash",
+ "thunderdome",
+ "winit",
 ]
 
 [[package]]
