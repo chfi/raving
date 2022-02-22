@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 ash = { version = "0.35", features = ["linked"] }
-ash-window = "0.9"
-gpu-allocator = { version = "0.15", features = ["vulkan"] }
+ash-window = "0.9.1"
+gpu-allocator = { version = "0.16", features = ["vulkan"] }
 rspirv-reflect = "0.6"
 
 winit = "0.25"
