@@ -159,8 +159,7 @@ impl VkEngine {
             device,
         )?;
 
-        let width = 800u32;
-        let height = 600u32;
+        let winit::dpi::PhysicalSize { width, height } = window.inner_size();
 
         let (swapchain, swapchain_khr, swapchain_props, images) =
             init::create_swapchain_and_images(

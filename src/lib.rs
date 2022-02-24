@@ -1,3 +1,4 @@
+pub mod texture;
 pub mod vk;
 
 pub mod script;

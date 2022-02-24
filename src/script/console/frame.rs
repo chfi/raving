@@ -140,13 +140,13 @@ pub fn try_get_var<T: Copy + std::any::Any + 'static>(
 }
 
 #[derive(Default)]
-pub struct FrameBuilder<'a> {
+pub struct FrameBuilder {
     resolvers: BTreeMap<Priority, Vec<ResolverFn>>,
     variables: HashMap<String, BindableVar>,
     // variables: HashMap
     pub ast: rhai::AST,
     pub module: rhai::Module,
-
+    /*
     swapchain_dependent_images:
         FxHashMap<ImageIx, WithAllocatorsInput<[u32; 2], ImageRes>>,
     swapchain_dependent_image_views: FxHashMap<
@@ -157,6 +157,7 @@ pub struct FrameBuilder<'a> {
     // not sure about the input type here
     swapchain_dependent_desc_sets:
         FxHashMap<DescSetIx, WithAllocatorsInput<(), ash::vk::DescriptorSet>>,
+    */
 }
 
 impl FrameBuilder {
