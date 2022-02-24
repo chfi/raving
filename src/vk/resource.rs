@@ -280,6 +280,44 @@ impl GpuResources {
 
     //// Image view methods
 
+    pub fn new_image_view(
+        &mut self,
+        ctx: &VkContext,
+        image: &ImageRes,
+    ) -> Result<vk::ImageView> {
+        let view = image.create_image_view(ctx)?;
+        Ok(view)
+    }
+
+    pub fn insert_image_view(
+        &mut self,
+        image_view: vk::ImageView,
+    ) -> ImageViewIx {
+        let ix = self.image_views.insert(image_view);
+        ImageViewIx(ix)
+    }
+
+    #[must_use = "If a vk::ImageView is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn take_image_view(
+        &mut self,
+        ix: ImageViewIx,
+    ) -> Option<vk::ImageView> {
+        self.image_views.remove(ix.0)
+    }
+
+    #[must_use = "If a vk::ImageView is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn recreate_image_view(
+        &mut self,
+        ctx: &VkContext,
+        image_ix: ImageIx,
+        image_view_ix: ImageViewIx,
+    ) -> Result<Option<vk::ImageView>> {
+        let image = &self[image_ix];
+        let new_view = self.new_image_view(ctx, image)?;
+        let old_view = self.image_views.insert_at(image_view_ix.0, new_view);
+        Ok(old_view)
+    }
+
     //// Shader methods
 
     //// Pipeline methods
