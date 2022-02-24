@@ -9,6 +9,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use crate::vk::descriptor::DescriptorUpdateBuilder;
 use crate::vk::resource::index::*;
+use crate::vk::FrameResources;
 use crate::vk::{context::VkContext, GpuResources};
 
 // i'll likely replace this with a custom error type; this alias
@@ -20,6 +21,17 @@ pub type ResolverFn = Box<
         + Send
         + Sync,
 >;
+
+#[derive(Debug, Clone)]
+pub struct Resolvable<T: Copy> {
+    pub(super) value: Arc<AtomicCell<Option<T>>>,
+    pub(super) priority: Priority,
+}
+
+pub struct RhaiFrame {
+    resources: FrameResources,
+    builder: FrameBuilder,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u64)]
@@ -85,13 +97,6 @@ impl Priority {
         self.secondary
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct Resolvable<T: Copy> {
-    pub(super) value: Arc<AtomicCell<Option<T>>>,
-    pub(super) priority: Priority,
-}
-
 impl<T: Copy> Resolvable<T> {
     pub fn get(&self) -> Option<T> {
         self.value.load()

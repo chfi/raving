@@ -135,23 +135,71 @@ impl GpuResources {
         Ok(result)
     }
 
+    //// Buffer methods
+
+    pub fn allocate_buffer(
+        &mut self,
+        ctx: &VkContext,
+        allocator: &mut Allocator,
+        location: gpu_allocator::MemoryLocation,
+        elem_size: usize,
+        len: usize,
+        usage: vk::BufferUsageFlags,
+        name: Option<&str>,
+    ) -> Result<BufferRes> {
+        let buffer = BufferRes::allocate(
+            ctx, allocator, location, usage, elem_size, len, name,
+        )?;
+
+        if let Some(name) = name {
+            VkEngine::set_debug_object_name(ctx, buffer.buffer, name)?;
+        }
+
+        Ok(buffer)
+    }
+
     pub fn insert_buffer(&mut self, buffer: BufferRes) -> BufferIx {
         let ix = self.buffers.insert(buffer);
         BufferIx(ix)
     }
 
+    #[must_use = "If a BufferRes is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
     pub fn insert_buffer_at(
+        &mut self,
+        buffer: BufferRes,
+        ix: BufferIx,
+    ) -> Option<BufferRes> {
+        self.buffers.insert_at(ix.0, buffer)
+    }
+
+    #[must_use = "If a BufferRes is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn take_buffer(&mut self, ix: BufferIx) -> Option<BufferRes> {
+        self.buffers.remove(ix.0)
+    }
+
+    pub fn free_buffer(
         &mut self,
         ctx: &VkContext,
         alloc: &mut Allocator,
         buffer: BufferRes,
+    ) -> Result<()> {
+        buffer.cleanup(ctx, alloc)?;
+        Ok(())
+    }
+
+    pub fn destroy_buffer(
+        &mut self,
+        ctx: &VkContext,
+        alloc: &mut Allocator,
         ix: BufferIx,
     ) -> Result<()> {
-        if let Some(_old_res) = self.buffers.insert_at(ix.0, buffer) {
-            self.free_buffer(ctx, alloc, ix)?;
+        if let Some(buffer) = self.take_buffer(ix) {
+            self.free_buffer(ctx, alloc, buffer)?;
         }
         Ok(())
     }
+
+    //// Image methods
 
     /*
     pub fn insert_image_at(
@@ -168,29 +216,6 @@ impl GpuResources {
     }
     */
 
-    pub fn allocate_buffer(
-        &mut self,
-        ctx: &VkContext,
-        allocator: &mut Allocator,
-        location: gpu_allocator::MemoryLocation,
-        elem_size: usize,
-        len: usize,
-        usage: vk::BufferUsageFlags,
-        name: Option<&str>,
-    ) -> Result<BufferIx> {
-        let buffer = BufferRes::allocate(
-            ctx, allocator, location, usage, elem_size, len, name,
-        )?;
-
-        if let Some(name) = name {
-            VkEngine::set_debug_object_name(ctx, buffer.buffer, name)?;
-        }
-
-        let ix = self.buffers.insert(buffer);
-
-        Ok(BufferIx(ix))
-    }
-
     pub fn allocate_image(
         &mut self,
         ctx: &VkContext,
@@ -200,7 +225,7 @@ impl GpuResources {
         format: vk::Format,
         usage: vk::ImageUsageFlags,
         name: Option<&str>,
-    ) -> Result<ImageIx> {
+    ) -> Result<ImageRes> {
         let image = ImageRes::allocate_2d(
             ctx, allocator, width, height, format, usage, name,
         )?;
@@ -209,9 +234,59 @@ impl GpuResources {
             VkEngine::set_debug_object_name(ctx, image.image, name)?;
         }
 
-        let ix = self.images.insert(image);
-        Ok(ImageIx(ix))
+        Ok(image)
     }
+
+    pub fn insert_image(&mut self, image: ImageRes) -> ImageIx {
+        let ix = self.images.insert(image);
+        ImageIx(ix)
+    }
+
+    #[must_use = "If an ImageRes is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn insert_image_at(
+        &mut self,
+        image: ImageRes,
+        ix: ImageIx,
+    ) -> Option<ImageRes> {
+        self.images.insert_at(ix.0, image)
+    }
+
+    #[must_use = "If an ImageRes is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn take_image(&mut self, ix: ImageIx) -> Option<ImageRes> {
+        self.images.remove(ix.0)
+    }
+
+    pub fn free_image(
+        &mut self,
+        ctx: &VkContext,
+        alloc: &mut Allocator,
+        image: ImageRes,
+    ) -> Result<()> {
+        image.cleanup(ctx, alloc)?;
+        Ok(())
+    }
+
+    pub fn destroy_image(
+        &mut self,
+        ctx: &VkContext,
+        alloc: &mut Allocator,
+        ix: ImageIx,
+    ) -> Result<()> {
+        if let Some(image) = self.take_image(ix) {
+            self.free_image(ctx, alloc, image)?;
+        }
+        Ok(())
+    }
+
+    //// Image view methods
+
+    //// Shader methods
+
+    //// Pipeline methods
+
+    //// Descriptor set methods
+
+    //// Semaphores and fences
 
     pub fn allocate_semaphore(
         &mut self,
@@ -470,22 +545,6 @@ impl GpuResources {
         };
 
         Some(())
-    }
-
-    pub fn free_buffer(
-        &mut self,
-        ctx: &VkContext,
-        alloc: &mut Allocator,
-        ix: BufferIx,
-    ) -> Result<()> {
-        let buf_res = self
-            .buffers
-            .remove(ix.0)
-            .ok_or(anyhow!("Tried to free buffer that did not exist"))?;
-
-        buf_res.cleanup(ctx, alloc)?;
-
-        Ok(())
     }
 
     pub fn cleanup(
