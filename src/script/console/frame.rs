@@ -9,8 +9,10 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use crate::vk::descriptor::DescriptorUpdateBuilder;
 use crate::vk::resource::index::*;
-use crate::vk::FrameResources;
 use crate::vk::{context::VkContext, GpuResources};
+use crate::vk::{FrameResources, ImageRes};
+
+use super::WithAllocatorsInput;
 
 // i'll likely replace this with a custom error type; this alias
 // makes that easier in the future
@@ -138,12 +140,23 @@ pub fn try_get_var<T: Copy + std::any::Any + 'static>(
 }
 
 #[derive(Default)]
-pub struct FrameBuilder {
+pub struct FrameBuilder<'a> {
     resolvers: BTreeMap<Priority, Vec<ResolverFn>>,
     variables: HashMap<String, BindableVar>,
     // variables: HashMap
     pub ast: rhai::AST,
     pub module: rhai::Module,
+
+    swapchain_dependent_images:
+        FxHashMap<ImageIx, WithAllocatorsInput<[u32; 2], ImageRes>>,
+    swapchain_dependent_image_views: FxHashMap<
+        ImageViewIx,
+        WithAllocatorsInput<ImageIx, ash::vk::ImageView>,
+    >,
+
+    // not sure about the input type here
+    swapchain_dependent_desc_sets:
+        FxHashMap<DescSetIx, WithAllocatorsInput<(), ash::vk::DescriptorSet>>,
 }
 
 impl FrameBuilder {

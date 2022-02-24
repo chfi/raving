@@ -213,6 +213,68 @@ impl VkEngine {
         Ok(engine)
     }
 
+    pub fn cleanup_swapchain(&mut self) {
+        let device = self.device();
+        unsafe {
+            self.swapchain_image_views
+                .iter()
+                .for_each(|v| device.destroy_image_view(*v, None));
+
+            self.swapchain.destroy_swapchain(self.swapchain_khr, None);
+        }
+    }
+
+    pub fn wait_gpu_idle(&self) -> Result<()> {
+        unsafe { self.device().device_wait_idle() }?;
+        Ok(())
+    }
+
+    pub fn recreate_swapchain(
+        &mut self,
+        dimensions: Option<[u32; 2]>,
+    ) -> Result<()> {
+        // TODO should only wait on the present queue, when i've added
+        // multiple queue family support
+        self.wait_gpu_idle()?;
+
+        self.cleanup_swapchain();
+
+        let dimensions = dimensions.unwrap_or([
+            self.swapchain_props.extent.width,
+            self.swapchain_props.extent.height,
+        ]);
+
+        let graphics_ix = self.queues.thread.queue_family_index;
+
+        let (swapchain, swapchain_khr, swapchain_props, images) =
+            init::create_swapchain_and_images(
+                self.ctx(),
+                graphics_ix,
+                dimensions,
+            )?;
+
+        let swapchain_image_views = init::create_swapchain_image_views(
+            self.device(),
+            &images,
+            swapchain_props,
+        )?;
+
+        self.swapchain = swapchain;
+        self.swapchain_khr = swapchain_khr;
+        self.swapchain_props = swapchain_props;
+        self.swapchain_images = images;
+        self.swapchain_image_views = swapchain_image_views;
+
+        // (later) create render passes (render passes that depend on
+        // swapchain extent)
+
+        // recreate framebuffers?
+
+        // signal that resources should be recreated?
+
+        Ok(())
+    }
+
     pub fn allocate_command_buffer(&mut self) -> Result<vk::CommandBuffer> {
         let ctx = &self.context;
 

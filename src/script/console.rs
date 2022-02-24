@@ -16,6 +16,27 @@ pub mod frame;
 
 use frame::*;
 
+pub type WithAllocators<T> = Box<
+    dyn FnOnce(
+            &VkContext,
+            &mut GpuResources,
+            &mut Allocator,
+        ) -> anyhow::Result<T>
+        + Send
+        + Sync,
+>;
+
+pub type WithAllocatorsInput<I, T> = Arc<
+    dyn Fn(
+            I,
+            &VkContext,
+            &mut GpuResources,
+            &mut Allocator,
+        ) -> anyhow::Result<T>
+        + Send
+        + Sync,
+>;
+
 pub type BatchFn =
     Arc<dyn Fn(&ash::Device, &GpuResources, vk::CommandBuffer) + Send + Sync>;
 
@@ -450,13 +471,3 @@ pub fn create_batch_engine() -> rhai::Engine {
 
     engine
 }
-
-pub type WithAllocators<T> = Box<
-    dyn FnOnce(
-            &VkContext,
-            &mut GpuResources,
-            &mut Allocator,
-        ) -> anyhow::Result<T>
-        + Send
-        + Sync,
->;
