@@ -166,8 +166,8 @@ impl GpuResources {
     #[must_use = "If a BufferRes is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
     pub fn insert_buffer_at(
         &mut self,
-        buffer: BufferRes,
         ix: BufferIx,
+        buffer: BufferRes,
     ) -> Option<BufferRes> {
         self.buffers.insert_at(ix.0, buffer)
     }
@@ -245,8 +245,8 @@ impl GpuResources {
     #[must_use = "If an ImageRes is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
     pub fn insert_image_at(
         &mut self,
-        image: ImageRes,
         ix: ImageIx,
+        image: ImageRes,
     ) -> Option<ImageRes> {
         self.images.insert_at(ix.0, image)
     }
@@ -324,32 +324,13 @@ impl GpuResources {
 
     //// Descriptor set methods
 
-    //// Semaphores and fences
-
-    pub fn allocate_semaphore(
-        &mut self,
-        ctx: &VkContext,
-    ) -> Result<SemaphoreIx> {
-        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
-        let semaphore =
-            unsafe { ctx.device().create_semaphore(&semaphore_info, None) }?;
-        let ix = self.semaphores.insert(semaphore);
-        Ok(SemaphoreIx(ix))
-    }
-
-    pub fn allocate_fence(&mut self, ctx: &VkContext) -> Result<FenceIx> {
-        let fence_info = vk::FenceCreateInfo::builder().build();
-        let fence = unsafe { ctx.device().create_fence(&fence_info, None) }?;
-        let ix = self.fences.insert(fence);
-        Ok(FenceIx(ix))
-    }
-
     pub fn allocate_desc_set<F>(
         &mut self,
         shader_ix: ShaderIx,
         set: u32,
         write_builder: F,
-    ) -> Result<DescSetIx>
+        // ) -> Result<DescSetIx>
+    ) -> Result<vk::DescriptorSet>
     where
         F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
     {
@@ -375,9 +356,43 @@ impl GpuResources {
             desc_set,
         );
 
-        let ix = self.descriptor_sets.insert(desc_set);
+        Ok(desc_set)
+    }
 
-        Ok(DescSetIx(ix))
+    pub fn insert_desc_set(
+        &mut self,
+        desc_set: vk::DescriptorSet,
+    ) -> DescSetIx {
+        let ix = self.descriptor_sets.insert(desc_set);
+        DescSetIx(ix)
+    }
+
+    pub fn insert_desc_set_at(
+        &mut self,
+        ix: DescSetIx,
+        desc_set: vk::DescriptorSet,
+    ) -> Option<vk::DescriptorSet> {
+        self.descriptor_sets.insert_at(ix.0, desc_set)
+    }
+
+    //// Semaphores and fences
+
+    pub fn allocate_semaphore(
+        &mut self,
+        ctx: &VkContext,
+    ) -> Result<SemaphoreIx> {
+        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
+        let semaphore =
+            unsafe { ctx.device().create_semaphore(&semaphore_info, None) }?;
+        let ix = self.semaphores.insert(semaphore);
+        Ok(SemaphoreIx(ix))
+    }
+
+    pub fn allocate_fence(&mut self, ctx: &VkContext) -> Result<FenceIx> {
+        let fence_info = vk::FenceCreateInfo::builder().build();
+        let fence = unsafe { ctx.device().create_fence(&fence_info, None) }?;
+        let ix = self.fences.insert(fence);
+        Ok(FenceIx(ix))
     }
 
     pub fn create_image_view_for_image(
