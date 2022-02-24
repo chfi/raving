@@ -425,7 +425,7 @@ impl FrameBuilder {
             move |ctx: &VkContext,
                   res: &mut GpuResources,
                   alloc: &mut Allocator| {
-                res.allocate_buffer(
+                let buf = res.allocate_buffer(
                     ctx,
                     alloc,
                     location,
@@ -433,7 +433,8 @@ impl FrameBuilder {
                     size as usize,
                     usage,
                     name.as_ref().map(|s| s.as_str()),
-                )
+                )?;
+                Ok(res.insert_buffer(buf))
             },
         )
     }
@@ -452,7 +453,7 @@ impl FrameBuilder {
             move |ctx: &VkContext,
                   res: &mut GpuResources,
                   alloc: &mut Allocator| {
-                res.allocate_image(
+                let img = res.allocate_image(
                     ctx,
                     alloc,
                     width,
@@ -460,7 +461,8 @@ impl FrameBuilder {
                     format,
                     usage,
                     name.as_ref().map(|s| s.as_str()),
-                )
+                )?;
+                Ok(res.insert_image(img))
             },
         )
     }
@@ -478,7 +480,9 @@ impl FrameBuilder {
                   res: &mut GpuResources,
                   _: &mut Allocator| {
                 let image = image_ix.value.load().unwrap();
-                res.create_image_view_for_image(ctx, image)
+                let image = &res[image];
+                let image_view = res.new_image_view(ctx, image)?;
+                Ok(res.insert_image_view(image_view))
             },
         )
     }
@@ -491,7 +495,10 @@ impl FrameBuilder {
         let shader_path = path.to_string();
         self.add_resolvable(
             Priority::primary(ResolveOrder::Shader),
-            move |_ctx, res, _alloc| res.load_shader(&shader_path, stage_flags),
+            move |_ctx, res, _alloc| {
+                let shader = res.load_shader(&shader_path, stage_flags)?;
+                Ok(res.insert_shader(shader))
+            },
         )
     }
 
@@ -599,13 +606,15 @@ impl FrameBuilder {
                   res: &mut GpuResources,
                   _alloc: &mut Allocator| {
                 let shader = shader.value.load().unwrap();
-                res.allocate_desc_set(shader, set, |res, builder| {
-                    for input in inputs {
-                        append_input(res, builder, &input)?;
-                    }
+                let desc_set =
+                    res.allocate_desc_set(shader, set, |res, builder| {
+                        for input in inputs {
+                            append_input(res, builder, &input)?;
+                        }
 
-                    Ok(())
-                })
+                        Ok(())
+                    })?;
+                Ok(res.insert_desc_set(desc_set))
             },
         )
     }

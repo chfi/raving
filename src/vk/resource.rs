@@ -281,7 +281,7 @@ impl GpuResources {
     //// Image view methods
 
     pub fn new_image_view(
-        &mut self,
+        &self,
         ctx: &VkContext,
         image: &ImageRes,
     ) -> Result<vk::ImageView> {
@@ -318,103 +318,31 @@ impl GpuResources {
         Ok(old_view)
     }
 
+    //// Sampler methods
+
+    pub fn insert_sampler(
+        &mut self,
+        context: &VkContext,
+        sampler_info: vk::SamplerCreateInfo,
+    ) -> Result<SamplerIx> {
+        let sampler =
+            unsafe { context.device().create_sampler(&sampler_info, None) }?;
+        let ix = self.samplers.insert(sampler);
+        Ok(SamplerIx(ix))
+    }
+
+    #[must_use = "If a vk::Sampler is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn take_sampler(&mut self, ix: SamplerIx) -> Option<vk::Sampler> {
+        self.samplers.remove(ix.0)
+    }
+
     //// Shader methods
-
-    //// Pipeline methods
-
-    //// Descriptor set methods
-
-    pub fn allocate_desc_set<F>(
-        &mut self,
-        shader_ix: ShaderIx,
-        set: u32,
-        write_builder: F,
-        // ) -> Result<DescSetIx>
-    ) -> Result<vk::DescriptorSet>
-    where
-        F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
-    {
-        let layout_info = self[shader_ix].set_layout_info(set)?;
-
-        let layout =
-            self.layout_cache.get_descriptor_layout_new(&layout_info)?;
-
-        let desc_set = self.descriptor_allocator.allocate(layout)?;
-
-        let set_info = self[shader_ix].set_infos.get(&set).ok_or(anyhow!(
-            "Tried to allocate descriptor set {} for incompatible shader",
-            set
-        ))?;
-
-        let mut builder = DescriptorUpdateBuilder::new(set_info);
-
-        write_builder(self, &mut builder)?;
-
-        builder.apply(
-            &mut self.layout_cache,
-            &mut self.descriptor_allocator,
-            desc_set,
-        );
-
-        Ok(desc_set)
-    }
-
-    pub fn insert_desc_set(
-        &mut self,
-        desc_set: vk::DescriptorSet,
-    ) -> DescSetIx {
-        let ix = self.descriptor_sets.insert(desc_set);
-        DescSetIx(ix)
-    }
-
-    pub fn insert_desc_set_at(
-        &mut self,
-        ix: DescSetIx,
-        desc_set: vk::DescriptorSet,
-    ) -> Option<vk::DescriptorSet> {
-        self.descriptor_sets.insert_at(ix.0, desc_set)
-    }
-
-    //// Semaphores and fences
-
-    pub fn allocate_semaphore(
-        &mut self,
-        ctx: &VkContext,
-    ) -> Result<SemaphoreIx> {
-        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
-        let semaphore =
-            unsafe { ctx.device().create_semaphore(&semaphore_info, None) }?;
-        let ix = self.semaphores.insert(semaphore);
-        Ok(SemaphoreIx(ix))
-    }
-
-    pub fn allocate_fence(&mut self, ctx: &VkContext) -> Result<FenceIx> {
-        let fence_info = vk::FenceCreateInfo::builder().build();
-        let fence = unsafe { ctx.device().create_fence(&fence_info, None) }?;
-        let ix = self.fences.insert(fence);
-        Ok(FenceIx(ix))
-    }
-
-    pub fn create_image_view_for_image(
-        &mut self,
-        ctx: &VkContext,
-        image_ix: ImageIx,
-    ) -> Result<ImageViewIx> {
-        let img = self.images.get(image_ix.0).ok_or(anyhow!(
-            "tried to create image view for nonexistent image"
-        ))?;
-
-        let view = img.create_image_view(ctx)?;
-        let ix = self.image_views.insert(view);
-
-        Ok(ImageViewIx(ix))
-    }
 
     pub fn load_shader(
         &mut self,
         shader_path: &str,
         stage: vk::ShaderStageFlags,
-    ) -> Result<ShaderIx> {
+    ) -> Result<ShaderInfo> {
         let spirv = {
             let mut file = std::fs::File::open(shader_path)?;
             ash::util::read_spv(&mut file)?
@@ -439,10 +367,15 @@ impl GpuResources {
             stage,
         };
 
-        let ix = self.shaders.insert(shader);
-
-        Ok(ShaderIx(ix))
+        Ok(shader)
     }
+
+    pub fn insert_shader(&mut self, shader: ShaderInfo) -> ShaderIx {
+        let ix = self.shaders.insert(shader);
+        ShaderIx(ix)
+    }
+
+    //// Pipeline methods
 
     pub fn create_compute_pipeline(
         &mut self,
@@ -548,16 +481,109 @@ impl GpuResources {
         Ok(PipelineIx(ix))
     }
 
-    pub fn insert_sampler(
+    //// Descriptor set methods
+
+    pub fn allocate_desc_set<F>(
         &mut self,
-        context: &VkContext,
-        sampler_info: vk::SamplerCreateInfo,
-    ) -> Result<SamplerIx> {
-        let sampler =
-            unsafe { context.device().create_sampler(&sampler_info, None) }?;
-        let ix = self.samplers.insert(sampler);
-        Ok(SamplerIx(ix))
+        shader_ix: ShaderIx,
+        set: u32,
+        write_builder: F,
+        // ) -> Result<DescSetIx>
+    ) -> Result<vk::DescriptorSet>
+    where
+        F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
+    {
+        let layout_info = self[shader_ix].set_layout_info(set)?;
+
+        let layout =
+            self.layout_cache.get_descriptor_layout_new(&layout_info)?;
+
+        let desc_set = self.descriptor_allocator.allocate(layout)?;
+
+        let set_info = self[shader_ix].set_infos.get(&set).ok_or(anyhow!(
+            "Tried to allocate descriptor set {} for incompatible shader",
+            set
+        ))?;
+
+        let mut builder = DescriptorUpdateBuilder::new(set_info);
+
+        write_builder(self, &mut builder)?;
+
+        builder.apply(
+            &mut self.layout_cache,
+            &mut self.descriptor_allocator,
+            desc_set,
+        );
+
+        Ok(desc_set)
     }
+
+    pub fn insert_desc_set(
+        &mut self,
+        desc_set: vk::DescriptorSet,
+    ) -> DescSetIx {
+        let ix = self.descriptor_sets.insert(desc_set);
+        DescSetIx(ix)
+    }
+
+    pub fn insert_desc_set_at(
+        &mut self,
+        ix: DescSetIx,
+        desc_set: vk::DescriptorSet,
+    ) -> Option<vk::DescriptorSet> {
+        self.descriptor_sets.insert_at(ix.0, desc_set)
+    }
+
+    //// Semaphores and fences
+
+    pub fn allocate_semaphore(
+        &mut self,
+        ctx: &VkContext,
+    ) -> Result<SemaphoreIx> {
+        let semaphore_info = vk::SemaphoreCreateInfo::builder().build();
+        let semaphore =
+            unsafe { ctx.device().create_semaphore(&semaphore_info, None) }?;
+        let ix = self.semaphores.insert(semaphore);
+        Ok(SemaphoreIx(ix))
+    }
+
+    pub fn allocate_fence(&mut self, ctx: &VkContext) -> Result<FenceIx> {
+        let fence_info = vk::FenceCreateInfo::builder().build();
+        let fence = unsafe { ctx.device().create_fence(&fence_info, None) }?;
+        let ix = self.fences.insert(fence);
+        Ok(FenceIx(ix))
+    }
+
+    pub fn destroy_fence(
+        &mut self,
+        device: &Device,
+        fence: FenceIx,
+    ) -> Option<()> {
+        let f = self.fences.remove(fence.0)?;
+
+        unsafe {
+            device.destroy_fence(f, None);
+        };
+
+        Some(())
+    }
+
+    // pub fn create_image_view_for_image(
+    //     &mut self,
+    //     ctx: &VkContext,
+    //     image_ix: ImageIx,
+    // ) -> Result<ImageViewIx> {
+    //     let img = self.images.get(image_ix.0).ok_or(anyhow!(
+    //         "tried to create image view for nonexistent image"
+    //     ))?;
+
+    //     let view = img.create_image_view(ctx)?;
+    //     let ix = self.image_views.insert(view);
+
+    //     Ok(ImageViewIx(ix))
+    // }
+
+    //// Command methods
 
     pub fn transition_image(
         &self,
@@ -586,19 +612,7 @@ impl GpuResources {
         );
     }
 
-    pub fn destroy_fence(
-        &mut self,
-        device: &Device,
-        fence: FenceIx,
-    ) -> Option<()> {
-        let f = self.fences.remove(fence.0)?;
-
-        unsafe {
-            device.destroy_fence(f, None);
-        };
-
-        Some(())
-    }
+    //// Cleanup
 
     pub fn cleanup(
         &mut self,

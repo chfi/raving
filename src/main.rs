@@ -85,9 +85,12 @@ fn main() -> Result<()> {
             Some("out_image"),
         )?;
 
-        let out_view = res.create_image_view_for_image(ctx, out_image)?;
+        let out_view = res.new_image_view(ctx, &out_image)?;
 
-        Ok((out_image, out_view))
+        let out_image_ix = res.insert_image(out_image);
+        let out_view_ix = res.insert_image_view(out_view);
+
+        Ok((out_image_ix, out_view_ix))
     })?;
 
     log::warn!("MODULE BUILDER");

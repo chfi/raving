@@ -9,7 +9,7 @@ use rspirv_reflect::Reflection;
 use std::{any::TypeId, sync::Arc};
 
 use crate::vk::{
-    context::VkContext, resource::index::*, GpuResources, VkEngine,
+    context::VkContext, resource::index::*, BufferRes, GpuResources, VkEngine,
 };
 
 pub mod frame;
@@ -34,7 +34,7 @@ pub type InitFn = Arc<
 pub struct BatchBuilder {
     pub init_fn: Vec<InitFn>,
 
-    staging_buffers: Arc<Mutex<Vec<BufferIx>>>,
+    staging_buffers: Arc<Mutex<Vec<BufferRes>>>,
 
     command_fns: Vec<BatchFn>,
     // Vec<Box<dyn Fn(&ash::Device, &GpuResources, vk::CommandBuffer)>>,
@@ -64,8 +64,8 @@ impl BatchBuilder {
     ) -> anyhow::Result<()> {
         let mut buffers = self.staging_buffers.lock();
 
-        for buf_ix in buffers.drain(..) {
-            res.free_buffer(ctx, alloc, buf_ix)?;
+        for buffer in buffers.drain(..) {
+            res.free_buffer(ctx, alloc, buffer)?;
         }
 
         Ok(())
@@ -125,9 +125,7 @@ impl BatchBuilder {
                     cmd,
                 )?;
 
-                let staging_ix = res.insert_buffer(staging);
-
-                staging_bufs.lock().push(staging_ix);
+                staging_bufs.lock().push(staging);
 
                 VkEngine::transition_image(
                     cmd,
@@ -171,9 +169,7 @@ impl BatchBuilder {
                     cmd,
                 )?;
 
-                let stg_ix = res.insert_buffer(staging);
-
-                staging_bufs.lock().push(stg_ix);
+                staging_bufs.lock().push(staging);
 
                 Ok(())
             },
