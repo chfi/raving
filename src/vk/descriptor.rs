@@ -38,7 +38,7 @@ pub struct DescriptorLayoutCache {
     layout_cache: HashMap<DescriptorLayoutInfo, vk::DescriptorSetLayout>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct DescriptorLayoutInfo {
     pub bindings: Vec<vk::DescriptorSetLayoutBinding>,
 }

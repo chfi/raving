@@ -1,18 +1,24 @@
 use raving::script::console::frame::FrameBuilder;
 use raving::script::console::BatchBuilder;
-use raving::vk::{BatchInput, FrameResources, GpuResources, VkEngine};
+use raving::vk::descriptor::DescriptorLayoutInfo;
+use raving::vk::{
+    BatchInput, FrameResources, GpuResources, VkEngine, WinSizeIndices,
+    WinSizeResourcesBuilder,
+};
 
 use raving::vk::util::*;
 
 use ash::{vk, Device};
 
 use flexi_logger::{Duplicate, FileSpec, Logger};
+use rspirv_reflect::DescriptorInfo;
 use winit::event::{Event, WindowEvent};
 use winit::{event_loop::EventLoop, window::WindowBuilder};
 
 // #[cfg(target_os = "linux")]
 // use winit::platform::unix::*;
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
@@ -74,31 +80,132 @@ fn main() -> Result<()> {
 
     let mut engine = VkEngine::new(&window)?;
 
-    let (out_image, out_view) = engine.with_allocators(|ctx, res, alloc| {
-        let out_image = res.allocate_image(
-            ctx,
-            alloc,
-            width,
-            height,
-            vk::Format::R8G8B8A8_UNORM,
-            vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
-            Some("out_image"),
-        )?;
+    let window_storage_set_info = {
+        let info = DescriptorInfo {
+            ty: rspirv_reflect::DescriptorType::STORAGE_IMAGE,
+            binding_count: rspirv_reflect::BindingCount::One,
+            name: "out_image".to_string(),
+        };
 
-        let out_view = res.new_image_view(ctx, &out_image)?;
+        Some((0u32, info)).into_iter().collect::<BTreeMap<_, _>>()
+    };
 
-        let out_image_ix = res.insert_image(out_image);
-        let out_view_ix = res.insert_image_view(out_view);
+    let window_storage_image_layout = {
+        let mut info = DescriptorLayoutInfo::default();
 
-        Ok((out_image_ix, out_view_ix))
-    })?;
+        let binding = vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_count(1)
+            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+            .build();
+
+        info.bindings.push(binding);
+        info
+    };
+
+    let mut win_size_resource_index = WinSizeIndices::default();
+
+    let win_size_res_builder = move |engine: &mut VkEngine,
+                                     width: u32,
+                                     height: u32|
+          -> Result<WinSizeResourcesBuilder> {
+        let mut builder = WinSizeResourcesBuilder::default();
+
+        let (img, view, desc_set) =
+            engine.with_allocators(|ctx, res, alloc| {
+                dbg!();
+                let out_image = res.allocate_image(
+                    ctx,
+                    alloc,
+                    width,
+                    height,
+                    vk::Format::R8G8B8A8_UNORM,
+                    vk::ImageUsageFlags::STORAGE
+                        | vk::ImageUsageFlags::TRANSFER_SRC,
+                    Some("out_image"),
+                )?;
+
+                dbg!();
+                let out_view = res.new_image_view(ctx, &out_image)?;
+
+                dbg!();
+                let out_desc_set = res.allocate_desc_set_raw(
+                    &window_storage_image_layout,
+                    &window_storage_set_info,
+                    |res, builder| {
+                        let info = ash::vk::DescriptorImageInfo::builder()
+                            .image_layout(vk::ImageLayout::GENERAL)
+                            .image_view(out_view)
+                            .build();
+
+                        builder.bind_image(0, &[info]);
+
+                        Ok(())
+                    },
+                )?;
+                dbg!();
+
+                Ok((out_image, out_view, out_desc_set))
+            })?;
+
+        builder.images.insert("out_image".to_string(), img);
+        builder
+            .image_views
+            .insert("out_image_view".to_string(), view);
+        builder
+            .desc_sets
+            .insert("out_desc_set".to_string(), desc_set);
+
+        //
+        Ok(builder)
+    };
+
+    {
+        let builder = win_size_res_builder(&mut engine, 800, 600)?;
+        engine.with_allocators(|ctx, res, alloc| {
+            builder.insert(&mut win_size_resource_index, ctx, res, alloc)?;
+            Ok(())
+        })?;
+    }
+
+    let out_image = *win_size_resource_index.images.get("out_image").unwrap();
+    let out_view = *win_size_resource_index
+        .image_views
+        .get("out_image_view")
+        .unwrap();
+    let out_desc_set = *win_size_resource_index
+        .desc_sets
+        .get("out_desc_set")
+        .unwrap();
+
+    // let (out_image, out_view) = engine.with_allocators(|ctx, res, alloc| {
+    //     let out_image = res.allocate_image(
+    //         ctx,
+    //         alloc,
+    //         width,
+    //         height,
+    //         vk::Format::R8G8B8A8_UNORM,
+    //         vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
+    //         Some("out_image"),
+    //     )?;
+
+    //     let out_view = res.new_image_view(ctx, &out_image)?;
+
+    //     let out_image_ix = res.insert_image(out_image);
+    //     let out_view_ix = res.insert_image_view(out_view);
+
+    //     Ok((out_image_ix, out_view_ix))
+    // })?;
 
     log::warn!("MODULE BUILDER");
 
     let mut builder = FrameBuilder::from_script(&script_path)?;
 
+    // builder.bind_var("out_image",
+    // builder.bind_var("out_view", out_view)?;
     builder.bind_var("out_image", out_image)?;
     builder.bind_var("out_view", out_view)?;
+    builder.bind_var("out_desc_set", out_desc_set)?;
 
     engine.with_allocators(|ctx, res, alloc| {
         builder.resolve(ctx, res, alloc)?;
@@ -186,10 +293,10 @@ fn main() -> Result<()> {
         }
     }
 
+    let mut recreate_swapchain = false;
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = winit::event_loop::ControlFlow::Poll;
-
-        let mut _dirty_swapchain = false;
 
         match event {
             Event::MainEventsCleared => {
@@ -244,10 +351,22 @@ fn main() -> Result<()> {
 
                 if !render_success {
                     dbg!();
-                    _dirty_swapchain = true;
+                    recreate_swapchain = true;
                 }
             }
             Event::RedrawEventsCleared => {
+                if recreate_swapchain {
+                    recreate_swapchain = false;
+
+                    let size = window.inner_size();
+
+                    if size.width > 0 && size.height > 0 {
+                        log::debug!(
+                            "Recreating swapchain with window size {:?}",
+                            size
+                        );
+                    }
+                }
                 //
             }
             Event::WindowEvent { event, .. } => match event {
@@ -256,7 +375,7 @@ fn main() -> Result<()> {
                     *control_flow = winit::event_loop::ControlFlow::Exit;
                 }
                 WindowEvent::Resized { .. } => {
-                    _dirty_swapchain = true;
+                    recreate_swapchain = true;
                 }
                 _ => (),
             },

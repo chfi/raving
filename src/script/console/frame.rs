@@ -146,6 +146,8 @@ pub struct FrameBuilder {
     // variables: HashMap
     pub ast: rhai::AST,
     pub module: rhai::Module,
+
+    batches: Vec<String>,
     /*
     swapchain_dependent_images:
         FxHashMap<ImageIx, WithAllocatorsInput<[u32; 2], ImageRes>>,

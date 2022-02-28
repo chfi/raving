@@ -89,16 +89,16 @@ pub struct FrameResources {
 
 #[derive(Default, Clone)]
 pub struct WinSizeIndices {
-    images: HashMap<String, ImageIx>,
-    image_views: HashMap<String, ImageViewIx>,
-    desc_sets: HashMap<String, DescSetIx>,
+    pub images: HashMap<String, ImageIx>,
+    pub image_views: HashMap<String, ImageViewIx>,
+    pub desc_sets: HashMap<String, DescSetIx>,
 }
 
 #[derive(Default)]
 pub struct WinSizeResourcesBuilder {
-    images: HashMap<String, ImageRes>,
-    image_views: HashMap<String, vk::ImageView>,
-    desc_sets: HashMap<String, vk::DescriptorSet>,
+    pub images: HashMap<String, ImageRes>,
+    pub image_views: HashMap<String, vk::ImageView>,
+    pub desc_sets: HashMap<String, vk::DescriptorSet>,
 }
 
 impl WinSizeResourcesBuilder {
@@ -483,19 +483,21 @@ impl VkEngine {
         device: &Device,
         cmd: vk::CommandBuffer,
         pipeline_ix: PipelineIx,
-        desc_set_ix: DescSetIx,
+        desc_set_indices: &[DescSetIx],
         push_constants: &[u8],
         groups: (u32, u32, u32),
     ) -> vk::CommandBuffer {
         let (pipeline, pipeline_layout) = resources[pipeline_ix];
 
-        let desc_set = resources[desc_set_ix];
+        let desc_sets = desc_set_indices
+            .iter()
+            .map(|&ix| resources[ix])
+            .collect::<Vec<_>>();
 
         unsafe {
             let bind_point = vk::PipelineBindPoint::COMPUTE;
             device.cmd_bind_pipeline(cmd, bind_point, pipeline);
 
-            let desc_sets = [desc_set];
             let null = [];
 
             device.cmd_bind_descriptor_sets(

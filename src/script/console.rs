@@ -231,7 +231,7 @@ impl BatchBuilder {
     pub fn dispatch_compute(
         &mut self,
         pipeline: PipelineIx,
-        desc_set: DescSetIx,
+        desc_sets: &[DescSetIx],
         push_constants: Vec<u8>,
         x_groups: i64,
         y_groups: i64,
@@ -240,6 +240,7 @@ impl BatchBuilder {
         let bytes = Arc::new(push_constants);
 
         let inner = bytes.clone();
+        let desc_sets = desc_sets.to_vec();
         let f = Arc::new(move |dev: &ash::Device, res: &GpuResources, cmd| {
             let bytes = inner.clone();
 
@@ -250,7 +251,7 @@ impl BatchBuilder {
                 dev,
                 cmd,
                 pipeline,
-                desc_set,
+                &desc_sets,
                 bytes.as_slice(),
                 groups,
             );
@@ -424,6 +425,39 @@ pub fn create_batch_engine() -> rhai::Engine {
         },
     );
 
+    engine.register_result_fn(
+        "dispatch_compute",
+        |builder: &mut BatchBuilder,
+         pipeline: PipelineIx,
+         dyn_desc_sets: rhai::Array,
+         push_constants: Vec<u8>,
+         groups: rhai::Map| {
+
+             let raw_len = dyn_desc_sets.len();
+             let desc_sets = dyn_desc_sets.into_iter().filter_map(|s| s.try_cast::<DescSetIx>()).collect::<Vec<_>>();
+
+             if desc_sets.len() != raw_len {
+                 return Err("Error: all elements in the descriptor set array have to be descriptor set indices".into());
+             }
+
+             let get = |name: &str| {
+                 let field = groups.get(name).ok_or(
+"`groups` map must have integer fields `x_groups`, `y_groups`, `z_groups`".into())?;
+                 field.as_int()
+             };
+
+             builder.dispatch_compute(
+                 pipeline,
+                 &desc_sets,
+                 push_constants,
+                 get("x_groups")?,
+                 get("y_groups")?,
+                 get("z_groups")?
+             );
+             Ok(())
+        },
+    );
+
     engine.register_fn(
         "dispatch_compute",
         |builder: &mut BatchBuilder,
@@ -435,7 +469,7 @@ pub fn create_batch_engine() -> rhai::Engine {
          z_groups: i64| {
             builder.dispatch_compute(
                 pipeline,
-                desc_set,
+                &[desc_set],
                 push_constants,
                 x_groups,
                 y_groups,
@@ -459,7 +493,7 @@ pub fn create_batch_engine() -> rhai::Engine {
 
              builder.dispatch_compute(
                  pipeline,
-                 desc_set,
+                 &[desc_set],
                  push_constants,
                  get("x_groups")?,
                  get("y_groups")?,

@@ -1,5 +1,6 @@
 export let out_image = image_var("out_image");
 export let out_view = image_view_var("out_view");
+export let out_desc_set = desc_set_var("out_desc_set");
 
 export let bg_shader = load_shader("shaders/trig_color.comp.spv",
                                    vk::ShaderStageFlags::COMPUTE);
@@ -128,7 +129,7 @@ fn background(w, h) {
     let push_constant = input_pc(img_pos);
 
     batch.dispatch_compute(self::img_pipeline.get(),
-                           self::img_desc_set.get(),
+                           [self::img_desc_set.get()],
                            push_constant,
                            group_counts);
   }

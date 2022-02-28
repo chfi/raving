@@ -501,6 +501,8 @@ impl GpuResources {
     where
         F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
     {
+        dbg!(layout_info);
+        dbg!(set_info);
         let layout =
             self.layout_cache.get_descriptor_layout_new(&layout_info)?;
 
@@ -529,11 +531,14 @@ impl GpuResources {
         F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
     {
         let layout_info = self[shader_ix].set_layout_info(set)?;
+        // dbg!(&layout_info);
 
         let set_info = self[shader_ix].set_infos.get(&set).ok_or(anyhow!(
             "Tried to allocate descriptor set {} for incompatible shader",
             set
         ))?;
+
+        // dbg!(set_info);
 
         let set_info = set_info.clone();
 
