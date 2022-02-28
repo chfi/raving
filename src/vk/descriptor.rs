@@ -76,7 +76,6 @@ impl std::hash::Hash for DescriptorLayoutInfo {
 
 pub struct DescriptorBuilder {
     bindings: Vec<vk::DescriptorSetLayoutBinding>,
-    // writes: Vec<vk::WriteDescriptorSetBuilder<'a>>,
     writes: Vec<vk::WriteDescriptorSet>,
 
     image_infos: Vec<Vec<vk::DescriptorImageInfo>>,
@@ -329,6 +328,10 @@ pub struct DescriptorUpdateBuilder {
 }
 
 impl DescriptorUpdateBuilder {
+    // pub fn from_layout_info(layout_info: &DescriptorLayoutInfo) -> Self {
+    //     let set_info = layout_info.bindings.iter().map(|b| (b.binding, b.
+    // }
+
     pub fn new(set_info: &BTreeMap<u32, DescriptorInfo>) -> Self {
         let set_info = set_info.clone();
 
