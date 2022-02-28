@@ -31,7 +31,7 @@ pub use index::*;
 pub struct GpuResources {
     descriptor_allocator: DescriptorAllocator,
     layout_cache: DescriptorLayoutCache,
-    descriptor_sets: Arena<vk::DescriptorSet>,
+    pub(super) descriptor_sets: Arena<vk::DescriptorSet>,
 
     // compute_pipelines: Arena<ComputePipeline>,
     pipelines: Arena<(vk::Pipeline, vk::PipelineLayout)>,
@@ -39,11 +39,11 @@ pub struct GpuResources {
     shaders: Arena<ShaderInfo>,
     shader_file_cache: HashMap<PathBuf, ShaderIx>,
 
-    buffers: Arena<BufferRes>,
+    pub(super) buffers: Arena<BufferRes>,
 
-    images: Arena<ImageRes>,
+    pub(super) images: Arena<ImageRes>,
     // image_views: Arena<(vk::ImageView, ImageIx)>,
-    image_views: Arena<vk::ImageView>,
+    pub(super) image_views: Arena<vk::ImageView>,
     samplers: Arena<vk::Sampler>,
 
     semaphores: Arena<vk::Semaphore>,
@@ -295,6 +295,15 @@ impl GpuResources {
     ) -> ImageViewIx {
         let ix = self.image_views.insert(image_view);
         ImageViewIx(ix)
+    }
+
+    #[must_use = "If a vk::ImageView is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn insert_image_view_at(
+        &mut self,
+        ix: ImageViewIx,
+        image_view: vk::ImageView,
+    ) -> Option<vk::ImageView> {
+        self.image_views.insert_at(ix.0, image_view)
     }
 
     #[must_use = "If a vk::ImageView is returned, it must be freed manually or inserted into another index, otherwise it will leak"]

@@ -8,28 +8,28 @@ use thunderdome::{Arena, Index};
 use super::{BufferRes, GpuResources, ImageRes, ShaderInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ShaderIx(pub(super) Index);
+pub struct ShaderIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PipelineIx(pub(super) Index);
+pub struct PipelineIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DescSetIx(pub(super) Index);
+pub struct DescSetIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ImageIx(pub(super) Index);
+pub struct ImageIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ImageViewIx(pub(super) Index);
+pub struct ImageViewIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SamplerIx(pub(super) Index);
+pub struct SamplerIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BufferIx(pub(super) Index);
+pub struct BufferIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SemaphoreIx(pub(super) Index);
+pub struct SemaphoreIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FenceIx(pub Index);
