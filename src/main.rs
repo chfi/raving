@@ -15,9 +15,6 @@ use rspirv_reflect::DescriptorInfo;
 use winit::event::{Event, WindowEvent};
 use winit::{event_loop::EventLoop, window::WindowBuilder};
 
-// #[cfg(target_os = "linux")]
-// use winit::platform::unix::*;
-
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -38,37 +35,22 @@ fn main() -> Result<()> {
         .duplicate_to_stderr(Duplicate::Debug)
         .start()?;
 
-    /*
     let event_loop: EventLoop<()>;
 
     #[cfg(target_os = "linux")]
     {
         use winit::platform::unix::EventLoopExtUnix;
+        log::debug!("Using X11 event loop");
         event_loop = EventLoop::new_x11()?;
-        // event_loop = if args.force_x11 || !instance_exts.wayland_surface {
-        //     if let Ok(ev_loop) = EventLoop::new_x11() {
-        //         log::debug!("Using X11 event loop");
-        //         ev_loop
-        //     } else {
-        //         error!(
-        //             "Error initializing X11 window, falling back to default"
-        //         );
-        //         EventLoop::new()
-        //     }
-        // } else {
-        //     log::debug!("Using default event loop");
-        //     EventLoop::new()
-        // };
     }
 
     #[cfg(not(target_os = "linux"))]
     {
         log::debug!("Using default event loop");
-        let event_loop = EventLoop::new();
+        event_loop = EventLoop::new();
     }
-    */
 
-    let event_loop = EventLoop::new();
+    // let event_loop = EventLoop::new();
 
     let width = 800;
     let height = 600;
@@ -187,8 +169,6 @@ fn main() -> Result<()> {
 
     let mut builder = FrameBuilder::from_script(&script_path)?;
 
-    // builder.bind_var("out_image",
-    // builder.bind_var("out_view", out_view)?;
     builder.bind_var("out_image", out_image)?;
     builder.bind_var("out_view", out_view)?;
     builder.bind_var("out_desc_set", out_desc_set)?;
@@ -220,16 +200,6 @@ fn main() -> Result<()> {
             builder.ast.clone_functions_only(),
             "background",
         );
-
-    // let mut rhai_engine = engine::script::console::create_batch_engine();
-    // rhai_engine.register_static_module("self", arc_module);
-
-    // let draw_foreground =
-    //     rhai::Func::<(i64, i64, f32), BatchBuilder>::create_from_ast(
-    //         rhai_engine,
-    //         builder.ast.clone_functions_only(),
-    //         "foreground",
-    //     );
 
     let mut frames = {
         let queue_ix = engine.queues.thread.queue_family_index;
@@ -289,8 +259,7 @@ fn main() -> Result<()> {
                 let t = start.elapsed().as_secs_f32();
 
                 let f_ix = engine.current_frame_number();
-                // dbg!(t);
-                // dbg!(f_ix);
+
                 let frame = &mut frames[f_ix % raving::vk::FRAME_OVERLAP];
 
                 let size = window.inner_size();
@@ -299,10 +268,6 @@ fn main() -> Result<()> {
                         .unwrap();
                 let bg_batch_fn = bg_batch.build();
                 let bg_rhai_batch = bg_batch_fn.clone();
-
-                // let fg_batch = draw_foreground(800, 600, t).unwrap();
-                // let fg_batch_fn = fg_batch.build();
-                // let fg_rhai_batch = fg_batch_fn.clone();
 
                 let bg_batch = Box::new(
                     move |dev: &Device,
@@ -313,16 +278,6 @@ fn main() -> Result<()> {
                     },
                 ) as Box<_>;
 
-                // let fg_batch = Box::new(
-                //     move |dev: &Device,
-                //           res: &GpuResources,
-                //           _input: &BatchInput,
-                //           cmd: vk::CommandBuffer| {
-                //         fg_rhai_batch(dev, res, cmd);
-                //     },
-                // ) as Box<_>;
-
-                // let batches = [&bg_batch, &fg_batch, &copy_batch];
                 let batches = [&bg_batch, &copy_batch];
 
                 let deps = vec![
@@ -331,15 +286,11 @@ fn main() -> Result<()> {
                     // Some(vec![(1, vk::PipelineStageFlags::COMPUTE_SHADER)]),
                 ];
 
-                // dbg!();
                 let render_success = engine
                     .draw_from_batches(frame, &batches, deps.as_slice(), 1)
                     .unwrap();
 
-                // dbg!();
-
                 if !render_success {
-                    dbg!();
                     recreate_swapchain = true;
                 }
             }
@@ -377,8 +328,6 @@ fn main() -> Result<()> {
                                     Ok(())
                                 })
                                 .unwrap();
-
-                            dbg!(&win_size_resource_index);
 
                             let mut rhai_engine =
                                 raving::script::console::create_batch_engine();

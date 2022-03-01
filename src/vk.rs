@@ -915,7 +915,7 @@ impl VkEngine {
         let mut last_semaphore = None;
 
         for (ix, ((deps_ix, stages), revs_ix)) in
-            batch_dep_info.into_iter().zip(batch_rev_deps).enumerate()
+            std::iter::zip(batch_dep_info, batch_rev_deps).enumerate()
         {
             let mut wait_semaphores = deps_ix
                 .into_iter()

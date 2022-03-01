@@ -49,15 +49,12 @@ impl PartialEq for DescriptorLayoutInfo {
             return false;
         }
 
-        self.bindings
-            .iter()
-            .zip(other.bindings.iter())
-            .all(|(&a, &b)| {
-                a.binding == b.binding
-                    && a.descriptor_count == b.descriptor_count
-                    && a.descriptor_type == b.descriptor_type
-                    && a.stage_flags == b.stage_flags
-            })
+        std::iter::zip(&self.bindings, &other.bindings).all(|(&a, &b)| {
+            a.binding == b.binding
+                && a.descriptor_count == b.descriptor_count
+                && a.descriptor_type == b.descriptor_type
+                && a.stage_flags == b.stage_flags
+        })
     }
 }
 
