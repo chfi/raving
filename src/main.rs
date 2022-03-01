@@ -162,7 +162,9 @@ fn main() -> Result<()> {
     };
 
     {
-        let builder = win_size_res_builder(&mut engine, 800, 600)?;
+        let size = window.inner_size();
+        let builder =
+            win_size_res_builder(&mut engine, size.width, size.height)?;
         engine.with_allocators(|ctx, res, alloc| {
             builder.insert(&mut win_size_resource_index, ctx, res, alloc)?;
             Ok(())
@@ -291,7 +293,10 @@ fn main() -> Result<()> {
                 // dbg!(f_ix);
                 let frame = &mut frames[f_ix % raving::vk::FRAME_OVERLAP];
 
-                let bg_batch = draw_background(800, 600).unwrap();
+                let size = window.inner_size();
+                let bg_batch =
+                    draw_background(size.width as i64, size.height as i64)
+                        .unwrap();
                 let bg_batch_fn = bg_batch.build();
                 let bg_rhai_batch = bg_batch_fn.clone();
 
