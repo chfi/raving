@@ -87,7 +87,7 @@ pub struct FrameResources {
 
 // }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct WinSizeIndices {
     pub images: HashMap<String, ImageIx>,
     pub image_views: HashMap<String, ImageViewIx>,

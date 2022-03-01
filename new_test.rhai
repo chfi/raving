@@ -42,12 +42,20 @@ export let img_shader = load_shader("shaders/sample_image.comp.spv",
 
 export let img_pipeline = create_compute_pipeline(img_shader);
 
+// export let img_desc_set =
+//   create_desc_set(img_shader,
+//                   0,
+//                   [ #{ binding: 0, sampler: sampler },
+//                     #{ binding: 1, image_view: file_image_view },
+//                     #{ binding: 2, image_view: out_view }
+//                   ]);
+
 export let img_desc_set =
   create_desc_set(img_shader,
                   0,
                   [ #{ binding: 0, sampler: sampler },
                     #{ binding: 1, image_view: file_image_view },
-                    #{ binding: 2, image_view: out_view }
+                    // #{ binding: 2, image_view: out_view }
                   ]);
 
 
@@ -101,7 +109,8 @@ fn background(w, h) {
   let y_groups = (h / y_size) + h % y_size;
 
   batch.dispatch_compute(self::bg_pipeline.get(),
-                         self::bg_desc_set.get(),
+                         self::out_desc_set.get(),
+                         // self::bg_desc_set.get(),
                          pc, x_groups, y_groups, 1);
 
   // workgroup counts for image copy
@@ -129,7 +138,8 @@ fn background(w, h) {
     let push_constant = input_pc(img_pos);
 
     batch.dispatch_compute(self::img_pipeline.get(),
-                           [self::img_desc_set.get()],
+                           [self::img_desc_set.get(),
+                            self::out_desc_set.get()],
                            push_constant,
                            group_counts);
   }

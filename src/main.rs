@@ -97,6 +97,7 @@ fn main() -> Result<()> {
             .binding(0)
             .descriptor_count(1)
             .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+            .stage_flags(vk::ShaderStageFlags::COMPUTE) // TODO should also be graphics
             .build();
 
         info.bindings.push(binding);
@@ -168,6 +169,8 @@ fn main() -> Result<()> {
         })?;
     }
 
+    dbg!(&win_size_resource_index);
+
     let out_image = *win_size_resource_index.images.get("out_image").unwrap();
     let out_view = *win_size_resource_index
         .image_views
@@ -177,25 +180,6 @@ fn main() -> Result<()> {
         .desc_sets
         .get("out_desc_set")
         .unwrap();
-
-    // let (out_image, out_view) = engine.with_allocators(|ctx, res, alloc| {
-    //     let out_image = res.allocate_image(
-    //         ctx,
-    //         alloc,
-    //         width,
-    //         height,
-    //         vk::Format::R8G8B8A8_UNORM,
-    //         vk::ImageUsageFlags::STORAGE | vk::ImageUsageFlags::TRANSFER_SRC,
-    //         Some("out_image"),
-    //     )?;
-
-    //     let out_view = res.new_image_view(ctx, &out_image)?;
-
-    //     let out_image_ix = res.insert_image(out_image);
-    //     let out_view_ix = res.insert_image_view(out_view);
-
-    //     Ok((out_image_ix, out_view_ix))
-    // })?;
 
     log::warn!("MODULE BUILDER");
 
@@ -228,7 +212,7 @@ fn main() -> Result<()> {
     let mut rhai_engine = raving::script::console::create_batch_engine();
     rhai_engine.register_static_module("self", arc_module.clone());
 
-    let draw_background =
+    let mut draw_background =
         rhai::Func::<(i64, i64), BatchBuilder>::create_from_ast(
             rhai_engine,
             builder.ast.clone_functions_only(),
@@ -365,6 +349,48 @@ fn main() -> Result<()> {
                             "Recreating swapchain with window size {:?}",
                             size
                         );
+
+                        engine
+                            .recreate_swapchain(Some([size.width, size.height]))
+                            .unwrap();
+
+                        {
+                            let res_builder = win_size_res_builder(
+                                &mut engine,
+                                size.width,
+                                size.height,
+                            )
+                            .unwrap();
+                            engine
+                                .with_allocators(|ctx, res, alloc| {
+                                    res_builder.insert(
+                                        &mut win_size_resource_index,
+                                        ctx,
+                                        res,
+                                        alloc,
+                                    )?;
+                                    Ok(())
+                                })
+                                .unwrap();
+
+                            dbg!(&win_size_resource_index);
+
+                            let mut rhai_engine =
+                                raving::script::console::create_batch_engine();
+                            rhai_engine.register_static_module(
+                                "self",
+                                arc_module.clone(),
+                            );
+
+                            draw_background = rhai::Func::<
+                                (i64, i64),
+                                BatchBuilder,
+                            >::create_from_ast(
+                                rhai_engine,
+                                builder.ast.clone_functions_only(),
+                                "background",
+                            );
+                        }
                     }
                 }
                 //
