@@ -67,6 +67,40 @@ impl BufferRes {
         self.len * self.elem_size
     }
 
+    /// Returns `None` if the buffer memory can't be mapped (e.g. it's
+    /// on device memory)
+    pub fn mapped_slice_mut(&mut self) -> Option<&mut [u8]> {
+        self.alloc.mapped_slice_mut()
+    }
+
+    // TODO it should probably panic if some sizes don't match
+    /// Returns `None` if the buffer memory can't be mapped (e.g. it's
+    /// on device memory), or if `N` does not match the element size.
+    ///
+    /// `unsafe` since the alignment etc. isn't fully validated when
+    /// allocating a `BufferRes`, yet, but it should be safe
+    pub unsafe fn mapped_windows_mut<const N: usize>(
+        &mut self,
+    ) -> Option<&mut [[u8; N]]> {
+        if self.elem_size != N {
+            return None;
+        }
+
+        let size_bytes = self.size_bytes();
+
+        let slice = self.alloc.mapped_slice_mut()?;
+
+        if size_bytes != slice.len() {
+            return None;
+        }
+
+        let ptr = slice as *mut [u8];
+        let ptr: *mut [u8; N] = ptr.cast();
+
+        let array_slice = std::slice::from_raw_parts_mut(ptr, self.len);
+        Some(array_slice)
+    }
+
     pub fn upload_to_self_bytes(
         &mut self,
         ctx: &VkContext,
