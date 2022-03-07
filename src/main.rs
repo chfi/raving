@@ -15,6 +15,7 @@ use rspirv_reflect::DescriptorInfo;
 use winit::event::{Event, WindowEvent};
 use winit::{event_loop::EventLoop, window::WindowBuilder};
 
+use crossbeam::atomic::AtomicCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -54,6 +55,8 @@ fn main() -> Result<()> {
 
     let width = 800;
     let height = 600;
+
+    let swapchain_dims = Arc::new(AtomicCell::new([width, height]));
 
     let window = WindowBuilder::new()
         .with_title("engine")
@@ -224,12 +227,28 @@ fn main() -> Result<()> {
         [new_frame(), new_frame()]
     };
 
+    let dims = swapchain_dims.clone();
     let copy_batch = Box::new(
         move |dev: &Device,
               res: &GpuResources,
               input: &BatchInput,
               cmd: vk::CommandBuffer| {
-            copy_batch(out_image, input.swapchain_image.unwrap(), dev, res, cmd)
+            let [w, h] = dims.load();
+
+            let extent = vk::Extent3D {
+                width: w,
+                height: h,
+                depth: 1,
+            };
+
+            copy_batch(
+                out_image,
+                input.swapchain_image.unwrap(),
+                extent,
+                dev,
+                res,
+                cmd,
+            )
         },
     ) as Box<_>;
 
@@ -309,6 +328,8 @@ fn main() -> Result<()> {
                         engine
                             .recreate_swapchain(Some([size.width, size.height]))
                             .unwrap();
+
+                        swapchain_dims.store(engine.swapchain_dimensions());
 
                         {
                             let res_builder = win_size_res_builder(

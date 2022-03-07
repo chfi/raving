@@ -504,8 +504,6 @@ impl GpuResources {
     where
         F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
     {
-        dbg!(layout_info);
-        dbg!(set_info);
         let layout =
             self.layout_cache.get_descriptor_layout_new(&layout_info)?;
 
@@ -534,55 +532,16 @@ impl GpuResources {
         F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
     {
         let layout_info = self[shader_ix].set_layout_info(set)?;
-        // dbg!(&layout_info);
 
         let set_info = self[shader_ix].set_infos.get(&set).ok_or(anyhow!(
             "Tried to allocate descriptor set {} for incompatible shader",
             set
         ))?;
-
-        // dbg!(set_info);
 
         let set_info = set_info.clone();
 
         self.allocate_desc_set_raw(&layout_info, &set_info, write_builder)
     }
-
-    /*
-    pub fn allocate_desc_set<F>(
-        &mut self,
-        shader_ix: ShaderIx,
-        set: u32,
-        write_builder: F,
-    ) -> Result<vk::DescriptorSet>
-    where
-        F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
-    {
-        let layout_info = self[shader_ix].set_layout_info(set)?;
-
-        let layout =
-            self.layout_cache.get_descriptor_layout_new(&layout_info)?;
-
-        let desc_set = self.descriptor_allocator.allocate(layout)?;
-
-        let set_info = self[shader_ix].set_infos.get(&set).ok_or(anyhow!(
-            "Tried to allocate descriptor set {} for incompatible shader",
-            set
-        ))?;
-
-        let mut builder = DescriptorUpdateBuilder::new(set_info);
-
-        write_builder(self, &mut builder)?;
-
-        builder.apply(
-            &mut self.layout_cache,
-            &mut self.descriptor_allocator,
-            desc_set,
-        );
-
-        Ok(desc_set)
-    }
-    */
 
     pub fn insert_desc_set(
         &mut self,

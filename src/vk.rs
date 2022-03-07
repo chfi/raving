@@ -347,6 +347,13 @@ impl VkEngine {
         Ok(())
     }
 
+    pub fn swapchain_dimensions(&self) -> [u32; 2] {
+        [
+            self.swapchain_props.extent.width,
+            self.swapchain_props.extent.height,
+        ]
+    }
+
     pub fn recreate_swapchain(
         &mut self,
         dimensions: Option<[u32; 2]>,
