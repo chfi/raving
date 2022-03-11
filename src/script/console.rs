@@ -228,6 +228,33 @@ impl BatchBuilder {
         self.command_fns.push(f);
     }
 
+    pub fn transition_image_raw(
+        &mut self,
+        image: vk::Image,
+        src_access_mask: vk::AccessFlags,
+        src_stage_mask: vk::PipelineStageFlags,
+        dst_access_mask: vk::AccessFlags,
+        dst_stage_mask: vk::PipelineStageFlags,
+        old_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+    ) {
+        let f = Arc::new(move |dev: &ash::Device, res: &GpuResources, cmd| {
+            VkEngine::transition_image(
+                cmd,
+                dev,
+                image,
+                src_access_mask,
+                src_stage_mask,
+                dst_access_mask,
+                dst_stage_mask,
+                old_layout,
+                new_layout,
+            );
+        }) as BatchFn;
+
+        self.command_fns.push(f);
+    }
+
     pub fn dispatch_compute(
         &mut self,
         pipeline: PipelineIx,
@@ -414,6 +441,28 @@ pub fn create_batch_engine() -> rhai::Engine {
          old_layout: vk::ImageLayout,
          new_layout: vk::ImageLayout| {
             builder.transition_image(
+                image,
+                src_access_mask,
+                src_stage_mask,
+                dst_access_mask,
+                dst_stage_mask,
+                old_layout,
+                new_layout,
+            );
+        },
+    );
+
+    engine.register_fn(
+        "transition_image",
+        |builder: &mut BatchBuilder,
+         image: vk::Image,
+         src_access_mask: vk::AccessFlags,
+         src_stage_mask: vk::PipelineStageFlags,
+         dst_access_mask: vk::AccessFlags,
+         dst_stage_mask: vk::PipelineStageFlags,
+         old_layout: vk::ImageLayout,
+         new_layout: vk::ImageLayout| {
+            builder.transition_image_raw(
                 image,
                 src_access_mask,
                 src_stage_mask,
