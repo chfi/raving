@@ -22,6 +22,7 @@ poll-promise = "0.1"
 
 rhai = { version = "1.5", features = ["sync", "f32_float"] }
 bytemuck = { version = "1.7", features = ["derive"] }
+zerocopy = "0.6.1"
 
 image = "0.23"
 rgb = "0.8.25"

@@ -5,6 +5,8 @@ use anyhow::{anyhow, bail, Result};
 
 use thunderdome::{Arena, Index};
 
+use zerocopy::{AsBytes, FromBytes};
+
 use super::{BufferRes, GpuResources, ImageRes, ShaderInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -14,7 +16,7 @@ pub struct ShaderIx(pub(crate) Index);
 pub struct PipelineIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DescSetIx(pub(crate) Index);
+pub struct DescSetIx(pub Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ImageIx(pub(crate) Index);
@@ -26,7 +28,7 @@ pub struct ImageViewIx(pub(crate) Index);
 pub struct SamplerIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BufferIx(pub(crate) Index);
+pub struct BufferIx(pub Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SemaphoreIx(pub(crate) Index);

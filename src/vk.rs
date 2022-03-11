@@ -5,12 +5,16 @@ use ash::{
 
 use crossbeam::atomic::AtomicCell;
 use gpu_allocator::vulkan::Allocator;
+use rspirv_reflect::DescriptorInfo;
 use rustc_hash::FxHashMap;
 use winit::window::Window;
 
 use anyhow::{anyhow, bail, Result};
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use thunderdome::{Arena, Index};
 
@@ -24,6 +28,8 @@ pub mod util;
 pub use resource::*;
 
 use context::{Queues, VkContext};
+
+use crate::vk::descriptor::DescriptorLayoutInfo;
 
 pub const FRAME_OVERLAP: usize = 2;
 
@@ -41,6 +47,8 @@ pub struct VkEngine {
     pub swapchain_images: Vec<vk::Image>,
     #[allow(dead_code)]
     pub swapchain_image_views: Vec<vk::ImageView>,
+
+    pub swapchain_storage_desc_sets: Vec<DescSetIx>,
 
     command_pool: vk::CommandPool,
 
@@ -286,6 +294,7 @@ impl VkEngine {
                 graphics_ix,
                 [width, height],
             )?;
+
         let swapchain_image_views = init::create_swapchain_image_views(
             vk_context.device(),
             &images,
@@ -298,7 +307,54 @@ impl VkEngine {
 
         let frame_number = 0;
 
-        let resources = GpuResources::new(&vk_context)?;
+        let mut resources = GpuResources::new(&vk_context)?;
+
+        let swapchain_storage_desc_sets = {
+            let layout = {
+                let mut info = DescriptorLayoutInfo::default();
+
+                let binding = vk::DescriptorSetLayoutBinding::builder()
+                    .binding(0)
+                    .descriptor_count(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .stage_flags(vk::ShaderStageFlags::COMPUTE) // TODO should also be graphics
+                    .build();
+
+                info.bindings.push(binding);
+                info
+            };
+
+            let set_info = {
+                let info = DescriptorInfo {
+                    ty: rspirv_reflect::DescriptorType::STORAGE_IMAGE,
+                    binding_count: rspirv_reflect::BindingCount::One,
+                    name: "out_image".to_string(),
+                };
+
+                Some((0u32, info)).into_iter().collect::<BTreeMap<_, _>>()
+            };
+
+            let mut views = Vec::new();
+            for view in swapchain_image_views.iter() {
+                let desc_set = resources.allocate_desc_set_raw(
+                    &layout,
+                    &set_info,
+                    |res, builder| {
+                        let info = ash::vk::DescriptorImageInfo::builder()
+                            .image_layout(vk::ImageLayout::GENERAL)
+                            .image_view(*view)
+                            .build();
+
+                        builder.bind_image(0, &[info]);
+
+                        Ok(())
+                    },
+                )?;
+                let set_ix = resources.insert_desc_set(desc_set);
+                views.push(set_ix);
+            }
+            views
+        };
 
         let device = vk_context.device();
 
@@ -322,6 +378,7 @@ impl VkEngine {
             swapchain_props,
             swapchain_images: images,
             swapchain_image_views,
+            swapchain_storage_desc_sets,
 
             command_pool,
 
@@ -388,6 +445,58 @@ impl VkEngine {
         self.swapchain_khr = swapchain_khr;
         self.swapchain_props = swapchain_props;
         self.swapchain_images = images;
+
+        let swapchain_storage_desc_sets = {
+            let layout = {
+                let mut info = DescriptorLayoutInfo::default();
+
+                let binding = vk::DescriptorSetLayoutBinding::builder()
+                    .binding(0)
+                    .descriptor_count(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .stage_flags(vk::ShaderStageFlags::COMPUTE) // TODO should also be graphics
+                    .build();
+
+                info.bindings.push(binding);
+                info
+            };
+
+            let set_info = {
+                let info = DescriptorInfo {
+                    ty: rspirv_reflect::DescriptorType::STORAGE_IMAGE,
+                    binding_count: rspirv_reflect::BindingCount::One,
+                    name: "out_image".to_string(),
+                };
+
+                Some((0u32, info)).into_iter().collect::<BTreeMap<_, _>>()
+            };
+
+            let mut views = Vec::new();
+            for (ix, view) in self
+                .swapchain_storage_desc_sets
+                .iter()
+                .zip(swapchain_image_views.iter())
+            {
+                let desc_set = self.resources.allocate_desc_set_raw(
+                    &layout,
+                    &set_info,
+                    |res, builder| {
+                        let info = ash::vk::DescriptorImageInfo::builder()
+                            .image_layout(vk::ImageLayout::GENERAL)
+                            .image_view(*view)
+                            .build();
+
+                        builder.bind_image(0, &[info]);
+
+                        Ok(())
+                    },
+                )?;
+                self.resources.insert_desc_set_at(*ix, desc_set);
+                views.push(desc_set);
+            }
+            views
+        };
+
         self.swapchain_image_views = swapchain_image_views;
 
         // (later) create render passes (render passes that depend on
