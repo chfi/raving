@@ -52,7 +52,9 @@ pub fn copy_batch(
         vk::AccessFlags::TRANSFER_WRITE,
         vk::PipelineStageFlags::TRANSFER,
         vk::AccessFlags::MEMORY_READ,
-        vk::PipelineStageFlags::HOST,
+        // vk::AccessFlags::MEMORY_READ,
+        // vk::PipelineStageFlags::HOST,
+        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         vk::ImageLayout::PRESENT_SRC_KHR,
     );

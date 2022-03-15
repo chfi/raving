@@ -48,7 +48,7 @@ pub struct VkEngine {
     #[allow(dead_code)]
     pub swapchain_image_views: Vec<vk::ImageView>,
 
-    pub swapchain_texture_sets: Vec<DescSetIx>,
+    // pub swapchain_texture_sets: Vec<DescSetIx>,
     pub swapchain_storage_desc_sets: Vec<DescSetIx>,
 
     command_pool: vk::CommandPool,
@@ -60,7 +60,6 @@ pub struct VkEngine {
 pub struct BatchInput {
     pub swapchain_image: Option<vk::Image>,
     pub storage_set: Option<DescSetIx>,
-    pub texture_set: Option<DescSetIx>,
 }
 
 pub type WinSizeResourcesFn = Arc<
@@ -312,53 +311,6 @@ impl VkEngine {
 
         let mut resources = GpuResources::new(&vk_context)?;
 
-        let swapchain_texture_sets = {
-            let layout = {
-                let mut info = DescriptorLayoutInfo::default();
-
-                let binding = vk::DescriptorSetLayoutBinding::builder()
-                    .binding(0)
-                    .descriptor_count(1)
-                    .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-                    .stage_flags(vk::ShaderStageFlags::COMPUTE) // TODO should also be graphics
-                    .build();
-
-                info.bindings.push(binding);
-                info
-            };
-
-            let set_info = {
-                let info = DescriptorInfo {
-                    ty: rspirv_reflect::DescriptorType::SAMPLED_IMAGE,
-                    binding_count: rspirv_reflect::BindingCount::One,
-                    name: "out_image".to_string(),
-                };
-
-                Some((0u32, info)).into_iter().collect::<BTreeMap<_, _>>()
-            };
-
-            let mut views = Vec::new();
-            for view in swapchain_image_views.iter() {
-                let desc_set = resources.allocate_desc_set_raw(
-                    &layout,
-                    &set_info,
-                    |res, builder| {
-                        let info = ash::vk::DescriptorImageInfo::builder()
-                            .image_layout(vk::ImageLayout::GENERAL)
-                            .image_view(*view)
-                            .build();
-
-                        builder.bind_image(0, &[info]);
-
-                        Ok(())
-                    },
-                )?;
-                let set_ix = resources.insert_desc_set(desc_set);
-                views.push(set_ix);
-            }
-            views
-        };
-
         let swapchain_storage_desc_sets = {
             let layout = {
                 let mut info = DescriptorLayoutInfo::default();
@@ -429,7 +381,6 @@ impl VkEngine {
             swapchain_images: images,
             swapchain_image_views,
 
-            swapchain_texture_sets,
             swapchain_storage_desc_sets,
 
             command_pool,
@@ -497,58 +448,6 @@ impl VkEngine {
         self.swapchain_khr = swapchain_khr;
         self.swapchain_props = swapchain_props;
         self.swapchain_images = images;
-
-        // sampled image desc sets
-        {
-            let layout = {
-                let mut info = DescriptorLayoutInfo::default();
-
-                let binding = vk::DescriptorSetLayoutBinding::builder()
-                    .binding(0)
-                    .descriptor_count(1)
-                    .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-                    .stage_flags(vk::ShaderStageFlags::COMPUTE) // TODO should also be graphics
-                    .build();
-
-                info.bindings.push(binding);
-                info
-            };
-
-            let set_info = {
-                let info = DescriptorInfo {
-                    ty: rspirv_reflect::DescriptorType::SAMPLED_IMAGE,
-                    binding_count: rspirv_reflect::BindingCount::One,
-                    name: "out_image".to_string(),
-                };
-
-                Some((0u32, info)).into_iter().collect::<BTreeMap<_, _>>()
-            };
-
-            let mut views = Vec::new();
-            for (ix, view) in self
-                .swapchain_texture_sets
-                .iter()
-                .zip(swapchain_image_views.iter())
-            {
-                let desc_set = self.resources.allocate_desc_set_raw(
-                    &layout,
-                    &set_info,
-                    |res, builder| {
-                        let info = ash::vk::DescriptorImageInfo::builder()
-                            .image_layout(vk::ImageLayout::GENERAL)
-                            .image_view(*view)
-                            .build();
-
-                        builder.bind_image(0, &[info]);
-
-                        Ok(())
-                    },
-                )?;
-                self.resources.insert_desc_set_at(*ix, desc_set);
-                views.push(desc_set);
-            }
-            views
-        };
 
         // storage image desc sets
         {
@@ -1061,8 +960,6 @@ impl VkEngine {
         };
 
         let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
-        let texture_set =
-            self.swapchain_texture_sets[swapchain_img_ix as usize];
         let storage_set =
             self.swapchain_storage_desc_sets[swapchain_img_ix as usize];
 
@@ -1085,7 +982,6 @@ impl VkEngine {
 
             let batch_input = BatchInput {
                 storage_set: Some(storage_set),
-                texture_set: Some(texture_set),
                 swapchain_image: (ix == acquire_image_batch)
                     .then(|| swapchain_img),
             };

@@ -372,6 +372,7 @@ pub(super) fn create_swapchain_and_images(
             .image_array_layers(1)
             .image_usage(
                 vk::ImageUsageFlags::COLOR_ATTACHMENT
+                    | vk::ImageUsageFlags::STORAGE
                     | vk::ImageUsageFlags::TRANSFER_DST,
             )
             .image_sharing_mode(vk::SharingMode::EXCLUSIVE);

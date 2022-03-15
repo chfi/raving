@@ -295,6 +295,16 @@ pub mod vk {
         pub const HOST_WRITE: Flags = Flags::HOST_WRITE;
         pub const MEMORY_READ: Flags = Flags::MEMORY_READ;
         pub const MEMORY_WRITE: Flags = Flags::MEMORY_WRITE;
+
+        #[rhai_fn(name = "|", global)]
+        pub fn or(f: vk::AccessFlags, g: vk::AccessFlags) -> vk::AccessFlags {
+            f | g
+        }
+
+        #[rhai_fn(name = "&", global)]
+        pub fn and(f: vk::AccessFlags, g: vk::AccessFlags) -> vk::AccessFlags {
+            f & g
+        }
     }
 
     #[rhai_mod(name = "Format")]
