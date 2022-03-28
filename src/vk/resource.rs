@@ -42,6 +42,8 @@ pub struct GpuResources {
     shaders: Arena<ShaderInfo>,
     shader_file_cache: HashMap<PathBuf, ShaderIx>,
 
+    pub(super) render_passes: Arena<vk::RenderPass>,
+
     pub(super) buffers: Arena<BufferRes>,
 
     pub(super) images: Arena<ImageRes>,
@@ -122,6 +124,8 @@ impl GpuResources {
 
             shaders: Arena::new(),
             shader_file_cache: HashMap::default(),
+
+            render_passes: Arena::new(),
 
             pipelines: Arena::new(),
 

@@ -186,7 +186,7 @@ impl DescriptorAllocator {
         let desc_sets = match alloc_result {
             Ok(sets) => Some(sets),
             Err(vk::Result::ERROR_FRAGMENTED_POOL | vk::Result::ERROR_OUT_OF_POOL_MEMORY) => None,
-            Err(_) => bail!("Unrecoverable error when attempting to allocate descriptor set"),
+            Err(err) => bail!("Unrecoverable error when attempting to allocate descriptor set: {:?}", err),
         };
 
         if let Some(sets) = desc_sets {
