@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ash = { version = "0.35", features = ["linked"] }
+ash = { version = "0.36", features = ["linked"] }
 ash-window = "0.9.1"
-gpu-allocator = { version = "0.16", features = ["vulkan"] }
+gpu-allocator = { version = "0.17", features = ["vulkan"] }
 rspirv-reflect = "0.6"
 
 winit = "0.25"

@@ -26,10 +26,12 @@ use crate::{
 pub mod buffer;
 pub mod img;
 pub mod index;
+pub mod vertex;
 
 pub use buffer::*;
 pub use img::*;
 pub use index::*;
+pub use vertex::*;
 
 pub struct GpuResources {
     descriptor_allocator: DescriptorAllocator,
