@@ -82,6 +82,7 @@ pub struct FrameResources {
     command_buffers: Vec<vk::CommandBuffer>,
 
     executing: AtomicCell<bool>,
+    // framebuffers: Vec<vk::Framebuffer>,
     // window_size_resources_fn: Option<WinSizeResourcesFn>,
     // window_size_indices: WinSizeIndices,
     // window_size_desc_sets: HashMap<String, vk::DescriptorSet>,
