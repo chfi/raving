@@ -103,6 +103,7 @@ pub struct WinSizeIndices {
     pub images: HashMap<String, ImageIx>,
     pub image_views: HashMap<String, ImageViewIx>,
     pub desc_sets: HashMap<String, DescSetIx>,
+    pub framebuffers: HashMap<String, FramebufferIx>,
 }
 
 #[derive(Default)]
@@ -110,6 +111,7 @@ pub struct WinSizeResourcesBuilder {
     pub images: HashMap<String, ImageRes>,
     pub image_views: HashMap<String, vk::ImageView>,
     pub desc_sets: HashMap<String, vk::DescriptorSet>,
+    pub framebuffers: HashMap<String, vk::Framebuffer>,
 }
 
 impl WinSizeResourcesBuilder {
@@ -121,6 +123,13 @@ impl WinSizeResourcesBuilder {
         alloc: &mut Allocator,
     ) -> Result<()> {
         // clean up any existing resources first, in order
+        for res_ix in index_map.framebuffers.values() {
+            if let Some(fb) = res.framebuffers.remove(res_ix.0) {
+                unsafe {
+                    ctx.device().destroy_framebuffer(fb, None);
+                }
+            }
+        }
 
         for res_ix in index_map.image_views.values() {
             if let Some(image_view) = res.image_views.remove(res_ix.0) {
@@ -136,6 +145,7 @@ impl WinSizeResourcesBuilder {
             }
         }
 
+        // insert the new resources
         for (name, img) in self.images {
             if let Some(&ix) = index_map.images.get(&name) {
                 // we already freed the resources above
@@ -161,6 +171,15 @@ impl WinSizeResourcesBuilder {
             } else {
                 let ix = res.insert_desc_set(desc_set);
                 index_map.desc_sets.insert(name, ix);
+            }
+        }
+
+        for (name, framebuffer) in self.framebuffers {
+            if let Some(&ix) = index_map.framebuffers.get(&name) {
+                let _ = res.insert_framebuffer_at(ix, framebuffer);
+            } else {
+                let ix = res.insert_framebuffer(framebuffer);
+                index_map.framebuffers.insert(name, ix);
             }
         }
 

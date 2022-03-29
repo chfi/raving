@@ -45,6 +45,7 @@ pub struct GpuResources {
     shader_file_cache: HashMap<PathBuf, ShaderIx>,
 
     pub(super) render_passes: Arena<vk::RenderPass>,
+    pub(super) framebuffers: Arena<vk::Framebuffer>,
 
     pub(super) buffers: Arena<BufferRes>,
 
@@ -128,6 +129,7 @@ impl GpuResources {
             shader_file_cache: HashMap::default(),
 
             render_passes: Arena::new(),
+            framebuffers: Arena::new(),
 
             pipelines: Arena::new(),
 
@@ -367,8 +369,10 @@ impl GpuResources {
         let color_attch_desc = vk::AttachmentDescription::builder()
             .format(format)
             .samples(vk::SampleCountFlags::TYPE_1)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            // .load_op(vk::AttachmentLoadOp::CLEAR)
+            .load_op(vk::AttachmentLoadOp::LOAD)
+            // .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .store_op(vk::AttachmentStoreOp::STORE)
             .initial_layout(initial_layout)
             .final_layout(final_layout)
             .build();
@@ -426,6 +430,56 @@ impl GpuResources {
     pub fn insert_render_pass(&mut self, pass: vk::RenderPass) -> RenderPassIx {
         let i = self.render_passes.insert(pass);
         RenderPassIx(i)
+    }
+
+    #[must_use = "If a vk::RenderPass is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn insert_render_pass_at(
+        &mut self,
+        ix: RenderPassIx,
+        pass: vk::RenderPass,
+    ) -> Option<vk::RenderPass> {
+        self.render_passes.insert_at(ix.0, pass)
+    }
+
+    //// Framebuffer methods
+
+    pub fn create_framebuffer(
+        &mut self,
+        ctx: &VkContext,
+        pass_ix: RenderPassIx,
+        attchs: &[vk::ImageView],
+        width: u32,
+        height: u32,
+    ) -> Result<vk::Framebuffer> {
+        let pass = self[pass_ix];
+
+        let framebuffer_info = vk::FramebufferCreateInfo::builder()
+            .render_pass(pass)
+            .attachments(attchs)
+            .width(width)
+            .height(height)
+            .layers(1)
+            .build();
+
+        let fb = unsafe {
+            ctx.device().create_framebuffer(&framebuffer_info, None)
+        }?;
+
+        Ok(fb)
+    }
+
+    pub fn insert_framebuffer(&mut self, fb: vk::Framebuffer) -> FramebufferIx {
+        let i = self.framebuffers.insert(fb);
+        FramebufferIx(i)
+    }
+
+    #[must_use = "If a vk::Framebuffer is returned, it must be freed manually or inserted into another index, otherwise it will leak"]
+    pub fn insert_framebuffer_at(
+        &mut self,
+        ix: FramebufferIx,
+        fb: vk::Framebuffer,
+    ) -> Option<vk::Framebuffer> {
+        self.framebuffers.insert_at(ix.0, fb)
     }
 
     //// Shader methods

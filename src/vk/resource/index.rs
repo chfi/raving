@@ -18,8 +18,8 @@ pub struct PipelineIx(pub(crate) Index);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RenderPassIx(pub(crate) Index);
 
-// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-// pub struct FramebufferIx(pub(crate) Index);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FramebufferIx(pub(crate) Index);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DescSetIx(pub Index);
@@ -63,6 +63,14 @@ impl std::ops::Index<RenderPassIx> for GpuResources {
 
     fn index(&self, i: RenderPassIx) -> &Self::Output {
         &self.render_passes[i.0]
+    }
+}
+
+impl std::ops::Index<FramebufferIx> for GpuResources {
+    type Output = vk::Framebuffer;
+
+    fn index(&self, i: FramebufferIx) -> &Self::Output {
+        &self.framebuffers[i.0]
     }
 }
 
