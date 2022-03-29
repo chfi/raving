@@ -286,6 +286,17 @@ impl BatchBuilder {
 
         self.command_fns.push(f);
     }
+
+    pub fn append_command<F>(&mut self, f: F)
+    where
+        F: Fn(&ash::Device, &GpuResources, vk::CommandBuffer)
+            + Send
+            + Sync
+            + 'static,
+    {
+        let arc_f = Arc::new(f) as BatchFn;
+        self.command_fns.push(arc_f);
+    }
 }
 
 pub fn create_batch_engine() -> rhai::Engine {
@@ -429,6 +440,25 @@ pub fn create_batch_engine() -> rhai::Engine {
             Ok(())
         },
     );
+
+    /*
+    engine.register_fn(
+        "begin_render_pass",
+        |builder: &mut BatchBuilder, pass_ix: RenderPassIx, clear: [f32; 4]| {
+            builder.append_command(|dev, res, cmd: vk::CommandBuffer| {
+                unsafe {
+                    dev.cmd_begin_render_pass(cmd, create_info, contents)
+                    //
+                }
+                // unsafe {
+                //     cmd.
+                // }
+            });
+            // clear: Vec<rhai::Dynamic>| {
+        },
+    );
+    */
+    // pass: vk::RenderPass,
 
     engine.register_fn(
         "transition_image",

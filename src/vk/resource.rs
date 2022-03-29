@@ -356,24 +356,77 @@ impl GpuResources {
 
     //// Render pass methods
 
-    /*
     pub fn create_line_render_pass(
         &self,
         ctx: &VkContext,
-        color_attch_desc: vk::AttachmentDescription,
-        // initial_layout: vk::ImageLayout,
-        // final_layout: vk::ImageLayout,
+        format: vk::Format,
+        // color_attch_desc: vk::AttachmentDescription,
+        initial_layout: vk::ImageLayout,
+        final_layout: vk::ImageLayout,
     ) -> Result<vk::RenderPass> {
         let color_attch_desc = vk::AttachmentDescription::builder()
-            .format(swapchain_props.format.format)
-            .samples(msaa_samples)
+            .format(format)
+            .samples(vk::SampleCountFlags::TYPE_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(initial_layout)
             .final_layout(final_layout)
             .build();
+
+        let attch_descs = [color_attch_desc];
+
+        let color_attch_ref = vk::AttachmentReference::builder()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build();
+
+        let color_attchs = [color_attch_ref];
+
+        let subpass_desc = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attchs)
+            // .resolve_attachments(&resolve_attchs)
+            .build();
+
+        let subpass_descs = [subpass_desc];
+
+        let subpass_dep = vk::SubpassDependency::builder()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                    | vk::PipelineStageFlags::COMPUTE_SHADER,
+            )
+            .src_access_mask(
+                vk::AccessFlags::SHADER_WRITE
+                    | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            )
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(
+                vk::AccessFlags::COLOR_ATTACHMENT_READ
+                    | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            )
+            .build();
+
+        let subpass_deps = [subpass_dep];
+
+        let render_pass_info = vk::RenderPassCreateInfo::builder()
+            .attachments(&attch_descs)
+            .subpasses(&subpass_descs)
+            .dependencies(&subpass_deps)
+            .build();
+
+        let render_pass = unsafe {
+            ctx.device().create_render_pass(&render_pass_info, None)
+        }?;
+
+        Ok(render_pass)
     }
-    */
+
+    pub fn insert_render_pass(&mut self, pass: vk::RenderPass) -> RenderPassIx {
+        let i = self.render_passes.insert(pass);
+        RenderPassIx(i)
+    }
 
     //// Shader methods
 
@@ -533,25 +586,100 @@ impl GpuResources {
 
         let stages = [vert_state_info, frag_state_info];
 
+        let vert_binding_descs = [Vx2D::get_binding_desc()];
+        let vert_attr_descs = Vx2D::get_attribute_descs();
+        let vert_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
+            .vertex_binding_descriptions(&vert_binding_descs)
+            .vertex_attribute_descriptions(&vert_attr_descs)
+            .build();
+
+        let input_assembly_info = {
+            let topology = vk::PrimitiveTopology::LINE_LIST;
+            // vk::PrimitiveTopology::TRIANGLE_LIST;
+            vk::PipelineInputAssemblyStateCreateInfo::builder()
+                .topology(topology)
+                .primitive_restart_enable(false)
+                .build()
+        };
+
+        let viewport_info = vk::PipelineViewportStateCreateInfo::builder()
+            .viewport_count(1)
+            .scissor_count(1)
+            .build();
+
+        let dynamic_states = {
+            use vk::DynamicState as DS;
+            [DS::VIEWPORT, DS::SCISSOR]
+        };
+
+        let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::builder()
+            .dynamic_states(&dynamic_states)
+            .build();
+
+        let rasterizer_info =
+            vk::PipelineRasterizationStateCreateInfo::builder()
+                .depth_clamp_enable(false)
+                .rasterizer_discard_enable(false)
+                .polygon_mode(vk::PolygonMode::FILL)
+                .line_width(1.0)
+                .cull_mode(vk::CullModeFlags::NONE)
+                .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+                .depth_bias_enable(false)
+                .depth_bias_constant_factor(0.0)
+                .depth_bias_clamp(0.0)
+                .depth_bias_slope_factor(0.0)
+                .build();
+
+        let multisampling_info =
+            vk::PipelineMultisampleStateCreateInfo::builder()
+                .sample_shading_enable(false)
+                .rasterization_samples(vk::SampleCountFlags::TYPE_1)
+                .min_sample_shading(1.0)
+                .alpha_to_coverage_enable(true)
+                .alpha_to_one_enable(false)
+                .build();
+
+        let color_blend_attachment =
+            vk::PipelineColorBlendAttachmentState::builder()
+                .color_write_mask(vk::ColorComponentFlags::default())
+                .blend_enable(true)
+                .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                .color_blend_op(vk::BlendOp::ADD)
+                .src_alpha_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                .alpha_blend_op(vk::BlendOp::ADD)
+                .build();
+
+        let color_blend_attachments = [color_blend_attachment];
+
+        let color_blending_info =
+            vk::PipelineColorBlendStateCreateInfo::builder()
+                // .logic_op_enable(false)
+                // .logic_op(vk::LogicOp::COPY)
+                .attachments(&color_blend_attachments)
+                .blend_constants([0.0, 0.0, 0.0, 0.0])
+                .build();
+
         let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
             .layout(pipeline_layout)
             .stages(&stages)
             .render_pass(render_pass)
+            .vertex_input_state(&vert_input_info)
+            .input_assembly_state(&input_assembly_info)
+            .color_blend_state(&color_blending_info)
+            .viewport_state(&viewport_info)
+            .dynamic_state(&dynamic_state_info)
+            .rasterization_state(&rasterizer_info)
+            .multisample_state(&multisampling_info)
+            .render_pass(render_pass)
+            .subpass(0)
             .build();
 
         /*
         let mut pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
             .stages(&shader_stages_create_infos)
-            .vertex_input_state(&vert_input_info)
-            .input_assembly_state(&input_assembly_info)
-            .viewport_state(&viewport_info)
-            .dynamic_state(&dynamic_state_info)
-            .rasterization_state(&rasterizer_info)
-            .multisample_state(&multisampling_info)
-            .color_blend_state(&color_blending_info)
             .layout(layout)
-            .render_pass(render_pass)
-            .subpass(0);
             */
 
         let pipeline_infos = [pipeline_info];
