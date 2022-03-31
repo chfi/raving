@@ -27,11 +27,13 @@ pub mod buffer;
 pub mod img;
 pub mod index;
 pub mod vertex;
+pub mod window;
 
 pub use buffer::*;
 pub use img::*;
 pub use index::*;
 pub use vertex::*;
+pub use window::*;
 
 pub struct GpuResources {
     descriptor_allocator: DescriptorAllocator,
