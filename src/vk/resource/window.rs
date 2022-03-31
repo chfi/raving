@@ -17,12 +17,134 @@ use thunderdome::Arena;
 
 use super::*;
 
+#[derive(Debug, Default, Clone)]
+pub struct WindowResIndices {
+    pub images: HashMap<String, ImageIx>,
+    pub image_views: HashMap<String, ImageViewIx>,
+    pub desc_sets: HashMap<
+        String,
+        HashMap<(vk::DescriptorType, vk::ImageLayout), DescSetIx>,
+    >,
+    pub framebuffers: HashMap<String, FramebufferIx>,
+}
+
+#[derive(Default)]
+pub struct WindowResBuilder {
+    pub images: HashMap<String, ImageRes>,
+    pub image_views: HashMap<String, vk::ImageView>,
+    // pub desc_sets: HashMap<String, vk::DescriptorSet>,
+    pub desc_sets: HashMap<
+        String,
+        HashMap<(vk::DescriptorType, vk::ImageLayout), vk::DescriptorSet>,
+    >,
+    pub framebuffers: HashMap<String, vk::Framebuffer>,
+}
+
+impl WindowResBuilder {
+    pub fn insert(
+        self,
+        index_map: &mut WindowResIndices,
+        ctx: &VkContext,
+        res: &mut GpuResources,
+        alloc: &mut Allocator,
+    ) -> Result<()> {
+        // clean up any existing resources first, in order
+        for res_ix in index_map.framebuffers.values() {
+            if let Some(fb) = res.framebuffers.remove(res_ix.0) {
+                unsafe {
+                    ctx.device().destroy_framebuffer(fb, None);
+                }
+            }
+        }
+
+        for res_ix in index_map.image_views.values() {
+            if let Some(image_view) = res.image_views.remove(res_ix.0) {
+                unsafe {
+                    ctx.device().destroy_image_view(image_view, None);
+                }
+            }
+        }
+
+        for res_ix in index_map.images.values() {
+            if let Some(image) = res.images.remove(res_ix.0) {
+                res.free_image(ctx, alloc, image)?;
+            }
+        }
+
+        // insert the new resources
+        for (name, img) in self.images {
+            if let Some(&ix) = index_map.images.get(&name) {
+                // we already freed the resources above
+                let _ = res.insert_image_at(ix, img);
+            } else {
+                let ix = res.insert_image(img);
+                index_map.images.insert(name, ix);
+            }
+        }
+
+        for (name, img_view) in self.image_views {
+            if let Some(&ix) = index_map.image_views.get(&name) {
+                let _ = res.insert_image_view_at(ix, img_view);
+            } else {
+                let ix = res.insert_image_view(img_view);
+                index_map.image_views.insert(name, ix);
+            }
+        }
+
+        // for (name, desc_set) in self.desc_sets {
+        for (name, inner) in self.desc_sets {
+            for ((ty, layout), desc_set) in inner {
+                if let Some(&ix) = index_map
+                    .desc_sets
+                    .get(&name)
+                    .and_then(|i| i.get(&(ty, layout)))
+                {
+                    let _ = res.insert_desc_set_at(ix, desc_set);
+                } else {
+                    let ix = res.insert_desc_set(desc_set);
+                    index_map
+                        .desc_sets
+                        .entry(name.to_string())
+                        .or_default()
+                        .insert((ty, layout), ix);
+                }
+            }
+        }
+
+        for (name, framebuffer) in self.framebuffers {
+            if let Some(&ix) = index_map.framebuffers.get(&name) {
+                let _ = res.insert_framebuffer_at(ix, framebuffer);
+            } else {
+                let ix = res.insert_framebuffer(framebuffer);
+                index_map.framebuffers.insert(name, ix);
+            }
+        }
+
+        Ok(())
+    }
+}
+
 pub struct WindowResources {
-    indices: WinSizeIndices,
+    indices: WindowResIndices,
 
     desc_set_infos: HashMap<String, BTreeMap<u32, DescriptorInfo>>,
 
     desc_layout_infos: HashMap<String, DescriptorLayoutInfo>,
+
+    // resources: Vec<WindowResDesc>,
+    resources: HashMap<String, WindowResDesc>,
+}
+
+// pub struct WindowResDesc<Name: AsRef<str>> {
+// name: Name,
+#[derive(Clone)]
+pub struct WindowResDesc {
+    // pub name: String,
+    pub format: vk::Format,
+    pub usage: vk::ImageUsageFlags,
+
+    descriptors: Vec<(vk::ImageUsageFlags, vk::ImageLayout)>,
+    framebuffers: Vec<RenderPassIx>,
 }
 
 impl WindowResources {
@@ -66,8 +188,12 @@ impl WindowResources {
 
             desc_set_infos,
             desc_layout_infos,
+
+            resources: Default::default(),
         }
     }
+
+    // pub fn add_image(&mut self,
 
     fn allocate_desc_sets_for(
         &mut self,
@@ -75,7 +201,8 @@ impl WindowResources {
         img_view: vk::ImageView,
         usage: vk::ImageUsageFlags,
         layout: vk::ImageLayout,
-    ) -> Result<Vec<(vk::ImageUsageFlags, vk::DescriptorSet)>> {
+        // ) -> Result<Vec<(vk::ImageUsageFlags, vk::DescriptorSet)>> {
+    ) -> Result<Vec<(vk::DescriptorType, vk::DescriptorSet)>> {
         let mut result = Vec::new();
 
         let window_storage_set_info =
@@ -104,7 +231,8 @@ impl WindowResources {
                 },
             )?;
 
-            result.push((vk::ImageUsageFlags::SAMPLED, sampled_desc_set));
+            result.push((vk::DescriptorType::SAMPLED_IMAGE, sampled_desc_set));
+            // result.push((vk::ImageUsageFlags::SAMPLED, sampled_desc_set));
         }
 
         if usage.intersects(vk::ImageUsageFlags::STORAGE) {
@@ -123,7 +251,8 @@ impl WindowResources {
                 },
             )?;
 
-            result.push((vk::ImageUsageFlags::STORAGE, storage_desc_set));
+            result.push((vk::DescriptorType::STORAGE_IMAGE, storage_desc_set));
+            // result.push((vk::ImageUsageFlags::STORAGE, storage_desc_set));
         }
 
         Ok(result)
