@@ -32,7 +32,6 @@ pub struct WindowResIndices {
 pub struct WindowResBuilder {
     pub images: HashMap<String, ImageRes>,
     pub image_views: HashMap<String, vk::ImageView>,
-    // pub desc_sets: HashMap<String, vk::DescriptorSet>,
     pub desc_sets: HashMap<
         String,
         HashMap<(vk::DescriptorType, vk::ImageLayout), vk::DescriptorSet>,
@@ -91,7 +90,6 @@ impl WindowResBuilder {
             }
         }
 
-        // for (name, desc_set) in self.desc_sets {
         for (name, inner) in self.desc_sets {
             for ((ty, layout), desc_set) in inner {
                 if let Some(&ix) = index_map
@@ -125,7 +123,7 @@ impl WindowResBuilder {
 }
 
 pub struct WindowResources {
-    indices: WindowResIndices,
+    pub indices: WindowResIndices,
 
     desc_set_infos: HashMap<String, BTreeMap<u32, DescriptorInfo>>,
 
@@ -193,10 +191,89 @@ impl WindowResources {
         }
     }
 
+    pub fn add_image(
+        &mut self,
+        name: &str,
+        format: vk::Format,
+        usage: vk::ImageUsageFlags,
+        descriptors: impl IntoIterator<
+            Item = (vk::ImageUsageFlags, vk::ImageLayout),
+        >,
+        framebuffer_pass: Option<RenderPassIx>,
+    ) -> Result<()> {
+        let res = WindowResDesc {
+            format,
+            usage,
+            // descriptors,
+            descriptors: descriptors.into_iter().collect(),
+            framebuffers: framebuffer_pass.into_iter().collect(),
+        };
+
+        self.resources.insert(name.to_string(), res);
+
+        Ok(())
+    }
+
+    pub fn build(
+        &self,
+        engine: &mut VkEngine,
+        width: u32,
+        height: u32,
+    ) -> Result<WindowResBuilder> {
+        let mut builder = WindowResBuilder::default();
+
+        engine.with_allocators(|ctx, res, alloc| {
+            for (name, win_res) in self.resources.iter() {
+                let image = res.allocate_image(
+                    ctx,
+                    alloc,
+                    width,
+                    height,
+                    win_res.format,
+                    win_res.usage,
+                    Some(name),
+                )?;
+
+                let view = res.new_image_view(ctx, &image)?;
+
+                for &pass_ix in &win_res.framebuffers {
+                    let attchs = [view];
+                    let framebuffer = res.create_framebuffer(
+                        ctx, pass_ix, &attchs, width, height,
+                    )?;
+
+                    builder.framebuffers.insert(name.to_string(), framebuffer);
+                }
+
+                {
+                    let desc_sets =
+                        builder.desc_sets.entry(name.to_string()).or_default();
+
+                    for &(usage, layout) in &win_res.descriptors {
+                        let out = self
+                            .allocate_desc_sets_for(res, view, usage, layout)?;
+
+                        for (ty, set) in out {
+                            desc_sets.insert((ty, layout), set);
+                        }
+                    }
+                }
+
+                builder.images.insert(name.to_string(), image);
+
+                builder.image_views.insert(name.to_string(), view);
+            }
+
+            Ok(())
+        })?;
+
+        Ok(builder)
+    }
+
     // pub fn add_image(&mut self,
 
     fn allocate_desc_sets_for(
-        &mut self,
+        &self,
         res: &mut GpuResources,
         img_view: vk::ImageView,
         usage: vk::ImageUsageFlags,

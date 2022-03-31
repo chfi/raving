@@ -3,7 +3,7 @@ use raving::script::console::BatchBuilder;
 use raving::vk::descriptor::DescriptorLayoutInfo;
 use raving::vk::{
     BatchInput, FrameResources, GpuResources, VkEngine, WinSizeIndices,
-    WinSizeResourcesBuilder,
+    WinSizeResourcesBuilder, WindowResources,
 };
 
 use raving::vk::util::*;
@@ -65,6 +65,33 @@ fn main() -> Result<()> {
 
     let mut engine = VkEngine::new(&window)?;
 
+    let mut window_resources = WindowResources::new();
+
+    window_resources.add_image(
+        "out",
+        vk::Format::R8G8B8A8_UNORM,
+        vk::ImageUsageFlags::STORAGE
+            | vk::ImageUsageFlags::SAMPLED
+            | vk::ImageUsageFlags::COLOR_ATTACHMENT
+            | vk::ImageUsageFlags::TRANSFER_SRC,
+        [
+            (vk::ImageUsageFlags::STORAGE, vk::ImageLayout::GENERAL),
+            (vk::ImageUsageFlags::SAMPLED, vk::ImageLayout::GENERAL),
+        ],
+        None,
+    )?;
+
+    {
+        let size = window.inner_size();
+        let builder =
+            window_resources.build(&mut engine, size.width, size.height)?;
+        engine.with_allocators(|ctx, res, alloc| {
+            builder.insert(&mut window_resources.indices, ctx, res, alloc)?;
+            Ok(())
+        })?;
+    }
+
+    /*
     let window_storage_set_info = {
         let info = DescriptorInfo {
             ty: rspirv_reflect::DescriptorType::STORAGE_IMAGE,
@@ -157,15 +184,20 @@ fn main() -> Result<()> {
     }
 
     dbg!(&win_size_resource_index);
+    */
 
-    let out_image = *win_size_resource_index.images.get("out_image").unwrap();
-    let out_view = *win_size_resource_index
-        .image_views
-        .get("out_image_view")
-        .unwrap();
-    let out_desc_set = *win_size_resource_index
+    let out_image = *window_resources.indices.images.get("out").unwrap();
+    let out_view = *window_resources.indices.image_views.get("out").unwrap();
+    let out_desc_set = *window_resources
+        .indices
         .desc_sets
-        .get("out_desc_set")
+        .get("out")
+        .and_then(|s| {
+            s.get(&(
+                vk::DescriptorType::STORAGE_IMAGE,
+                vk::ImageLayout::GENERAL,
+            ))
+        })
         .unwrap();
 
     log::warn!("MODULE BUILDER");
@@ -332,16 +364,14 @@ fn main() -> Result<()> {
                         swapchain_dims.store(engine.swapchain_dimensions());
 
                         {
-                            let res_builder = win_size_res_builder(
-                                &mut engine,
-                                size.width,
-                                size.height,
-                            )
-                            .unwrap();
+                            let res_builder = window_resources
+                                .build(&mut engine, size.width, size.height)
+                                .unwrap();
+
                             engine
                                 .with_allocators(|ctx, res, alloc| {
                                     res_builder.insert(
-                                        &mut win_size_resource_index,
+                                        &mut window_resources.indices,
                                         ctx,
                                         res,
                                         alloc,
