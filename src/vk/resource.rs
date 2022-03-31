@@ -564,39 +564,33 @@ impl GpuResources {
         }?;
 
         let pipeline_layout = {
-            let vert_pc_range =
-                if let Some((offset, size)) = vert.push_constant_range {
+            let mut pc_ranges = Vec::new();
+
+            // let vert_pc_range =
+            if let Some((offset, size)) = vert.push_constant_range {
+                pc_ranges.push(
                     vk::PushConstantRange::builder()
                         .stage_flags(vk::ShaderStageFlags::VERTEX)
                         .offset(offset)
                         .size(size)
-                        .build()
-                } else {
-                    // TODO not sure if this is correct!
-                    vk::PushConstantRange::builder()
-                        .stage_flags(vk::ShaderStageFlags::VERTEX)
-                        .offset(0)
-                        .size(0)
-                        .build()
-                };
+                        .build(),
+                )
+            }
+            // } else {
+            //     None
+            // };
 
-            let frag_pc_range =
-                if let Some((offset, size)) = frag.push_constant_range {
+            if let Some((offset, size)) = frag.push_constant_range {
+                pc_ranges.push(
                     vk::PushConstantRange::builder()
                         .stage_flags(vk::ShaderStageFlags::FRAGMENT)
                         .offset(offset)
                         .size(size)
-                        .build()
-                } else {
-                    // TODO not sure if this is correct!
-                    vk::PushConstantRange::builder()
-                        .stage_flags(vk::ShaderStageFlags::FRAGMENT)
-                        .offset(0)
-                        .size(0)
-                        .build()
-                };
+                        .build(),
+                )
+            }
 
-            let pc_ranges = [vert_pc_range, frag_pc_range];
+            // let pc_ranges = [vert_pc_range, frag_pc_range];
 
             let mut layouts = Vec::new();
 
@@ -648,8 +642,8 @@ impl GpuResources {
             .build();
 
         let input_assembly_info = {
-            let topology = vk::PrimitiveTopology::LINE_LIST;
-            // vk::PrimitiveTopology::TRIANGLE_LIST;
+            // let topology = vk::PrimitiveTopology::LINE_LIST;
+            let topology = vk::PrimitiveTopology::TRIANGLE_LIST;
             vk::PipelineInputAssemblyStateCreateInfo::builder()
                 .topology(topology)
                 .primitive_restart_enable(false)
@@ -695,7 +689,7 @@ impl GpuResources {
 
         let color_blend_attachment =
             vk::PipelineColorBlendAttachmentState::builder()
-                .color_write_mask(vk::ColorComponentFlags::default())
+                .color_write_mask(vk::ColorComponentFlags::RGBA)
                 .blend_enable(true)
                 .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
                 .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
