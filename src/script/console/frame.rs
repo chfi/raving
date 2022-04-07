@@ -189,6 +189,48 @@ impl FrameBuilder {
         no_resolvers
     }
 
+    pub fn from_script_with<F>(path: &str, f: F) -> anyhow::Result<Self>
+    where
+        F: Fn(&mut rhai::Engine),
+    {
+        use anyhow::anyhow;
+
+        let builder = {
+            let result = Self::default();
+            let result = Arc::new(Mutex::new(result));
+
+            let mut engine = Self::create_engine(result.clone());
+            f(&mut engine);
+
+            let path = std::path::PathBuf::from(path);
+            let ast = engine.compile_file(path)?;
+
+            let module = rhai::Module::eval_ast_as_new(
+                rhai::Scope::new(),
+                &ast,
+                &engine,
+            )?;
+
+            std::mem::drop(engine);
+
+            let mutex = Arc::try_unwrap(result).map_err(|_| {
+                anyhow!("More than one Arc owner in FrameBuilder::from_script")
+            })?;
+            let mut result = mutex.into_inner();
+
+            result.ast = ast;
+            result.module = module;
+
+            result
+        };
+
+        for (name, var) in builder.module.iter_var() {
+            log::warn!("{} - {:?}", name, var);
+        }
+
+        Ok(builder)
+    }
+
     pub fn from_script(path: &str) -> anyhow::Result<Self> {
         use anyhow::anyhow;
 
