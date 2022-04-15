@@ -360,6 +360,7 @@ impl GpuResources {
 
     //// Render pass methods
 
+    // TODO rename and make more configurable
     pub fn create_line_render_pass(
         &self,
         ctx: &VkContext,
@@ -871,6 +872,28 @@ impl GpuResources {
     }
 
     //// Descriptor set methods
+
+    pub fn write_desc_set_raw<F>(
+        &mut self,
+        set_info: &BTreeMap<u32, DescriptorInfo>,
+        desc_set: vk::DescriptorSet,
+        write_builder: F,
+    ) -> Result<()>
+    where
+        F: FnOnce(&Self, &mut DescriptorUpdateBuilder) -> Result<()>,
+    {
+        let mut builder = DescriptorUpdateBuilder::new(set_info);
+
+        write_builder(self, &mut builder)?;
+
+        builder.apply(
+            &mut self.layout_cache,
+            &mut self.descriptor_allocator,
+            desc_set,
+        );
+
+        Ok(())
+    }
 
     pub fn allocate_desc_set_raw<F>(
         &mut self,
