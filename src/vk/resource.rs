@@ -637,8 +637,8 @@ impl GpuResources {
 
         let stages = [vert_state_info, frag_state_info];
 
-        let vert_binding_descs = [Vx2D::get_binding_desc()];
-        let vert_attr_descs = Vx2D::get_attribute_descs();
+        let vert_binding_descs = [Vx2DIx::get_binding_desc()];
+        let vert_attr_descs = Vx2DIx::get_attribute_descs();
         let vert_input_info = vk::PipelineVertexInputStateCreateInfo::builder()
             .vertex_binding_descriptions(&vert_binding_descs)
             .vertex_attribute_descriptions(&vert_attr_descs)
