@@ -266,6 +266,22 @@ pub mod vk {
         pub const HOST: Flags = Flags::HOST;
         pub const ALL_GRAPHICS: Flags = Flags::ALL_GRAPHICS;
         pub const ALL_COMMANDS: Flags = Flags::ALL_COMMANDS;
+
+        #[rhai_fn(name = "|", global)]
+        pub fn or(
+            f: vk::PipelineStageFlags,
+            g: vk::PipelineStageFlags,
+        ) -> vk::PipelineStageFlags {
+            f | g
+        }
+
+        #[rhai_fn(name = "&", global)]
+        pub fn and(
+            f: vk::PipelineStageFlags,
+            g: vk::PipelineStageFlags,
+        ) -> vk::PipelineStageFlags {
+            f & g
+        }
     }
 
     #[rhai_mod(name = "AccessFlags")]
