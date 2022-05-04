@@ -526,6 +526,241 @@ impl GpuResources {
 
     //// Pipeline methods
 
+    pub fn create_graphics_pipeline<'a>(
+        &mut self,
+        context: &VkContext,
+        vert_shader_ix: ShaderIx,
+        frag_shader_ix: ShaderIx,
+        render_pass: vk::RenderPass,
+        vert_input_info: vk::PipelineVertexInputStateCreateInfoBuilder<'a>,
+    ) -> Result<PipelineIx> {
+        /*
+                if (*&self[vert_shader_ix].stage & vk::ShaderStageFlags::VERTEX).is_empty()
+                    ||
+        (*&self[frag_shader_ix].stage & vk::ShaderStageFlags::FRAGMENT).is_empty()
+
+                {
+                    bail!("Tried to create a compute pipeline from shader {:?} which has stage flags {:?}", shader_ix, &self[shader_ix].stage);
+                }
+                */
+
+        let vert = self[vert_shader_ix].clone();
+        let frag = self[frag_shader_ix].clone();
+
+        let vert_create_info = vk::ShaderModuleCreateInfo::builder()
+            .code(&vert.spirv)
+            .build();
+
+        let vert_shader_module = unsafe {
+            context
+                .device()
+                .create_shader_module(&vert_create_info, None)
+        }?;
+
+        let frag_create_info = vk::ShaderModuleCreateInfo::builder()
+            .code(&frag.spirv)
+            .build();
+
+        let frag_shader_module = unsafe {
+            context
+                .device()
+                .create_shader_module(&frag_create_info, None)
+        }?;
+
+        let pipeline_layout = {
+            let mut pc_ranges = Vec::new();
+
+            // let vert_pc_range =
+            if let Some((offset, size)) = vert.push_constant_range {
+                pc_ranges.push(
+                    vk::PushConstantRange::builder()
+                        .stage_flags(vk::ShaderStageFlags::VERTEX)
+                        .offset(offset)
+                        .size(size)
+                        .build(),
+                )
+            }
+            // } else {
+            //     None
+            // };
+
+            if let Some((offset, size)) = frag.push_constant_range {
+                pc_ranges.push(
+                    vk::PushConstantRange::builder()
+                        .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                        .offset(offset)
+                        .size(size)
+                        .build(),
+                )
+            }
+
+            // let pc_ranges = [vert_pc_range, frag_pc_range];
+
+            let mut layouts = Vec::new();
+
+            layouts.extend(vert.set_infos.keys().filter_map(|&set_ix| {
+                let info = vert.set_layout_info(set_ix).ok()?;
+                let layout =
+                    self.layout_cache.get_descriptor_layout_new(&info).ok()?;
+                Some(layout)
+            }));
+
+            layouts.extend(frag.set_infos.keys().filter_map(|&set_ix| {
+                let info = frag.set_layout_info(set_ix).ok()?;
+                let layout =
+                    self.layout_cache.get_descriptor_layout_new(&info).ok()?;
+                Some(layout)
+            }));
+
+            let layout_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(&layouts)
+                .push_constant_ranges(&pc_ranges)
+                .build();
+
+            unsafe {
+                context.device().create_pipeline_layout(&layout_info, None)
+            }
+        }?;
+
+        let entry_point = std::ffi::CString::new("main").unwrap();
+
+        let vert_state_info = vk::PipelineShaderStageCreateInfo::builder()
+            .stage(vk::ShaderStageFlags::VERTEX)
+            .module(vert_shader_module)
+            .name(&entry_point)
+            .build();
+
+        let frag_state_info = vk::PipelineShaderStageCreateInfo::builder()
+            .stage(vk::ShaderStageFlags::FRAGMENT)
+            .module(frag_shader_module)
+            .name(&entry_point)
+            .build();
+
+        let stages = [vert_state_info, frag_state_info];
+
+        let input_assembly_info = {
+            // let topology = vk::PrimitiveTopology::LINE_LIST;
+            let topology = vk::PrimitiveTopology::TRIANGLE_LIST;
+            vk::PipelineInputAssemblyStateCreateInfo::builder()
+                .topology(topology)
+                .primitive_restart_enable(false)
+                .build()
+        };
+
+        let viewport_info = vk::PipelineViewportStateCreateInfo::builder()
+            .viewport_count(1)
+            .scissor_count(1)
+            .build();
+
+        let dynamic_states = {
+            use vk::DynamicState as DS;
+            [DS::VIEWPORT, DS::SCISSOR]
+        };
+
+        let dynamic_state_info = vk::PipelineDynamicStateCreateInfo::builder()
+            .dynamic_states(&dynamic_states)
+            .build();
+
+        let rasterizer_info =
+            vk::PipelineRasterizationStateCreateInfo::builder()
+                .depth_clamp_enable(false)
+                .rasterizer_discard_enable(false)
+                .polygon_mode(vk::PolygonMode::FILL)
+                .line_width(1.0)
+                .cull_mode(vk::CullModeFlags::NONE)
+                .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+                .depth_bias_enable(false)
+                .depth_bias_constant_factor(0.0)
+                .depth_bias_clamp(0.0)
+                .depth_bias_slope_factor(0.0)
+                .build();
+
+        let multisampling_info =
+            vk::PipelineMultisampleStateCreateInfo::builder()
+                .sample_shading_enable(false)
+                .rasterization_samples(vk::SampleCountFlags::TYPE_1)
+                .min_sample_shading(1.0)
+                .alpha_to_coverage_enable(true)
+                .alpha_to_one_enable(false)
+                .build();
+
+        let color_blend_attachment =
+            vk::PipelineColorBlendAttachmentState::builder()
+                .color_write_mask(vk::ColorComponentFlags::RGBA)
+                .blend_enable(true)
+                .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                .color_blend_op(vk::BlendOp::ADD)
+                .src_alpha_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                .alpha_blend_op(vk::BlendOp::ADD)
+                .build();
+
+        let color_blend_attachments = [color_blend_attachment];
+
+        let color_blending_info =
+            vk::PipelineColorBlendStateCreateInfo::builder()
+                // .logic_op_enable(false)
+                // .logic_op(vk::LogicOp::COPY)
+                .attachments(&color_blend_attachments)
+                .blend_constants([0.0, 0.0, 0.0, 0.0])
+                .build();
+
+        let pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+            .layout(pipeline_layout)
+            .stages(&stages)
+            .render_pass(render_pass)
+            .vertex_input_state(&vert_input_info)
+            .input_assembly_state(&input_assembly_info)
+            .color_blend_state(&color_blending_info)
+            .viewport_state(&viewport_info)
+            .dynamic_state(&dynamic_state_info)
+            .rasterization_state(&rasterizer_info)
+            .multisample_state(&multisampling_info)
+            .render_pass(render_pass)
+            .subpass(0)
+            .build();
+
+        /*
+        let mut pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+            .stages(&shader_stages_create_infos)
+            .layout(layout)
+            */
+
+        let pipeline_infos = [pipeline_info];
+
+        let result = unsafe {
+            context.device().create_graphics_pipelines(
+                vk::PipelineCache::null(),
+                &pipeline_infos,
+                None,
+            )
+        };
+
+        let pipelines = match result {
+            Ok(pipelines) => pipelines,
+            Err((pipelines, err)) => {
+                log::warn!("{:?}", err);
+                pipelines
+            }
+        };
+
+        let pipeline = pipelines[0];
+
+        let ix = self.pipelines.insert((pipeline, pipeline_layout));
+
+        unsafe {
+            context
+                .device()
+                .destroy_shader_module(vert_shader_module, None);
+            context
+                .device()
+                .destroy_shader_module(frag_shader_module, None);
+        }
+
+        Ok(PipelineIx(ix))
+    }
+
     pub fn create_graphics_pipeline_tmp(
         &mut self,
         context: &VkContext,
