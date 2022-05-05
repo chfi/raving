@@ -269,7 +269,10 @@ impl VkEngine {
                     .binding(0)
                     .descriptor_count(1)
                     .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-                    .stage_flags(vk::ShaderStageFlags::COMPUTE) // TODO should also be graphics
+                    .stage_flags(
+                        vk::ShaderStageFlags::COMPUTE
+                            | vk::ShaderStageFlags::FRAGMENT,
+                    )
                     .build();
 
                 info.bindings.push(binding);
@@ -408,7 +411,10 @@ impl VkEngine {
                     .binding(0)
                     .descriptor_count(1)
                     .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-                    .stage_flags(vk::ShaderStageFlags::COMPUTE) // TODO should also be graphics
+                    .stage_flags(
+                        vk::ShaderStageFlags::COMPUTE
+                            | vk::ShaderStageFlags::FRAGMENT,
+                    )
                     .build();
 
                 info.bindings.push(binding);

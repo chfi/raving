@@ -123,6 +123,9 @@ impl WindowResBuilder {
 }
 
 pub struct WindowResources {
+    width: u32,
+    height: u32,
+
     pub indices: WindowResIndices,
 
     desc_set_infos: HashMap<String, BTreeMap<u32, DescriptorInfo>>,
@@ -159,7 +162,7 @@ impl WindowResources {
 
         let window_storage_image_layout = make_descriptor_layout_info(
             vk::DescriptorType::STORAGE_IMAGE,
-            vk::ShaderStageFlags::COMPUTE,
+            vk::ShaderStageFlags::COMPUTE | vk::ShaderStageFlags::FRAGMENT,
         );
 
         let window_texture_layout = make_descriptor_layout_info(
@@ -182,6 +185,9 @@ impl WindowResources {
         .collect();
 
         Self {
+            width: 0,
+            height: 0,
+
             indices: Default::default(),
 
             desc_set_infos,
@@ -189,6 +195,10 @@ impl WindowResources {
 
             resources: Default::default(),
         }
+    }
+
+    pub fn dims(&self) -> [u32; 2] {
+        [self.width, self.height]
     }
 
     pub fn add_image(
@@ -215,7 +225,7 @@ impl WindowResources {
     }
 
     pub fn build(
-        &self,
+        &mut self,
         engine: &mut VkEngine,
         width: u32,
         height: u32,
@@ -266,6 +276,9 @@ impl WindowResources {
 
             Ok(())
         })?;
+
+        self.width = width;
+        self.height = height;
 
         Ok(builder)
     }

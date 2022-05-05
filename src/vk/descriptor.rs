@@ -17,10 +17,6 @@ use anyhow::{anyhow, bail, Result};
 
 use thunderdome::{Arena, Index};
 
-pub mod transitions;
-
-pub use transitions::*;
-
 use super::{context::VkContext, BufferIx, ImageIx, ImageViewIx, SamplerIx};
 
 pub struct DescriptorAllocator {
