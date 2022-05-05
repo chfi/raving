@@ -864,11 +864,11 @@ impl VkEngine {
         Ok(())
     }
 
-    pub fn draw_from_batches(
+    pub fn draw_from_batches<'a>(
         &mut self,
         frame: &mut FrameResources,
         batches: &[&Box<
-            dyn Fn(&Device, &GpuResources, &BatchInput, vk::CommandBuffer),
+            dyn Fn(&Device, &GpuResources, &BatchInput, vk::CommandBuffer) + 'a,
         >],
         batch_dependencies: &[Option<Vec<(usize, vk::PipelineStageFlags)>>],
         acquire_image_batch: usize,
