@@ -1,8 +1,6 @@
 use crossbeam::atomic::AtomicCell;
 use parking_lot::{Mutex, RwLock};
 
-use lazy_static::lazy_static;
-
 use crate::vk::resource::index::*;
 
 use rhai::plugin::*;

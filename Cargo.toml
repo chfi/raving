@@ -15,24 +15,15 @@ winit = "0.25"
 
 crossbeam = "0.8"
 parking_lot = "0.11.1"
-rayon = "1.5"
-futures = { version = "0.3", features = ["thread-pool"] }
-futures-timer = { version = "3.0.2" }
-poll-promise = "0.1"
+
+version_check = { version = "0.9.4" }
 
 rhai = { version = "1.6", features = ["sync", "f32_float"] }
 bytemuck = { version = "1.7", features = ["derive"] }
 zerocopy = "0.6.1"
 
 image = "0.23"
-rgb = "0.8.25"
-colorous = "1.0.5"
 
-nalgebra = "0.30"
-nalgebra-glm = "0.16"
-nalgebra-sparse = "0.6"
-
-lazy_static = "1.4.0"
 anyhow = "1.0"
 
 thunderdome = "0.5"
@@ -40,12 +31,7 @@ rustc-hash = "1.1"
 
 bstr = "0.2"
 
-num_cpus = "1.13.0"
-
 log = "0.4"
-flexi_logger = { version = "0.18", features = ["async"] }
 
-rand = "0.8"
-
-[profile.dev]
-opt-level = 2
+# [profile.dev]
+# opt-level = 2
