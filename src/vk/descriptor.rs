@@ -259,45 +259,6 @@ impl DescriptorLayoutCache {
         Ok(layout)
     }
 
-    pub(super) fn get_descriptor_layout(
-        &mut self,
-        info: &vk::DescriptorSetLayoutCreateInfo,
-    ) -> Result<vk::DescriptorSetLayout> {
-        let mut layout_info = DescriptorLayoutInfo::default();
-
-        let count = info.binding_count as usize;
-        layout_info.bindings.reserve(count);
-
-        let mut is_sorted = true;
-        let mut prev = None;
-
-        let bindings =
-            unsafe { std::slice::from_raw_parts::<_>(info.p_bindings, count) };
-
-        for &b in bindings {
-            if let Some(p) = prev {
-                is_sorted = p < b.binding;
-            }
-            layout_info.bindings.push(b);
-            prev = Some(b.binding);
-        }
-
-        if !is_sorted {
-            layout_info.bindings.sort_by_key(|l| l.binding);
-        }
-
-        if let Some(v) = self.layout_cache.get(&layout_info) {
-            return Ok(*v);
-        }
-
-        let layout =
-            unsafe { self.device.create_descriptor_set_layout(info, None)? };
-
-        self.layout_cache.insert(layout_info, layout);
-
-        Ok(layout)
-    }
-
     pub(super) fn cleanup(&mut self) -> Result<()> {
         for layout in self.layout_cache.values() {
             unsafe {

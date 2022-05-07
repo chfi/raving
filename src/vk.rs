@@ -271,6 +271,7 @@ impl VkEngine {
                     .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
                     .stage_flags(
                         vk::ShaderStageFlags::COMPUTE
+                            | vk::ShaderStageFlags::VERTEX
                             | vk::ShaderStageFlags::FRAGMENT,
                     )
                     .build();
@@ -413,6 +414,7 @@ impl VkEngine {
                     .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
                     .stage_flags(
                         vk::ShaderStageFlags::COMPUTE
+                            | vk::ShaderStageFlags::VERTEX
                             | vk::ShaderStageFlags::FRAGMENT,
                     )
                     .build();

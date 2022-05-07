@@ -162,7 +162,9 @@ impl WindowResources {
 
         let window_storage_image_layout = make_descriptor_layout_info(
             vk::DescriptorType::STORAGE_IMAGE,
-            vk::ShaderStageFlags::COMPUTE | vk::ShaderStageFlags::FRAGMENT,
+            vk::ShaderStageFlags::VERTEX
+                | vk::ShaderStageFlags::COMPUTE
+                | vk::ShaderStageFlags::FRAGMENT,
         );
 
         let window_texture_layout = make_descriptor_layout_info(
@@ -252,6 +254,15 @@ impl WindowResources {
                         ctx, pass_ix, &attchs, width, height,
                     )?;
 
+                    VkEngine::set_debug_object_name(
+                        ctx,
+                        framebuffer,
+                        &format!(
+                            "Window Framebuffer: ({}, {}) - {}",
+                            width, height, name
+                        ),
+                    )?;
+
                     builder.framebuffers.insert(name.to_string(), framebuffer);
                 }
 
@@ -264,13 +275,40 @@ impl WindowResources {
                             .allocate_desc_sets_for(res, view, usage, layout)?;
 
                         for (ty, set) in out {
+                            {
+                                VkEngine::set_debug_object_name(
+                                    ctx,
+                                    set,
+                                    &format!(
+                                        "Window Desc Set: ({}, {}) - {:?}-{}",
+                                        width, height, ty, name
+                                    ),
+                                )?;
+                            }
+
                             desc_sets.insert((ty, layout), set);
                         }
                     }
                 }
 
+                VkEngine::set_debug_object_name(
+                    ctx,
+                    image.image,
+                    &format!(
+                        "Window Image: ({}, {}) - {}",
+                        width, height, name
+                    ),
+                )?;
                 builder.images.insert(name.to_string(), image);
 
+                VkEngine::set_debug_object_name(
+                    ctx,
+                    view,
+                    &format!(
+                        "Window Image View: ({}, {}) - {}",
+                        width, height, name
+                    ),
+                )?;
                 builder.image_views.insert(name.to_string(), view);
             }
 

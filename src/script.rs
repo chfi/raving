@@ -240,6 +240,22 @@ pub mod vk {
             ash::vk::ShaderStageFlags::ALL_GRAPHICS;
         pub const ALL: ash::vk::ShaderStageFlags =
             ash::vk::ShaderStageFlags::ALL;
+
+        #[rhai_fn(name = "|", global)]
+        pub fn or(
+            f: vk::ShaderStageFlags,
+            g: vk::ShaderStageFlags,
+        ) -> vk::ShaderStageFlags {
+            f | g
+        }
+
+        #[rhai_fn(name = "&", global)]
+        pub fn and(
+            f: vk::ShaderStageFlags,
+            g: vk::ShaderStageFlags,
+        ) -> vk::ShaderStageFlags {
+            f & g
+        }
     }
 
     #[rhai_mod(name = "PipelineStageFlags")]
