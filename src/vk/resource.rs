@@ -487,16 +487,11 @@ impl GpuResources {
 
     //// Shader methods
 
-    pub fn load_shader(
+    pub fn new_shader(
         &mut self,
-        shader_path: &str,
+        spirv: &[u32],
         stage: vk::ShaderStageFlags,
     ) -> Result<ShaderInfo> {
-        let spirv = {
-            let mut file = std::fs::File::open(shader_path)?;
-            ash::util::read_spv(&mut file)?
-        };
-
         let (sets, pcs) = rspirv_reflect::Reflection::new_from_spirv(
             bytemuck::cast_slice(&spirv),
         )
@@ -510,13 +505,26 @@ impl GpuResources {
         let push_constant_range = pcs.map(|pc| (pc.offset, pc.size));
 
         let shader = ShaderInfo {
-            spirv,
+            spirv: spirv.to_vec(),
             set_infos: sets,
             push_constant_range,
             stage,
         };
 
         Ok(shader)
+    }
+
+    pub fn load_shader(
+        &mut self,
+        shader_path: &str,
+        stage: vk::ShaderStageFlags,
+    ) -> Result<ShaderInfo> {
+        let spirv = {
+            let mut file = std::fs::File::open(shader_path)?;
+            ash::util::read_spv(&mut file)?
+        };
+
+        self.new_shader(&spirv, stage)
     }
 
     pub fn insert_shader(&mut self, shader: ShaderInfo) -> ShaderIx {

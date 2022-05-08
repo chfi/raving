@@ -5,6 +5,8 @@ use crate::vk::resource::index::*;
 
 use rhai::plugin::*;
 
+pub type EvalResult<T> = Result<T, Box<rhai::EvalAltResult>>;
+
 pub mod console;
 
 #[export_module]
