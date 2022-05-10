@@ -98,6 +98,14 @@ impl LabelSpace {
         self.used_bytes = 0;
     }
 
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub fn used_bytes(&self) -> usize {
+        self.used_bytes
+    }
+
     pub fn write_buffer(&self, res: &mut GpuResources) -> Option<()> {
         if self.used_bytes == 0 {
             return Some(());

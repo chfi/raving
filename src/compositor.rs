@@ -108,6 +108,10 @@ impl Compositor {
         })
     }
 
+    pub fn window_dims(&self) -> [u32; 2] {
+        self.window_dims.load()
+    }
+
     pub fn allocate_sublayers(&mut self, engine: &mut VkEngine) -> Result<()> {
         let mut layers = self.layers.write();
 
@@ -172,6 +176,53 @@ sublayer `{}`, sublayer def `{}`",
             self.sublayer_defs.insert(def.name.clone(), def);
         }
     }
+
+    /*
+    pub fn draw_into_image(
+        &self,
+        engine: &mut VkEngine,
+        dims: [u32; 2],
+    ) -> Result<Vec<u8>> {
+        let [width, height] = dims;
+
+        let px_count = (width * height) as usize;
+
+        // 3 channels of f32 colors
+        let out = Vec::with_capacity(px_count * 4 * 3);
+
+        let mut window_resources = WindowResources::new();
+        window_resources.add_image(
+            "out",
+            vk::Format::R8G8B8A8_UNORM,
+            vk::ImageUsageFlags::STORAGE
+                | vk::ImageUsageFlags::SAMPLED
+                | vk::ImageUsageFlags::COLOR_ATTACHMENT
+                | vk::ImageUsageFlags::TRANSFER_SRC,
+            [
+                (vk::ImageUsageFlags::STORAGE, vk::ImageLayout::GENERAL),
+                (vk::ImageUsageFlags::SAMPLED, vk::ImageLayout::GENERAL),
+            ],
+            Some(self.pass),
+        )?;
+
+        let builder = window_resources.build(engine, width, height)?;
+
+        builder.insert(
+            &mut window_resources.indices,
+            &engine.context,
+            &mut engine.resources,
+            &mut engine.allocator,
+        )?;
+
+        window_resources.destroy(
+            &engine.context,
+            &mut engine.resources,
+            &mut engine.allocator,
+        )?;
+
+        Ok(out)
+    }
+    */
 
     pub fn draw<'a>(
         &'a self,

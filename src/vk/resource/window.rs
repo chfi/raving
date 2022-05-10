@@ -199,6 +199,37 @@ impl WindowResources {
         }
     }
 
+    pub fn destroy(
+        self,
+        ctx: &VkContext,
+        res: &mut GpuResources,
+        alloc: &mut Allocator,
+    ) -> Result<()> {
+        for res_ix in self.indices.framebuffers.values() {
+            if let Some(fb) = res.framebuffers.remove(res_ix.0) {
+                unsafe {
+                    ctx.device().destroy_framebuffer(fb, None);
+                }
+            }
+        }
+
+        for res_ix in self.indices.image_views.values() {
+            if let Some(image_view) = res.image_views.remove(res_ix.0) {
+                unsafe {
+                    ctx.device().destroy_image_view(image_view, None);
+                }
+            }
+        }
+
+        for res_ix in self.indices.images.values() {
+            if let Some(image) = res.images.remove(res_ix.0) {
+                res.free_image(ctx, alloc, image)?;
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn dims(&self) -> [u32; 2] {
         [self.width, self.height]
     }
