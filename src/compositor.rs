@@ -333,16 +333,15 @@ sublayer `{}`, sublayer def `{}`",
         Box::new(draw)
     }
 
-    pub fn with_layer<F>(&self, layer_name: &str, f: F) -> Result<()>
+    pub fn with_layer<T, F>(&self, layer_name: &str, f: F) -> Result<T>
     where
-        F: FnOnce(&mut Layer) -> Result<()>,
+        F: FnOnce(&mut Layer) -> Result<T>,
     {
         let mut layers = self.layers.write();
         let layer = layers
             .get_mut(layer_name)
             .ok_or(anyhow!("Layer `{}` not found", layer_name))?;
-        f(layer)?;
-        Ok(())
+        f(layer)
     }
 
     pub fn push_sublayer(
