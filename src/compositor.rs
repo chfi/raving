@@ -108,6 +108,13 @@ impl Compositor {
         })
     }
 
+    pub fn toggle_layer(&self, layer_name: &str, enabled: bool) {
+        let mut layers = self.layers.write();
+        if let Some(layer) = layers.get_mut(layer_name) {
+            layer.enabled = enabled;
+        }
+    }
+
     pub fn window_dims(&self) -> [u32; 2] {
         self.window_dims.load()
     }
