@@ -119,6 +119,10 @@ impl Compositor {
         self.window_dims.load()
     }
 
+    pub fn window_dims_arc(&self) -> &Arc<AtomicCell<[u32; 2]>> {
+        &self.window_dims
+    }
+
     pub fn allocate_sublayers(&mut self, engine: &mut VkEngine) -> Result<()> {
         let mut layers = self.layers.write();
 
