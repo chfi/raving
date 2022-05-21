@@ -60,7 +60,8 @@ pub struct Compositor {
     window_dims: Arc<AtomicCell<[u32; 2]>>,
     pub sublayer_defs: BTreeMap<rhai::ImmutableString, SublayerDef>,
 
-    pub pass: RenderPassIx,
+    pub clear_pass: RenderPassIx,
+    pub load_pass: RenderPassIx,
 
     pub layers: Arc<RwLock<BTreeMap<rhai::ImmutableString, Layer>>>,
 
@@ -72,24 +73,37 @@ impl Compositor {
     pub fn init(
         engine: &mut VkEngine,
         window_dims: &Arc<AtomicCell<[u32; 2]>>,
+        init_layout: vk::ImageLayout,
+        final_layout: vk::ImageLayout,
         // sublayer_defs: F,
         // font_desc_set: DescSetIx,
     ) -> Result<Self> {
         let mut sublayer_defs = BTreeMap::default();
 
-        let pass = engine.with_allocators(|ctx, res, alloc| {
-            let format = vk::Format::R8G8B8A8_UNORM;
-            let pass = res.create_line_render_pass(
-                ctx,
-                format,
-                vk::ImageLayout::GENERAL,
-                vk::ImageLayout::GENERAL,
-            )?;
+        let (clear_pass, load_pass) =
+            engine.with_allocators(|ctx, res, alloc| {
+                let format = vk::Format::R8G8B8A8_UNORM;
+                let clear_pass = res.create_render_pass(
+                    ctx,
+                    format,
+                    init_layout,
+                    final_layout,
+                    true,
+                )?;
 
-            let pass_ix = res.insert_render_pass(pass);
+                let load_pass = res.create_render_pass(
+                    ctx,
+                    format,
+                    init_layout,
+                    final_layout,
+                    false,
+                )?;
 
-            Ok(pass_ix)
-        })?;
+                let clear_pass_ix = res.insert_render_pass(clear_pass);
+                let load_pass_ix = res.insert_render_pass(load_pass);
+
+                Ok((clear_pass_ix, load_pass_ix))
+            })?;
 
         let layers = Arc::new(RwLock::new(BTreeMap::default()));
         // let layer_priority = BTreeMap::default();
@@ -99,7 +113,10 @@ impl Compositor {
         Ok(Self {
             window_dims: window_dims.clone(),
             sublayer_defs,
-            pass,
+
+            clear_pass,
+            load_pass,
+
             // layer,
             layers,
 
@@ -244,7 +261,7 @@ sublayer `{}`, sublayer def `{}`",
                          res: &GpuResources,
                          cmd: vk::CommandBuffer| {
             let pass_info = vk::RenderPassBeginInfo::builder()
-                .render_pass(res[self.pass])
+                .render_pass(res[self.load_pass])
                 .framebuffer(res[framebuffer])
                 .render_area(vk::Rect2D {
                     offset: vk::Offset2D { x: 0, y: 0 },

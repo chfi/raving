@@ -360,25 +360,28 @@ impl GpuResources {
 
     //// Render pass methods
 
-    // TODO rename and make more configurable
-    pub fn create_line_render_pass(
+    pub fn create_render_pass(
         &self,
         ctx: &VkContext,
         format: vk::Format,
-        // color_attch_desc: vk::AttachmentDescription,
         initial_layout: vk::ImageLayout,
         final_layout: vk::ImageLayout,
+        clear: bool,
     ) -> Result<vk::RenderPass> {
-        let color_attch_desc = vk::AttachmentDescription::builder()
-            .format(format)
-            .samples(vk::SampleCountFlags::TYPE_1)
-            // .load_op(vk::AttachmentLoadOp::CLEAR)
-            .load_op(vk::AttachmentLoadOp::LOAD)
-            // .store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .store_op(vk::AttachmentStoreOp::STORE)
-            .initial_layout(initial_layout)
-            .final_layout(final_layout)
-            .build();
+        let color_attch_desc = {
+            let builder = vk::AttachmentDescription::builder()
+                .format(format)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .initial_layout(initial_layout)
+                .final_layout(final_layout);
+
+            if clear {
+                builder.load_op(vk::AttachmentLoadOp::CLEAR).build()
+            } else {
+                builder.load_op(vk::AttachmentLoadOp::LOAD).build()
+            }
+        };
 
         let attch_descs = [color_attch_desc];
 
