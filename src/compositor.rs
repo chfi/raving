@@ -254,21 +254,41 @@ sublayer `{}`, sublayer def `{}`",
 
     pub fn draw<'a>(
         &'a self,
+        clear_color: Option<[f32; 3]>,
         framebuffer: FramebufferIx,
         extent: vk::Extent2D,
     ) -> Box<dyn Fn(&Device, &GpuResources, vk::CommandBuffer) + 'a> {
+        let clear_values = clear_color.map(|color| {
+            [vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [color[0], color[1], color[2], 1.0],
+                },
+            }]
+        });
+
         let draw = move |device: &Device,
                          res: &GpuResources,
                          cmd: vk::CommandBuffer| {
-            let pass_info = vk::RenderPassBeginInfo::builder()
-                .render_pass(res[self.load_pass])
-                .framebuffer(res[framebuffer])
-                .render_area(vk::Rect2D {
-                    offset: vk::Offset2D { x: 0, y: 0 },
-                    extent,
-                })
-                .clear_values(&[])
-                .build();
+            let pass_info = {
+                let pass_info = vk::RenderPassBeginInfo::builder()
+                    .framebuffer(res[framebuffer])
+                    .render_area(vk::Rect2D {
+                        offset: vk::Offset2D { x: 0, y: 0 },
+                        extent,
+                    });
+
+                if let Some(cv) = clear_values.as_ref() {
+                    pass_info
+                        .render_pass(res[self.clear_pass])
+                        .clear_values(cv)
+                        .build()
+                } else {
+                    pass_info
+                        .render_pass(res[self.load_pass])
+                        .clear_values(&[])
+                        .build()
+                }
+            };
 
             unsafe {
                 device.cmd_begin_render_pass(
@@ -349,7 +369,14 @@ sublayer `{}`, sublayer def `{}`",
                     // let i_count = sublayer.instance_count;
 
                     def.draw(
-                        vertices, vx_count, i_count, sets, extent, device, res,
+                        vertices,
+                        vx_count,
+                        i_count,
+                        sets,
+                        clear_color,
+                        extent,
+                        device,
+                        res,
                         cmd,
                     );
                 }
@@ -719,7 +746,9 @@ impl Sublayer {
 pub struct SublayerDef {
     pub name: rhai::ImmutableString,
 
-    pub(super) pipeline: PipelineIx,
+    pub(super) clear_pipeline: PipelineIx,
+    pub(super) load_pipeline: PipelineIx,
+
     pub(super) sets: Vec<DescSetIx>,
     pub(super) vertex_stride: usize,
 
@@ -739,12 +768,17 @@ impl SublayerDef {
         vertex_count: usize,
         instance_count: usize,
         sets: impl IntoIterator<Item = DescSetIx>,
+        clear_color: Option<[f32; 3]>,
         extent: vk::Extent2D,
         device: &Device,
         res: &GpuResources,
         cmd: vk::CommandBuffer,
     ) {
-        let (pipeline, layout) = res[self.pipeline];
+        let (pipeline, layout) = if clear_color.is_some() {
+            res[self.clear_pipeline]
+        } else {
+            res[self.load_pipeline]
+        };
 
         unsafe {
             device.cmd_bind_pipeline(
@@ -805,7 +839,8 @@ impl SublayerDef {
         name: &str,
         vert: ShaderIx,
         frag: ShaderIx,
-        pass: vk::RenderPass,
+        clear_pass: vk::RenderPass,
+        load_pass: vk::RenderPass,
         vertex_offset: usize,
         vertex_stride: usize,
         per_instance: bool,
@@ -819,33 +854,56 @@ impl SublayerDef {
         S: IntoIterator<Item = DescSetIx>,
         T: std::any::Any + Copy,
     {
-        let pipeline = res.create_graphics_pipeline(
+        let clear_pipeline = res.create_graphics_pipeline(
             ctx,
             vert,
             frag,
-            pass,
-            vert_input_info,
+            clear_pass,
+            &vert_input_info,
+        )?;
+
+        let load_pipeline = res.create_graphics_pipeline(
+            ctx,
+            vert,
+            frag,
+            load_pass,
+            &vert_input_info,
         )?;
 
         {
-            let (pipeline, pipeline_layout) = res[pipeline];
+            let (pipeline, pipeline_layout) = res[clear_pipeline];
 
             VkEngine::set_debug_object_name(
                 ctx,
                 pipeline,
-                &format!("Sublayer Pipeline: `{}`", name),
+                &format!("Sublayer CLEAR Pipeline: `{}`", name),
             )?;
             VkEngine::set_debug_object_name(
                 ctx,
                 pipeline_layout,
-                &format!("Sublayer Pipeline Layout: `{}`", name),
+                &format!("Sublayer CLEAR Pipeline Layout: `{}`", name),
+            )?;
+
+            let (pipeline, pipeline_layout) = res[load_pipeline];
+
+            VkEngine::set_debug_object_name(
+                ctx,
+                pipeline,
+                &format!("Sublayer LOAD Pipeline: `{}`", name),
+            )?;
+            VkEngine::set_debug_object_name(
+                ctx,
+                pipeline_layout,
+                &format!("Sublayer LOAD Pipeline Layout: `{}`", name),
             )?;
         }
 
         Ok(Self {
             name: name.into(),
 
-            pipeline,
+            clear_pipeline,
+            load_pipeline,
+
             sets: sets.into_iter().collect(),
             vertex_stride,
             vertex_offset,

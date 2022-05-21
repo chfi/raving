@@ -537,13 +537,13 @@ impl GpuResources {
 
     //// Pipeline methods
 
-    pub fn create_graphics_pipeline<'a>(
+    pub fn create_graphics_pipeline(
         &mut self,
         context: &VkContext,
         vert_shader_ix: ShaderIx,
         frag_shader_ix: ShaderIx,
         render_pass: vk::RenderPass,
-        vert_input_info: vk::PipelineVertexInputStateCreateInfoBuilder<'a>,
+        vert_input_info: &vk::PipelineVertexInputStateCreateInfo,
     ) -> Result<PipelineIx> {
         /*
                 if (*&self[vert_shader_ix].stage & vk::ShaderStageFlags::VERTEX).is_empty()

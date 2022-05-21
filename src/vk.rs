@@ -29,7 +29,7 @@ pub use resource::*;
 
 use context::{Queues, VkContext};
 
-use crate::vk::descriptor::DescriptorLayoutInfo;
+use crate::{compositor::Compositor, vk::descriptor::DescriptorLayoutInfo};
 
 pub const FRAME_OVERLAP: usize = 2;
 
