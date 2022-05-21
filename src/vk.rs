@@ -498,6 +498,93 @@ impl VkEngine {
         };
     }
 
+    pub fn submit_queue_semaphore(
+        &mut self,
+        cmd: vk::CommandBuffer,
+        semaphore: SemaphoreIx,
+        wait_dst_stage_mask: vk::PipelineStageFlags,
+    ) -> Result<FenceIx> {
+        let ctx = &self.context;
+        let device = ctx.device();
+        let fence = self.resources.allocate_fence(ctx)?;
+
+        let cmds = [cmd];
+
+        let semaphore = self.resources[semaphore];
+
+        let wait_semaphores = [semaphore];
+        let wait_mask = [wait_dst_stage_mask];
+
+        let batch = vk::SubmitInfo::builder()
+            .command_buffers(&cmds)
+            .wait_semaphores(&wait_semaphores)
+            .wait_dst_stage_mask(&wait_mask)
+            .signal_semaphores(&[])
+            .build();
+
+        let submit_infos = [batch];
+
+        let queue = self.queues.thread.queue;
+
+        unsafe {
+            device.queue_submit(queue, &submit_infos, self.resources[fence])?;
+        }
+
+        Ok(fence)
+    }
+
+    pub fn submit_queue_fn<F, T>(&mut self, f: F) -> Result<T>
+    where
+        F: FnOnce(&Device, vk::CommandBuffer) -> Result<T>,
+    {
+        let cmd = self.allocate_command_buffer()?;
+        let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        unsafe {
+            self.context
+                .device()
+                .begin_command_buffer(cmd, &cmd_begin_info)?;
+        }
+
+        let result = f(self.context.device(), cmd);
+
+        unsafe { self.context.device().end_command_buffer(cmd) }?;
+
+        if result.is_err() {
+            self.free_command_buffer(cmd);
+        }
+
+        let result = result?;
+
+        let ctx = &self.context;
+        let device = ctx.device();
+        let fence = self.resources.allocate_fence(ctx)?;
+
+        let cmds = [cmd];
+
+        let batch = vk::SubmitInfo::builder()
+            .command_buffers(&cmds)
+            .wait_semaphores(&[])
+            .wait_dst_stage_mask(&[])
+            .signal_semaphores(&[])
+            .build();
+
+        let submit_infos = [batch];
+
+        let queue = self.queues.thread.queue;
+
+        unsafe {
+            device.queue_submit(queue, &submit_infos, self.resources[fence])?;
+        }
+
+        self.block_on_fence(fence)?;
+
+        self.free_command_buffer(cmd);
+
+        Ok(result)
+    }
+
     pub fn submit_queue(&mut self, cmd: vk::CommandBuffer) -> Result<FenceIx> {
         let ctx = &self.context;
         let device = ctx.device();
@@ -864,6 +951,266 @@ impl VkEngine {
         };
 
         Ok(())
+    }
+
+    pub fn draw_compositor(
+        &mut self,
+        compositor: &Compositor,
+        clear_color: [f32; 3],
+        width: u32,
+        height: u32,
+    ) -> Result<(ImageIx, ImageViewIx)> {
+        let render_pass = compositor.clear_pass;
+
+        let format = vk::Format::R8G8B8A8_UNORM;
+
+        let usage = vk::ImageUsageFlags::COLOR_ATTACHMENT
+            | vk::ImageUsageFlags::SAMPLED
+            | vk::ImageUsageFlags::TRANSFER_SRC;
+
+        // allocate image
+        let image = self.resources.allocate_image(
+            &self.context,
+            &mut self.allocator,
+            width,
+            height,
+            format,
+            usage,
+            Some(&format!("Compositor Image: ({}, {})", width, height)),
+        )?;
+
+        let image_view =
+            self.resources.new_image_view(&self.context, &image)?;
+
+        // create framebuffer
+        let attchs = [image_view];
+        let framebuffer = self.resources.create_framebuffer(
+            &self.context,
+            render_pass,
+            &attchs,
+            width,
+            height,
+        )?;
+
+        VkEngine::set_debug_object_name(
+            &self.context,
+            framebuffer,
+            &format!("Compositor Framebuffer: ({}, {})", width, height),
+        )?;
+
+        // let fb_ix = self.resources.insert_framebuffer(framebuffer);
+        let cmd = self.allocate_command_buffer()?;
+
+        unsafe {
+            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            self.context
+                .device()
+                .begin_command_buffer(cmd, &cmd_begin_info)?;
+        }
+
+        // draw compositor image
+        let extent = vk::Extent2D { width, height };
+        compositor.draw_impl(
+            framebuffer,
+            extent,
+            Some(clear_color),
+            self.context.device(),
+            &self.resources,
+            cmd,
+        )?;
+
+        unsafe {
+            self.context.device().end_command_buffer(cmd)?;
+        }
+
+        let fence = self.submit_queue(cmd)?;
+
+        // await results
+        self.block_on_fence(fence)?;
+
+        // free resources
+        self.free_command_buffer(cmd);
+        unsafe {
+            self.context.device().destroy_framebuffer(framebuffer, None);
+        }
+
+        let image = self.resources.insert_image(image);
+        let image_view = self.resources.insert_image_view(image_view);
+
+        Ok((image, image_view))
+    }
+
+    pub fn display_image(
+        &mut self,
+        // prev: Option<(FenceIx, SemaphoreIx)>,
+        prev: Option<FenceIx>,
+        image: ImageIx,
+        src_layout: vk::ImageLayout,
+        // ) -> Result<Option<(FenceIx, SemaphoreIx)>> {
+    ) -> Result<Option<FenceIx>> {
+        // if let Some(fence) = prev {
+        //     self.block_on_fence(fence)?;
+        // };
+
+        let s_img_avail = self.resources.allocate_semaphore(&self.context)?;
+        // let s_blit = self.resources.allocate_semaphore(&self.context)?;
+
+        let img_available_semaphore = self.resources[s_img_avail];
+        // let blit_semaphore = self.resources[s_blit];
+
+        let swapchain_img_ix = unsafe {
+            let result = self.swapchain.acquire_next_image(
+                self.swapchain_khr,
+                std::u64::MAX,
+                img_available_semaphore,
+                vk::Fence::null(),
+            );
+
+            match result {
+                Ok((img_index, _)) => img_index,
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    log::warn!("Swapchain out of date");
+                    self.resources
+                        .destroy_semaphore(&self.context, s_img_avail);
+                    // self.resources.destroy_semaphore(&self.context, s_blit);
+                    return Ok(None);
+                }
+                Err(error) => bail!(
+                    "Error while acquiring next swapchain image: {}",
+                    error
+                ),
+            }
+        };
+
+        let cmd = self.allocate_command_buffer()?;
+
+        let [width, height] = self.swapchain_dimensions();
+
+        let dst_extent = vk::Extent2D { width, height };
+
+        // blit image to swapchain i guess??
+        let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
+
+        let src_img = &self.resources[image];
+        let img_extent = src_img.extent;
+
+        let device = &self.context.device();
+        unsafe {
+            let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+            device.begin_command_buffer(cmd, &cmd_begin_info)?;
+
+            // Self::transition_image(
+            //     cmd,
+            //     self.context.device(),
+            //     src_img,
+            //     vk::AccessFlags::NONE,
+            //     vk::PipelineStageFlags::TOP_OF_PIPE,
+            //     vk::AccessFlags::TRANSFER_READ,
+            //     vk::PipelineStageFlags::TRANSFER,
+            //     vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            //     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            // );
+
+            Self::transition_image(
+                cmd,
+                self.context.device(),
+                swapchain_img,
+                vk::AccessFlags::NONE,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::ImageLayout::UNDEFINED,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
+
+            let src_subres = vk::ImageSubresourceLayers::builder()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_array_layer(0)
+                .mip_level(0)
+                .layer_count(1)
+                .build();
+
+            let dst_subres = src_subres.clone();
+
+            let src_0 = vk::Offset3D::builder().x(0).y(0).z(0).build();
+
+            let src_1 = vk::Offset3D::builder()
+                .x(img_extent.width as i32)
+                .y(img_extent.height as i32)
+                .z(1)
+                .build();
+
+            let dst_1 = vk::Offset3D::builder()
+                .x(dst_extent.width as i32)
+                .y(dst_extent.height as i32)
+                .z(1)
+                .build();
+
+            let blit = vk::ImageBlit::builder()
+                .src_subresource(src_subres)
+                .src_offsets([src_0, src_1])
+                .dst_subresource(dst_subres)
+                .dst_offsets([src_0, dst_1])
+                .build();
+
+            let regions = [blit];
+            let filter = vk::Filter::LINEAR;
+            device.cmd_blit_image(
+                cmd,
+                src_img.image,
+                src_layout,
+                swapchain_img,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &regions,
+                filter,
+            );
+
+            Self::transition_image(
+                cmd,
+                self.context.device(),
+                swapchain_img,
+                vk::AccessFlags::TRANSFER_WRITE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::AccessFlags::NONE,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::PRESENT_SRC_KHR,
+            );
+
+            device.end_command_buffer(cmd)
+        }?;
+
+        let fence = self.submit_queue_semaphore(
+            cmd,
+            s_img_avail,
+            vk::PipelineStageFlags::ALL_GRAPHICS,
+        )?;
+
+        self.block_on_fence(fence)?;
+
+        let present_wait = [];
+        let swapchains = [self.swapchain_khr];
+        let img_indices = [swapchain_img_ix];
+
+        let present_info = vk::PresentInfoKHR::builder()
+            .wait_semaphores(&present_wait)
+            .swapchains(&swapchains)
+            .image_indices(&img_indices)
+            .build();
+
+        let queue = self.queues.thread.queue;
+        let result =
+            unsafe { self.swapchain.queue_present(queue, &present_info) };
+
+        self.wait_gpu_idle()?;
+        self.resources.destroy_semaphore(&self.context, s_img_avail);
+        // self.resources.destroy_semaphore(&self.context, s_blit);
+
+        Ok(Some(fence))
     }
 
     pub fn draw_from_batches<'a>(

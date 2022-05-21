@@ -252,6 +252,133 @@ sublayer `{}`, sublayer def `{}`",
     }
     */
 
+    pub fn draw_impl(
+        &self,
+        framebuffer: vk::Framebuffer,
+        extent: vk::Extent2D,
+        clear_color: Option<[f32; 3]>,
+        device: &Device,
+        res: &GpuResources,
+        cmd: vk::CommandBuffer,
+    ) -> Result<()> {
+        let clear_values = clear_color.map(|color| {
+            [vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [color[0], color[1], color[2], 1.0],
+                },
+            }]
+        });
+
+        let pass_info = {
+            let pass_info = vk::RenderPassBeginInfo::builder()
+                .framebuffer(framebuffer)
+                .render_area(vk::Rect2D {
+                    offset: vk::Offset2D { x: 0, y: 0 },
+                    extent,
+                });
+
+            if let Some(cv) = clear_values.as_ref() {
+                pass_info
+                    .render_pass(res[self.clear_pass])
+                    .clear_values(cv)
+                    .build()
+            } else {
+                pass_info
+                    .render_pass(res[self.load_pass])
+                    .clear_values(&[])
+                    .build()
+            }
+        };
+
+        unsafe {
+            device.cmd_begin_render_pass(
+                cmd,
+                &pass_info,
+                vk::SubpassContents::INLINE,
+            );
+
+            let viewport = vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: extent.width as f32,
+                height: extent.height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            };
+
+            let viewports = [viewport];
+
+            device.cmd_set_viewport(cmd, 0, &viewports);
+
+            let scissor = vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent,
+            };
+            let scissors = [scissor];
+
+            device.cmd_set_scissor(cmd, 0, &scissors);
+
+            let sublayers = {
+                let layers = self.layers.read();
+
+                let mut layer_vec = layers
+                    .iter()
+                    .filter_map(|(_, layer)| {
+                        if layer.enabled {
+                            Some((
+                                layer.depth,
+                                layer
+                                    .sublayer_order
+                                    .iter()
+                                    .map(|i| &layer.sublayers[*i]),
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                layer_vec.sort_by_key(|(depth, _)| *depth);
+
+                layer_vec
+                    .into_iter()
+                    .flat_map(|(_, sublayer)| {
+                        sublayer.map(|sublayer| {
+                            let def_name = sublayer.def_name.clone();
+                            let vertices = sublayer.vertex_buffer;
+                            let vx_count = sublayer.vertex_count;
+                            let i_count = sublayer.instance_count;
+                            let sets = sublayer.sets.clone();
+
+                            (def_name, vertices, vx_count, i_count, sets)
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            };
+
+            for (def_name, vertices, vx_count, i_count, sets) in sublayers {
+                log::trace!("drawing sublayer {}", def_name);
+                let def = self.sublayer_defs.get(&def_name).unwrap();
+
+                def.draw(
+                    vertices,
+                    vx_count,
+                    i_count,
+                    sets,
+                    clear_color,
+                    extent,
+                    device,
+                    res,
+                    cmd,
+                );
+            }
+
+            device.cmd_end_render_pass(cmd);
+        }
+
+        Ok(())
+    }
+
     pub fn draw<'a>(
         &'a self,
         clear_color: Option<[f32; 3]>,

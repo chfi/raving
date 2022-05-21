@@ -340,6 +340,14 @@ impl GpuResources {
         Ok(old_view)
     }
 
+    pub fn destroy_image_view(&mut self, ctx: &VkContext, ix: ImageViewIx) {
+        if let Some(view) = self.take_image_view(ix) {
+            unsafe {
+                ctx.device().destroy_image_view(view, None);
+            }
+        }
+    }
+
     //// Sampler methods
 
     pub fn insert_sampler(
@@ -975,6 +983,18 @@ impl GpuResources {
             unsafe { ctx.device().create_semaphore(&semaphore_info, None) }?;
         let ix = self.semaphores.insert(semaphore);
         Ok(SemaphoreIx(ix))
+    }
+
+    pub fn destroy_semaphore(
+        &mut self,
+        ctx: &VkContext,
+        semaphore: SemaphoreIx,
+    ) {
+        if let Some(semaphore) = self.semaphores.remove(semaphore.0) {
+            unsafe {
+                ctx.device().destroy_semaphore(semaphore, None);
+            }
+        }
     }
 
     pub fn allocate_fence(&mut self, ctx: &VkContext) -> Result<FenceIx> {
