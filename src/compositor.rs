@@ -993,10 +993,20 @@ impl SublayerDef {
                         vk::IndexType::UINT32,
                     );
 
+                    // no idea if this is correct but works with the line renderer at least
+                    let instance_count = if instance_count > 1 {
+                        ix_count as u32
+                    } else {
+                        1
+                    };
+
                     device.cmd_draw_indexed(
                         cmd,
                         ix_count as u32,
-                        instance_count as u32,
+                        // 1,
+                        instance_count,
+                        // ix_count as u32,
+                        // instance_count as u32,
                         0,
                         0,
                         0,
@@ -1020,6 +1030,7 @@ impl SublayerDef {
         default_vertex_count: Option<usize>,
         default_instance_count: Option<usize>,
         vert_input_info: vk::PipelineVertexInputStateCreateInfoBuilder<'a>,
+        rasterizer_info: Option<&vk::PipelineRasterizationStateCreateInfo>,
         sets: S,
     ) -> Result<Self>
     where
@@ -1027,21 +1038,46 @@ impl SublayerDef {
         S: IntoIterator<Item = DescSetIx>,
         T: std::any::Any + Copy,
     {
-        let clear_pipeline = res.create_graphics_pipeline(
-            ctx,
-            vert,
-            frag,
-            clear_pass,
-            &vert_input_info,
-        )?;
+        let (clear_pipeline, load_pipeline) =
+            if let Some(rast_info) = rasterizer_info {
+                let clear = res.create_graphics_pipeline_impl(
+                    ctx,
+                    vert,
+                    frag,
+                    clear_pass,
+                    &vert_input_info,
+                    rast_info,
+                )?;
 
-        let load_pipeline = res.create_graphics_pipeline(
-            ctx,
-            vert,
-            frag,
-            load_pass,
-            &vert_input_info,
-        )?;
+                let load = res.create_graphics_pipeline_impl(
+                    ctx,
+                    vert,
+                    frag,
+                    load_pass,
+                    &vert_input_info,
+                    rast_info,
+                )?;
+
+                (clear, load)
+            } else {
+                let clear = res.create_graphics_pipeline(
+                    ctx,
+                    vert,
+                    frag,
+                    clear_pass,
+                    &vert_input_info,
+                )?;
+
+                let load = res.create_graphics_pipeline(
+                    ctx,
+                    vert,
+                    frag,
+                    load_pass,
+                    &vert_input_info,
+                )?;
+
+                (clear, load)
+            };
 
         {
             let (pipeline, pipeline_layout) = res[clear_pipeline];

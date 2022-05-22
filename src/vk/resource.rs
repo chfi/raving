@@ -548,24 +548,15 @@ impl GpuResources {
 
     //// Pipeline methods
 
-    pub fn create_graphics_pipeline(
+    pub fn create_graphics_pipeline_impl(
         &mut self,
         context: &VkContext,
         vert_shader_ix: ShaderIx,
         frag_shader_ix: ShaderIx,
         render_pass: vk::RenderPass,
         vert_input_info: &vk::PipelineVertexInputStateCreateInfo,
+        rasterizer_info: &vk::PipelineRasterizationStateCreateInfo,
     ) -> Result<PipelineIx> {
-        /*
-                if (*&self[vert_shader_ix].stage & vk::ShaderStageFlags::VERTEX).is_empty()
-                    ||
-        (*&self[frag_shader_ix].stage & vk::ShaderStageFlags::FRAGMENT).is_empty()
-
-                {
-                    bail!("Tried to create a compute pipeline from shader {:?} which has stage flags {:?}", shader_ix, &self[shader_ix].stage);
-                }
-                */
-
         let vert = self[vert_shader_ix].clone();
         let frag = self[frag_shader_ix].clone();
 
@@ -683,20 +674,6 @@ impl GpuResources {
             .dynamic_states(&dynamic_states)
             .build();
 
-        let rasterizer_info =
-            vk::PipelineRasterizationStateCreateInfo::builder()
-                .depth_clamp_enable(false)
-                .rasterizer_discard_enable(false)
-                .polygon_mode(vk::PolygonMode::FILL)
-                .line_width(1.0)
-                .cull_mode(vk::CullModeFlags::NONE)
-                .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
-                .depth_bias_enable(false)
-                .depth_bias_constant_factor(0.0)
-                .depth_bias_clamp(0.0)
-                .depth_bias_slope_factor(0.0)
-                .build();
-
         let multisampling_info =
             vk::PipelineMultisampleStateCreateInfo::builder()
                 .sample_shading_enable(false)
@@ -781,6 +758,41 @@ impl GpuResources {
         }
 
         Ok(PipelineIx(ix))
+    }
+
+    pub fn create_graphics_pipeline(
+        &mut self,
+        context: &VkContext,
+        vert_shader_ix: ShaderIx,
+        frag_shader_ix: ShaderIx,
+        render_pass: vk::RenderPass,
+        vert_input_info: &vk::PipelineVertexInputStateCreateInfo,
+    ) -> Result<PipelineIx> {
+        let rasterizer_info =
+            vk::PipelineRasterizationStateCreateInfo::builder()
+                .depth_clamp_enable(false)
+                .rasterizer_discard_enable(false)
+                .polygon_mode(vk::PolygonMode::FILL)
+                .line_width(1.0)
+                // .cull_mode(vk::CullModeFlags::BACK)
+                // .cull_mode(vk::CullModeFlags::FRONT)
+                .cull_mode(vk::CullModeFlags::NONE)
+                // .front_face(vk::FrontFace::CLOCKWISE)
+                .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+                .depth_bias_enable(false)
+                .depth_bias_constant_factor(0.0)
+                .depth_bias_clamp(0.0)
+                .depth_bias_slope_factor(0.0)
+                .build();
+
+        self.create_graphics_pipeline_impl(
+            context,
+            vert_shader_ix,
+            frag_shader_ix,
+            render_pass,
+            vert_input_info,
+            &rasterizer_info,
+        )
     }
 
     pub fn create_compute_pipeline(
