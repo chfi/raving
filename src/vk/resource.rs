@@ -384,7 +384,10 @@ impl GpuResources {
                 .initial_layout(initial_layout)
                 .final_layout(final_layout);
 
-            if clear {
+            // don't try to load from undefined
+            if initial_layout == vk::ImageLayout::UNDEFINED && !clear {
+                builder.load_op(vk::AttachmentLoadOp::DONT_CARE).build()
+            } else if clear {
                 builder.load_op(vk::AttachmentLoadOp::CLEAR).build()
             } else {
                 builder.load_op(vk::AttachmentLoadOp::LOAD).build()

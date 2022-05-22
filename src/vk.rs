@@ -535,7 +535,12 @@ impl VkEngine {
 
     pub fn submit_queue_fn<F, T>(&mut self, f: F) -> Result<T>
     where
-        F: FnOnce(&Device, vk::CommandBuffer) -> Result<T>,
+        F: FnOnce(
+            &VkContext,
+            &mut GpuResources,
+            &mut Allocator,
+            vk::CommandBuffer,
+        ) -> Result<T>,
     {
         let cmd = self.allocate_command_buffer()?;
         let cmd_begin_info = vk::CommandBufferBeginInfo::builder()
@@ -547,7 +552,8 @@ impl VkEngine {
                 .begin_command_buffer(cmd, &cmd_begin_info)?;
         }
 
-        let result = f(self.context.device(), cmd);
+        let result =
+            f(&self.context, &mut self.resources, &mut self.allocator, cmd);
 
         unsafe { self.context.device().end_command_buffer(cmd) }?;
 

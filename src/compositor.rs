@@ -346,22 +346,29 @@ sublayer `{}`, sublayer def `{}`",
                         sublayer.map(|sublayer| {
                             let def_name = sublayer.def_name.clone();
                             let vertices = sublayer.vertex_buffer;
+                            let indices = sublayer.indices;
                             let vx_count = sublayer.vertex_count;
                             let i_count = sublayer.instance_count;
                             let sets = sublayer.sets.clone();
 
-                            (def_name, vertices, vx_count, i_count, sets)
+                            (
+                                def_name, vertices, indices, vx_count, i_count,
+                                sets,
+                            )
                         })
                     })
                     .collect::<Vec<_>>()
             };
 
-            for (def_name, vertices, vx_count, i_count, sets) in sublayers {
+            for (def_name, vertices, indices, vx_count, i_count, sets) in
+                sublayers
+            {
                 log::trace!("drawing sublayer {}", def_name);
                 let def = self.sublayer_defs.get(&def_name).unwrap();
 
                 def.draw(
                     vertices,
+                    indices,
                     vx_count,
                     i_count,
                     sets,
@@ -473,11 +480,15 @@ sublayer `{}`, sublayer def `{}`",
                             sublayer.map(|sublayer| {
                                 let def_name = sublayer.def_name.clone();
                                 let vertices = sublayer.vertex_buffer;
+                                let indices = sublayer.indices;
                                 let vx_count = sublayer.vertex_count;
                                 let i_count = sublayer.instance_count;
                                 let sets = sublayer.sets.clone();
 
-                                (def_name, vertices, vx_count, i_count, sets)
+                                (
+                                    def_name, vertices, indices, vx_count,
+                                    i_count, sets,
+                                )
                             })
                         })
                         .collect::<Vec<_>>()
@@ -486,7 +497,9 @@ sublayer `{}`, sublayer def `{}`",
                     // layer_vec.sort_by_key(|(_, l)| *l.depth);
                 };
 
-                for (def_name, vertices, vx_count, i_count, sets) in sublayers {
+                for (def_name, vertices, indices, vx_count, i_count, sets) in
+                    sublayers
+                {
                     log::trace!("drawing sublayer {}", def_name);
                     let def = self.sublayer_defs.get(&def_name).unwrap();
 
@@ -497,6 +510,7 @@ sublayer `{}`, sublayer def `{}`",
 
                     def.draw(
                         vertices,
+                        indices,
                         vx_count,
                         i_count,
                         sets,
@@ -575,6 +589,8 @@ sublayer `{}`, sublayer def `{}`",
             vertex_stride: def.vertex_stride,
             vertex_data: Vec::new(),
             vertex_buffer,
+
+            indices: None,
 
             sets: sets.into_iter().collect(),
 
@@ -689,6 +705,8 @@ pub struct Sublayer {
 
     vertex_buffer: BufferIx,
 
+    indices: Option<(BufferIx, usize)>,
+
     sets: Vec<DescSetIx>,
 
     need_write: bool,
@@ -701,6 +719,10 @@ impl Sublayer {
     ) {
         self.sets.clear();
         self.sets.extend(new_sets);
+    }
+
+    pub fn set_indices(&mut self, indices: Option<(BufferIx, usize)>) {
+        self.indices = indices;
     }
 
     pub fn update_vertices_raw(
@@ -892,6 +914,7 @@ impl SublayerDef {
     pub fn draw(
         &self,
         vertices: BufferIx,
+        indices: Option<(BufferIx, usize)>,
         vertex_count: usize,
         instance_count: usize,
         sets: impl IntoIterator<Item = DescSetIx>,
@@ -950,13 +973,36 @@ impl SublayerDef {
                 );
             }
 
-            device.cmd_draw(
-                cmd,
-                vertex_count as u32,
-                instance_count as u32,
-                0,
-                0,
-            );
+            match indices {
+                None => {
+                    device.cmd_draw(
+                        cmd,
+                        vertex_count as u32,
+                        instance_count as u32,
+                        0,
+                        0,
+                    );
+                }
+                Some((ix_buf, ix_count)) => {
+                    let ix_buf = res[ix_buf].buffer;
+
+                    device.cmd_bind_index_buffer(
+                        cmd,
+                        ix_buf,
+                        0,
+                        vk::IndexType::UINT32,
+                    );
+
+                    device.cmd_draw_indexed(
+                        cmd,
+                        ix_count as u32,
+                        instance_count as u32,
+                        0,
+                        0,
+                        0,
+                    );
+                }
+            }
         }
     }
 
