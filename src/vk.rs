@@ -1048,23 +1048,15 @@ impl VkEngine {
         Ok((image, image_view))
     }
 
+    // this one blocks as it waits on the blitting fence
     pub fn display_image(
         &mut self,
-        // prev: Option<(FenceIx, SemaphoreIx)>,
-        prev: Option<FenceIx>,
         image: ImageIx,
         src_layout: vk::ImageLayout,
-        // ) -> Result<Option<(FenceIx, SemaphoreIx)>> {
-    ) -> Result<Option<FenceIx>> {
-        // if let Some(fence) = prev {
-        //     self.block_on_fence(fence)?;
-        // };
-
+    ) -> Result<bool> {
         let s_img_avail = self.resources.allocate_semaphore(&self.context)?;
-        // let s_blit = self.resources.allocate_semaphore(&self.context)?;
 
         let img_available_semaphore = self.resources[s_img_avail];
-        // let blit_semaphore = self.resources[s_blit];
 
         let swapchain_img_ix = unsafe {
             let result = self.swapchain.acquire_next_image(
@@ -1080,8 +1072,7 @@ impl VkEngine {
                     log::warn!("Swapchain out of date");
                     self.resources
                         .destroy_semaphore(&self.context, s_img_avail);
-                    // self.resources.destroy_semaphore(&self.context, s_blit);
-                    return Ok(None);
+                    return Ok(false);
                 }
                 Err(error) => bail!(
                     "Error while acquiring next swapchain image: {}",
@@ -1096,7 +1087,6 @@ impl VkEngine {
 
         let dst_extent = vk::Extent2D { width, height };
 
-        // blit image to swapchain i guess??
         let swapchain_img = self.swapchain_images[swapchain_img_ix as usize];
 
         let src_img = &self.resources[image];
@@ -1108,18 +1098,6 @@ impl VkEngine {
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
             device.begin_command_buffer(cmd, &cmd_begin_info)?;
-
-            // Self::transition_image(
-            //     cmd,
-            //     self.context.device(),
-            //     src_img,
-            //     vk::AccessFlags::NONE,
-            //     vk::PipelineStageFlags::TOP_OF_PIPE,
-            //     vk::AccessFlags::TRANSFER_READ,
-            //     vk::PipelineStageFlags::TRANSFER,
-            //     vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            //     vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            // );
 
             Self::transition_image(
                 cmd,
@@ -1214,9 +1192,10 @@ impl VkEngine {
 
         self.wait_gpu_idle()?;
         self.resources.destroy_semaphore(&self.context, s_img_avail);
-        // self.resources.destroy_semaphore(&self.context, s_blit);
 
-        Ok(Some(fence))
+        self.free_command_buffer(cmd);
+
+        Ok(true)
     }
 
     pub fn draw_from_batches<'a>(
