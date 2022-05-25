@@ -58,7 +58,7 @@ impl SublayerAllocMsg {
 
 pub struct Compositor {
     window_dims: Arc<AtomicCell<[u32; 2]>>,
-    pub sublayer_defs: BTreeMap<rhai::ImmutableString, SublayerDef>,
+    pub sublayer_defs: BTreeMap<rhai::ImmutableString, Arc<SublayerDef>>,
 
     pub clear_pass: RenderPassIx,
     pub load_pass: RenderPassIx,
@@ -201,7 +201,7 @@ sublayer `{}`, sublayer def `{}`",
         sublayer_defs: impl IntoIterator<Item = SublayerDef>,
     ) {
         for def in sublayer_defs {
-            self.sublayer_defs.insert(def.name.clone(), def);
+            self.sublayer_defs.insert(def.name.clone(), Arc::new(def));
         }
     }
 
@@ -541,7 +541,7 @@ sublayer `{}`, sublayer def `{}`",
     }
 
     pub fn push_sublayer(
-        defs: &BTreeMap<rhai::ImmutableString, SublayerDef>,
+        defs: &BTreeMap<rhai::ImmutableString, Arc<SublayerDef>>,
         engine: &mut VkEngine,
         layer: &mut Layer,
         def_name: &str,
@@ -580,6 +580,7 @@ sublayer `{}`, sublayer def `{}`",
         })?;
 
         let sublayer = Sublayer {
+            def: def.clone(),
             def_name: def.name.clone(),
 
             instance_count: def.default_instance_count.unwrap_or_default(),
@@ -693,6 +694,7 @@ impl Layer {
 
 #[derive(Clone)]
 pub struct Sublayer {
+    pub def: Arc<SublayerDef>,
     pub def_name: rhai::ImmutableString,
 
     vertex_stride: usize,
@@ -820,7 +822,7 @@ impl Sublayer {
     where
         I: IntoIterator<Item = [u8; N]>,
     {
-        assert!(N == self.vertex_stride);
+        assert_eq!(N, self.vertex_stride);
         if self.per_instance {
             self.vertex_data.clear();
             self.instance_count = 0;
@@ -908,6 +910,10 @@ pub struct SublayerDef {
     default_instance_count: Option<usize>,
 
     elem_type: std::any::TypeId,
+
+    pub parse_rhai_vertex: Option<
+        Arc<dyn Fn(rhai::Map, &mut [u8]) -> Option<()> + Send + Sync + 'static>,
+    >,
 }
 
 impl SublayerDef {
@@ -1122,7 +1128,17 @@ impl SublayerDef {
             default_instance_count,
 
             elem_type: std::any::TypeId::of::<T>(),
+
+            parse_rhai_vertex: None,
         })
+    }
+
+    pub fn set_parser<F>(&mut self, f: F)
+    where
+        F: Fn(rhai::Map, &mut [u8]) -> Option<()> + Send + Sync + 'static,
+    {
+        let parser = Arc::new(f);
+        self.parse_rhai_vertex = Some(parser);
     }
 }
 
