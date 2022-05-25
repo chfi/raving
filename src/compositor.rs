@@ -345,19 +345,20 @@ impl Compositor {
                 layer_vec
                     .into_iter()
                     .flat_map(|(_, sublayer)| {
-                        sublayer.map(|sublayer| {
-                            let def_name = sublayer.def_name.clone();
-                            let draw_data = &sublayer.draw_data;
-                            let vertices = draw_data.vertex_buffer;
-                            let indices = draw_data.indices;
-                            let vx_count = draw_data.vertex_count;
-                            let i_count = draw_data.instance_count;
-                            let sets = draw_data.sets.clone();
+                        sublayer.flat_map(|sublayer| {
+                            sublayer.draw_data.iter().map(|draw_data| {
+                                let def_name = sublayer.def_name.clone();
+                                let vertices = draw_data.vertex_buffer;
+                                let indices = draw_data.indices;
+                                let vx_count = draw_data.vertex_count;
+                                let i_count = draw_data.instance_count;
+                                let sets = draw_data.sets.clone();
 
-                            (
-                                def_name, vertices, indices, vx_count, i_count,
-                                sets,
-                            )
+                                (
+                                    def_name, vertices, indices, vx_count,
+                                    i_count, sets,
+                                )
+                            })
                         })
                     })
                     .collect::<Vec<_>>()
@@ -475,35 +476,33 @@ impl Compositor {
                         })
                         .collect::<Vec<_>>();
 
-                    layer_vec.sort_by_key(|(depth, _)| *depth);
-
                     layer_vec
                         .into_iter()
                         .flat_map(|(_, sublayer)| {
-                            sublayer.filter_map(|sublayer| {
-                                let def_name = sublayer.def_name.clone();
+                            sublayer.flat_map(|sublayer| {
+                                sublayer.draw_data.iter().filter_map(
+                                    |draw_data| {
+                                        let def_name =
+                                            sublayer.def_name.clone();
+                                        let vertices = draw_data.vertex_buffer;
+                                        let indices = draw_data.indices;
+                                        let vx_count = draw_data.vertex_count;
+                                        let i_count = draw_data.instance_count;
+                                        let sets = draw_data.sets.clone();
 
-                                let draw_data = &sublayer.draw_data;
-                                let vertices = draw_data.vertex_buffer;
-                                let indices = draw_data.indices;
-                                let vx_count = draw_data.vertex_count;
-                                let i_count = draw_data.instance_count;
-                                let sets = draw_data.sets.clone();
+                                        if vx_count == 0 || i_count == 0 {
+                                            return None;
+                                        }
 
-                                if vx_count == 0 || i_count == 0 {
-                                    return None;
-                                }
-
-                                Some((
-                                    def_name, vertices, indices, vx_count,
-                                    i_count, sets,
-                                ))
+                                        Some((
+                                            def_name, vertices, indices,
+                                            vx_count, i_count, sets,
+                                        ))
+                                    },
+                                )
                             })
                         })
                         .collect::<Vec<_>>()
-
-                    // let mut layer_vec = layers.iter().collect::<Vec<_>>();
-                    // layer_vec.sort_by_key(|(_, l)| *l.depth);
                 };
 
                 for (def_name, vertices, indices, vx_count, i_count, sets) in
@@ -511,11 +510,6 @@ impl Compositor {
                 {
                     log::trace!("drawing sublayer {}", def_name);
                     let def = self.sublayer_defs.get(&def_name).unwrap();
-
-                    // let vertices = sublayer.vertex_buffer;
-                    // let sets = sublayer.sets.iter().copied();
-                    // let vx_count = sublayer.vertex_count;
-                    // let i_count = sublayer.instance_count;
 
                     def.draw(
                         vertices,
@@ -563,58 +557,15 @@ impl Compositor {
         ))?;
 
         let capacity = 1024 * 1024;
+        let sets = sets.into_iter().collect::<Vec<_>>();
 
-        let vertex_buffer = engine.with_allocators(|ctx, res, alloc| {
-            let mem_loc = gpu_allocator::MemoryLocation::CpuToGpu;
-            let usage = vk::BufferUsageFlags::VERTEX_BUFFER
-                // | vk::BufferUsageFlags::STORAGE_BUFFER
-                | vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST;
-            let buffer = res.allocate_buffer(
-                ctx,
-                alloc,
-                mem_loc,
-                def.vertex_stride,
-                capacity,
-                usage,
-                Some(&format!(
-                    "Buffer: Sublayer {}.{}",
-                    def_name, sublayer_name
-                )),
-            )?;
-
-            let buf_ix = res.insert_buffer(buffer);
-
-            Ok(buf_ix)
-        })?;
-
-        let draw_data = SublayerDrawData {
-            instance_count: def.default_instance_count.unwrap_or_default(),
-            vertex_count: def.default_vertex_count.unwrap_or_default(),
-
-            vertex_data: Vec::new(),
-            vertex_buffer,
-
-            indices: None,
-
-            sets: sets.into_iter().collect(),
-
-            need_write: false,
-
-            per_instance: def.per_instance,
-            vertex_stride: def.vertex_stride,
-        };
-
-        let sublayer = Sublayer {
-            def: def.clone(),
-
-            def_name: def.name.clone(),
-
-            per_instance: def.per_instance,
-            vertex_stride: def.vertex_stride,
-
-            draw_data,
-        };
+        let sublayer = SublayerDef::instantiate(
+            def,
+            engine,
+            sublayer_name,
+            [capacity],
+            [sets.as_slice()],
+        )?;
 
         let i = layer.sublayers.len();
 
@@ -625,61 +576,6 @@ impl Compositor {
 
         Ok(())
     }
-
-    /*
-    pub fn push_sublayer(
-        &mut self,
-        engine: &mut VkEngine,
-        def_name: &str,
-        sets: impl IntoIterator<Item = DescSetIx>,
-    ) -> Result<()> {
-        let def = self.sublayer_defs.get(def_name).ok_or(anyhow!(
-            "could not find sublayer definition `{}`",
-            def_name
-        ))?;
-
-        let capacity = 1024 * 1024;
-
-        let vertex_buffer = engine.with_allocators(|ctx, res, alloc| {
-            let mem_loc = gpu_allocator::MemoryLocation::CpuToGpu;
-            let usage = vk::BufferUsageFlags::VERTEX_BUFFER
-                // | vk::BufferUsageFlags::STORAGE_BUFFER
-                | vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST;
-            let buffer = res.allocate_buffer(
-                ctx,
-                alloc,
-                mem_loc,
-                def.vertex_stride,
-                capacity,
-                usage,
-                Some(&format!("sublayer {}", def_name)),
-            )?;
-
-            let buf_ix = res.insert_buffer(buffer);
-
-            Ok(buf_ix)
-        })?;
-
-        let sublayer = Sublayer {
-            def_name: def.name.clone(),
-
-            instance_count: def.default_instance_count.unwrap_or_default(),
-            vertex_count: def.default_vertex_count.unwrap_or_default(),
-            per_instance: def.per_instance,
-
-            vertex_stride: def.vertex_stride,
-            vertex_data: Vec::new(),
-            vertex_buffer,
-
-            sets: sets.into_iter().collect(),
-        };
-
-        self.layer.sublayers.push(sublayer);
-
-        Ok(())
-    }
-    */
 }
 
 #[derive(Clone, Default)]
@@ -915,15 +811,15 @@ pub struct Sublayer {
 
     vertex_stride: usize,
 
-    pub draw_data: SublayerDrawData,
-    // draw_data: Vec<SublayerDrawData>,
+    // pub draw_data: SublayerDrawData,
+    pub draw_data: Vec<SublayerDrawData>,
 }
 
 impl Sublayer {
     pub fn draw_data_mut<'a>(
         &'a mut self,
     ) -> impl Iterator<Item = &'a mut SublayerDrawData> {
-        Some(&mut self.draw_data).into_iter()
+        self.draw_data.iter_mut()
     }
 }
 
@@ -950,6 +846,77 @@ pub struct SublayerDef {
 }
 
 impl SublayerDef {
+    pub fn instantiate<'a>(
+        def: &Arc<SublayerDef>,
+        engine: &mut VkEngine,
+        sublayer_name: &str,
+        vx_buf_caps: impl IntoIterator<Item = usize>,
+        sets: impl IntoIterator<Item = &'a [DescSetIx]>,
+    ) -> Result<Sublayer> {
+        let caps = vx_buf_caps.into_iter().collect::<Vec<_>>();
+        let sets = sets.into_iter().collect::<Vec<_>>();
+
+        assert!(caps.len() == sets.len(), "SublayerDef::instantiate()\nThe number of vertex buffers must be equal to the number of descriptor set slices ({} != {})", caps.len(), sets.len());
+
+        let mut draw_data = Vec::new();
+
+        for (capacity, sets) in caps.into_iter().zip(sets) {
+            let vertex_buffer = engine.with_allocators(|ctx, res, alloc| {
+                let mem_loc = gpu_allocator::MemoryLocation::CpuToGpu;
+                let usage = vk::BufferUsageFlags::VERTEX_BUFFER
+                // | vk::BufferUsageFlags::STORAGE_BUFFER
+                    | vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST;
+                let buffer = res.allocate_buffer(
+                    ctx,
+                    alloc,
+                    mem_loc,
+                    def.vertex_stride,
+                    capacity,
+                    usage,
+                    Some(&format!(
+                        "Buffer: Sublayer {}.{}",
+                        def.name, sublayer_name
+                    )),
+                )?;
+
+                let buf_ix = res.insert_buffer(buffer);
+
+                Ok(buf_ix)
+            })?;
+
+            let data = SublayerDrawData {
+                instance_count: def.default_instance_count.unwrap_or_default(),
+                vertex_count: def.default_vertex_count.unwrap_or_default(),
+
+                vertex_data: Vec::new(),
+                vertex_buffer,
+
+                indices: None,
+
+                sets: sets.into_iter().copied().collect(),
+
+                need_write: false,
+
+                per_instance: def.per_instance,
+                vertex_stride: def.vertex_stride,
+            };
+
+            draw_data.push(data);
+        }
+
+        Ok(Sublayer {
+            def: def.clone(),
+
+            def_name: def.name.clone(),
+
+            per_instance: def.per_instance,
+            vertex_stride: def.vertex_stride,
+
+            draw_data,
+        })
+    }
+
     pub fn draw(
         &self,
         vertices: BufferIx,
