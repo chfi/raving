@@ -183,13 +183,15 @@ impl Compositor {
 
                 let def_name = sublayer.def_name.clone();
 
-                sublayer.write_buffer(res).ok_or(anyhow!(
-                    "Error writing sublayer buffer in layer `{}`, \
-sublayer `{}`, sublayer def `{}`",
-                    name,
-                    sub_name,
-                    def_name
-                ))?;
+                for draw_data in sublayer.draw_data_mut() {
+                    draw_data.write_buffer(res).ok_or(anyhow!(
+                        "Error writing sublayer buffer in layer `{}`, \
+                         sublayer `{}`, sublayer def `{}`",
+                        name,
+                        sub_name,
+                        def_name
+                    ))?;
+                }
             }
         }
 
@@ -345,11 +347,12 @@ sublayer `{}`, sublayer def `{}`",
                     .flat_map(|(_, sublayer)| {
                         sublayer.map(|sublayer| {
                             let def_name = sublayer.def_name.clone();
-                            let vertices = sublayer.vertex_buffer;
-                            let indices = sublayer.indices;
-                            let vx_count = sublayer.vertex_count;
-                            let i_count = sublayer.instance_count;
-                            let sets = sublayer.sets.clone();
+                            let draw_data = &sublayer.draw_data;
+                            let vertices = draw_data.vertex_buffer;
+                            let indices = draw_data.indices;
+                            let vx_count = draw_data.vertex_count;
+                            let i_count = draw_data.instance_count;
+                            let sets = draw_data.sets.clone();
 
                             (
                                 def_name, vertices, indices, vx_count, i_count,
@@ -479,11 +482,13 @@ sublayer `{}`, sublayer def `{}`",
                         .flat_map(|(_, sublayer)| {
                             sublayer.filter_map(|sublayer| {
                                 let def_name = sublayer.def_name.clone();
-                                let vertices = sublayer.vertex_buffer;
-                                let indices = sublayer.indices;
-                                let vx_count = sublayer.vertex_count;
-                                let i_count = sublayer.instance_count;
-                                let sets = sublayer.sets.clone();
+
+                                let draw_data = &sublayer.draw_data;
+                                let vertices = draw_data.vertex_buffer;
+                                let indices = draw_data.indices;
+                                let vx_count = draw_data.vertex_count;
+                                let i_count = draw_data.instance_count;
+                                let sets = draw_data.sets.clone();
 
                                 if vx_count == 0 || i_count == 0 {
                                     return None;
@@ -583,15 +588,10 @@ sublayer `{}`, sublayer def `{}`",
             Ok(buf_ix)
         })?;
 
-        let sublayer = Sublayer {
-            def: def.clone(),
-            def_name: def.name.clone(),
-
+        let draw_data = SublayerDrawData {
             instance_count: def.default_instance_count.unwrap_or_default(),
             vertex_count: def.default_vertex_count.unwrap_or_default(),
-            per_instance: def.per_instance,
 
-            vertex_stride: def.vertex_stride,
             vertex_data: Vec::new(),
             vertex_buffer,
 
@@ -600,6 +600,20 @@ sublayer `{}`, sublayer def `{}`",
             sets: sets.into_iter().collect(),
 
             need_write: false,
+
+            per_instance: def.per_instance,
+            vertex_stride: def.vertex_stride,
+        };
+
+        let sublayer = Sublayer {
+            def: def.clone(),
+
+            def_name: def.name.clone(),
+
+            per_instance: def.per_instance,
+            vertex_stride: def.vertex_stride,
+
+            draw_data,
         };
 
         let i = layer.sublayers.len();
@@ -697,18 +711,11 @@ impl Layer {
 }
 
 #[derive(Clone)]
-pub struct Sublayer {
-    pub def: Arc<SublayerDef>,
-    pub def_name: rhai::ImmutableString,
-
-    vertex_stride: usize,
-
+pub struct SublayerDrawData {
     vertex_count: usize,
     instance_count: usize,
-    per_instance: bool,
 
     vertex_data: Vec<u8>,
-
     vertex_buffer: BufferIx,
 
     indices: Option<(BufferIx, usize)>,
@@ -716,19 +723,55 @@ pub struct Sublayer {
     sets: Vec<DescSetIx>,
 
     need_write: bool,
+
+    per_instance: bool,
+    vertex_stride: usize,
 }
 
-impl Sublayer {
+impl SublayerDrawData {
     pub fn update_sets(
         &mut self,
         new_sets: impl IntoIterator<Item = DescSetIx>,
     ) {
-        self.sets.clear();
-        self.sets.extend(new_sets);
+        self.sets = new_sets.into_iter().collect();
     }
 
     pub fn set_indices(&mut self, indices: Option<(BufferIx, usize)>) {
         self.indices = indices;
+    }
+
+    pub fn update_vertices<'a, I>(&mut self, new: I) -> Result<()>
+    where
+        I: IntoIterator<Item = &'a [u8]> + 'a,
+    {
+        if self.per_instance {
+            self.vertex_data.clear();
+            self.instance_count = 0;
+        } else {
+            self.vertex_data.clear();
+            self.vertex_count = 0;
+        }
+        self.need_write = true;
+
+        for slice in new.into_iter() {
+            if slice.len() != self.vertex_stride {
+                anyhow::bail!(
+                    "slice length {} doesn't match vertex stride {}",
+                    slice.len(),
+                    self.vertex_stride
+                );
+            }
+
+            self.vertex_data.extend_from_slice(slice);
+
+            if self.per_instance {
+                self.instance_count += 1;
+            } else {
+                self.vertex_count += 1;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn update_vertices_raw(
@@ -742,7 +785,6 @@ impl Sublayer {
         self.vertex_data.extend_from_slice(data);
         self.vertex_count = vertex_count;
         self.instance_count = instance_count;
-
         self.need_write = true;
     }
 
@@ -849,40 +891,6 @@ impl Sublayer {
         Ok(())
     }
 
-    pub fn update_vertices<'a, I>(&mut self, new: I) -> Result<()>
-    where
-        I: IntoIterator<Item = &'a [u8]> + 'a,
-    {
-        if self.per_instance {
-            self.vertex_data.clear();
-            self.instance_count = 0;
-        } else {
-            self.vertex_data.clear();
-            self.vertex_count = 0;
-        }
-        self.need_write = true;
-
-        for slice in new.into_iter() {
-            if slice.len() != self.vertex_stride {
-                anyhow::bail!(
-                    "slice length {} doesn't match vertex stride {}",
-                    slice.len(),
-                    self.vertex_stride
-                );
-            }
-
-            self.vertex_data.extend_from_slice(slice);
-
-            if self.per_instance {
-                self.instance_count += 1;
-            } else {
-                self.vertex_count += 1;
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn write_buffer(&mut self, res: &mut GpuResources) -> Option<()> {
         if !self.need_write {
             return Some(());
@@ -895,6 +903,27 @@ impl Sublayer {
         slice[0..len].clone_from_slice(&self.vertex_data);
         self.need_write = false;
         Some(())
+    }
+}
+
+#[derive(Clone)]
+pub struct Sublayer {
+    pub def: Arc<SublayerDef>,
+    pub def_name: rhai::ImmutableString,
+
+    per_instance: bool,
+
+    vertex_stride: usize,
+
+    pub draw_data: SublayerDrawData,
+    // draw_data: Vec<SublayerDrawData>,
+}
+
+impl Sublayer {
+    pub fn draw_data_mut<'a>(
+        &'a mut self,
+    ) -> impl Iterator<Item = &'a mut SublayerDrawData> {
+        Some(&mut self.draw_data).into_iter()
     }
 }
 
