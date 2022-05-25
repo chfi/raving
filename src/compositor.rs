@@ -477,7 +477,7 @@ sublayer `{}`, sublayer def `{}`",
                     layer_vec
                         .into_iter()
                         .flat_map(|(_, sublayer)| {
-                            sublayer.map(|sublayer| {
+                            sublayer.filter_map(|sublayer| {
                                 let def_name = sublayer.def_name.clone();
                                 let vertices = sublayer.vertex_buffer;
                                 let indices = sublayer.indices;
@@ -485,10 +485,14 @@ sublayer `{}`, sublayer def `{}`",
                                 let i_count = sublayer.instance_count;
                                 let sets = sublayer.sets.clone();
 
-                                (
+                                if vx_count == 0 || i_count == 0 {
+                                    return None;
+                                }
+
+                                Some((
                                     def_name, vertices, indices, vx_count,
                                     i_count, sets,
-                                )
+                                ))
                             })
                         })
                         .collect::<Vec<_>>()
