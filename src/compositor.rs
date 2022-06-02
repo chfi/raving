@@ -476,6 +476,8 @@ impl Compositor {
                         })
                         .collect::<Vec<_>>();
 
+                    layer_vec.sort_by_key(|(i, _)| *i);
+
                     layer_vec
                         .into_iter()
                         .flat_map(|(_, sublayer)| {
