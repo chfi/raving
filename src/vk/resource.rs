@@ -13,6 +13,7 @@ use gpu_allocator::{
 #[allow(unused_imports)]
 use anyhow::{anyhow, bail, Result};
 use rspirv_reflect::DescriptorInfo;
+use rustc_hash::FxHashMap;
 use thunderdome::Arena;
 
 use crate::{
@@ -40,8 +41,7 @@ pub struct GpuResources {
     layout_cache: DescriptorLayoutCache,
     pub(super) descriptor_sets: Arena<vk::DescriptorSet>,
 
-    // compute_pipelines: Arena<ComputePipeline>,
-    pipelines: Arena<(vk::Pipeline, vk::PipelineLayout)>,
+    pipelines: Arena<PipelineRes>,
 
     shaders: Arena<ShaderInfo>,
     shader_file_cache: HashMap<PathBuf, ShaderIx>,
@@ -61,14 +61,69 @@ pub struct GpuResources {
 }
 
 #[derive(Clone)]
+pub struct PipelineRes {
+    pub pipeline: vk::Pipeline,
+    pub pipeline_layout: vk::PipelineLayout,
+
+    pub vertex: Option<ShaderIx>,
+    pub fragment: Option<ShaderIx>,
+    pub compute: Option<ShaderIx>,
+}
+
+impl PipelineRes {
+    pub fn pipeline_and_layout(&self) -> (vk::Pipeline, vk::PipelineLayout) {
+        (self.pipeline, self.pipeline_layout)
+    }
+
+    pub fn is_graphics(&self) -> bool {
+        self.vertex.is_some() && self.fragment.is_some()
+    }
+
+    pub fn is_compute(&self) -> bool {
+        self.compute.is_some()
+    }
+
+    pub fn graphics(
+        pipeline: vk::Pipeline,
+        pipeline_layout: vk::PipelineLayout,
+        vertex: ShaderIx,
+        fragment: ShaderIx,
+    ) -> Self {
+        Self {
+            pipeline,
+            pipeline_layout,
+
+            vertex: Some(vertex),
+            fragment: Some(fragment),
+            compute: None,
+        }
+    }
+
+    pub fn compute(
+        pipeline: vk::Pipeline,
+        pipeline_layout: vk::PipelineLayout,
+        compute: ShaderIx,
+    ) -> Self {
+        Self {
+            pipeline,
+            pipeline_layout,
+
+            vertex: None,
+            fragment: None,
+            compute: Some(compute),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct ShaderInfo {
     // name: String,
-    spirv: Vec<u32>,
+    pub spirv: Vec<u32>,
 
-    set_infos: BTreeMap<u32, BTreeMap<u32, DescriptorInfo>>,
-    push_constant_range: Option<(u32, u32)>,
+    pub set_infos: BTreeMap<u32, BTreeMap<u32, DescriptorInfo>>,
+    pub push_constant_range: Option<(u32, u32)>,
 
-    stage: vk::ShaderStageFlags,
+    pub stage: vk::ShaderStageFlags,
 }
 
 impl ShaderInfo {
@@ -746,7 +801,14 @@ impl GpuResources {
 
         let pipeline = pipelines[0];
 
-        let ix = self.pipelines.insert((pipeline, pipeline_layout));
+        let pipeline_res = PipelineRes::graphics(
+            pipeline,
+            pipeline_layout,
+            vert_shader_ix,
+            frag_shader_ix,
+        );
+
+        let ix = self.pipelines.insert(pipeline_res);
 
         unsafe {
             context
@@ -890,7 +952,10 @@ impl GpuResources {
 
         let pipeline = pipelines[0];
 
-        let ix = self.pipelines.insert((pipeline, pipeline_layout));
+        let pipeline_res =
+            PipelineRes::compute(pipeline, pipeline_layout, shader_ix);
+
+        let ix = self.pipelines.insert(pipeline_res);
 
         unsafe {
             context.device().destroy_shader_module(shader_module, None);
@@ -1122,10 +1187,11 @@ impl GpuResources {
             }
         }
 
-        for (_ix, (pipeline, layout)) in self.pipelines.iter() {
+        for (_ix, pipeline_res) in self.pipelines.iter() {
             unsafe {
-                device.destroy_pipeline_layout(*layout, None);
-                device.destroy_pipeline(*pipeline, None);
+                let (pipeline, layout) = pipeline_res.pipeline_and_layout();
+                device.destroy_pipeline_layout(layout, None);
+                device.destroy_pipeline(pipeline, None);
             }
         }
 

@@ -658,7 +658,8 @@ impl VkEngine {
         push_constants: &[u8],
         groups: (u32, u32, u32),
     ) -> vk::CommandBuffer {
-        let (pipeline, pipeline_layout) = resources[pipeline_ix];
+        let (pipeline, pipeline_layout) =
+            resources[pipeline_ix].pipeline_and_layout();
 
         let desc_sets = desc_set_indices
             .iter()

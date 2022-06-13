@@ -828,8 +828,8 @@ impl Sublayer {
 pub struct SublayerDef {
     pub name: rhai::ImmutableString,
 
-    pub(super) clear_pipeline: PipelineIx,
-    pub(super) load_pipeline: PipelineIx,
+    pub clear_pipeline: PipelineIx,
+    pub load_pipeline: PipelineIx,
 
     pub(super) sets: Vec<DescSetIx>,
     pub(super) vertex_stride: usize,
@@ -933,9 +933,9 @@ impl SublayerDef {
         cmd: vk::CommandBuffer,
     ) {
         let (pipeline, layout) = if clear_color.is_some() {
-            res[self.clear_pipeline]
+            res[self.clear_pipeline].pipeline_and_layout()
         } else {
-            res[self.load_pipeline]
+            res[self.load_pipeline].pipeline_and_layout()
         };
 
         unsafe {
@@ -1088,7 +1088,8 @@ impl SublayerDef {
             };
 
         {
-            let (pipeline, pipeline_layout) = res[clear_pipeline];
+            let (pipeline, pipeline_layout) =
+                res[clear_pipeline].pipeline_and_layout();
 
             VkEngine::set_debug_object_name(
                 ctx,
@@ -1101,7 +1102,8 @@ impl SublayerDef {
                 &format!("Sublayer CLEAR Pipeline Layout: `{}`", name),
             )?;
 
-            let (pipeline, pipeline_layout) = res[load_pipeline];
+            let (pipeline, pipeline_layout) =
+                res[load_pipeline].pipeline_and_layout();
 
             VkEngine::set_debug_object_name(
                 ctx,

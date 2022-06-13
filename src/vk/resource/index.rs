@@ -51,7 +51,7 @@ impl std::ops::Index<ShaderIx> for GpuResources {
 }
 
 impl std::ops::Index<PipelineIx> for GpuResources {
-    type Output = (vk::Pipeline, vk::PipelineLayout);
+    type Output = super::PipelineRes;
 
     fn index(&self, i: PipelineIx) -> &Self::Output {
         &self.pipelines[i.0]
