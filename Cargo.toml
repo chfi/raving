@@ -18,6 +18,9 @@ parking_lot = "0.11.1"
 
 version_check = { version = "0.9.4" }
 
+nalgebra = "0.31"
+nalgebra-glm = "0.17"
+
 rhai = { version = "1.6", features = ["sync", "f32_float"] }
 bytemuck = { version = "1.7", features = ["derive"] }
 zerocopy = "0.6.1"
