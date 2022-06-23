@@ -269,6 +269,34 @@ impl GpuResources {
 
     //// Image methods
 
+    pub fn find_supported_format(
+        ctx: &VkContext,
+        candidates: impl IntoIterator<Item = vk::Format>,
+        tiling: vk::ImageTiling,
+        features: vk::FormatFeatureFlags,
+    ) -> Result<vk::Format> {
+        for cand in candidates {
+            let props = unsafe {
+                ctx.instance().get_physical_device_format_properties(
+                    ctx.physical_device(),
+                    cand,
+                )
+            };
+
+            if tiling == vk::ImageTiling::LINEAR
+                && (props.linear_tiling_features & features) == features
+            {
+                return Ok(cand);
+            } else if tiling == vk::ImageTiling::OPTIMAL
+                && (props.optimal_tiling_features & features) == features
+            {
+                return Ok(cand);
+            }
+        }
+
+        Err(anyhow!("Failed to find supported format"))
+    }
+
     /*
     pub fn insert_image_at(
         &mut self,
@@ -422,6 +450,110 @@ impl GpuResources {
     }
 
     //// Render pass methods
+
+    pub fn create_render_pass_adv(
+        &self,
+        ctx: &VkContext,
+        format: vk::Format,
+        depth_format: Option<vk::Format>,
+        initial_layout: vk::ImageLayout,
+        final_layout: vk::ImageLayout,
+        clear: bool,
+    ) -> Result<vk::RenderPass> {
+        let color_attch_desc = {
+            let builder = vk::AttachmentDescription::builder()
+                .format(format)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .initial_layout(initial_layout)
+                .final_layout(final_layout);
+
+            // don't try to load from undefined
+            if initial_layout == vk::ImageLayout::UNDEFINED && !clear {
+                builder.load_op(vk::AttachmentLoadOp::DONT_CARE).build()
+            } else if clear {
+                builder.load_op(vk::AttachmentLoadOp::CLEAR).build()
+            } else {
+                builder.load_op(vk::AttachmentLoadOp::LOAD).build()
+            }
+        };
+
+        let mut attch_descs = vec![color_attch_desc];
+
+        let depth_attch_ref = if let Some(depth_format) = depth_format {
+            let builder = vk::AttachmentDescription::builder()
+                .format(depth_format)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .load_op(vk::AttachmentLoadOp::DONT_CARE)
+                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                // .store_op(vk::AttachmentStoreOp::STORE)
+                .initial_layout(vk::ImageLayout::UNDEFINED)
+                .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .build();
+
+            attch_descs.push(builder);
+
+            let attch_ref = vk::AttachmentReference::builder()
+                .attachment(1)
+                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .build();
+
+            Some(attch_ref)
+        } else {
+            None
+        };
+
+        let color_attch_ref = vk::AttachmentReference::builder()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .build();
+
+        let color_attchs = [color_attch_ref];
+
+        let mut subpass_desc = vk::SubpassDescription::builder()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color_attchs);
+
+        if let Some(depth_attch) = depth_attch_ref.as_ref() {
+            subpass_desc = subpass_desc.depth_stencil_attachment(depth_attch);
+        }
+
+        let subpass_desc = subpass_desc.build();
+
+        let subpass_descs = [subpass_desc];
+
+        let subpass_dep = vk::SubpassDependency::builder()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                    | vk::PipelineStageFlags::COMPUTE_SHADER,
+            )
+            .src_access_mask(
+                vk::AccessFlags::SHADER_WRITE
+                    | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            )
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(
+                vk::AccessFlags::COLOR_ATTACHMENT_READ
+                    | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            )
+            .build();
+
+        let subpass_deps = [subpass_dep];
+
+        let render_pass_info = vk::RenderPassCreateInfo::builder()
+            .attachments(&attch_descs)
+            .subpasses(&subpass_descs)
+            .dependencies(&subpass_deps)
+            .build();
+
+        let render_pass = unsafe {
+            ctx.device().create_render_pass(&render_pass_info, None)
+        }?;
+
+        Ok(render_pass)
+    }
 
     pub fn create_render_pass(
         &self,

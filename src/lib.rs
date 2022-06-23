@@ -2,6 +2,8 @@ pub mod texture;
 pub mod vk;
 
 pub mod compositor;
+pub mod scene;
+
 pub mod script;
 
 #[macro_export]
