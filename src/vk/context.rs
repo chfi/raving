@@ -92,8 +92,9 @@ pub struct VkContext {
     physical_device: vk::PhysicalDevice,
     device: Device,
 
-    #[allow(dead_code)]
-    get_physical_device_features2: KhrGetPhysicalDeviceProperties2Fn,
+    physical_device_properties: vk::PhysicalDeviceProperties,
+    // #[allow(dead_code)]
+    // get_physical_device_features2: KhrGetPhysicalDeviceProperties2Fn,
 }
 
 impl VkContext {
@@ -120,6 +121,10 @@ impl VkContext {
     pub fn debug_utils(&self) -> Option<&DebugUtils> {
         self.debug_utils.as_ref().map(|(utils, _)| utils)
     }
+
+    pub fn phys_device_props(&self) -> &vk::PhysicalDeviceProperties {
+        &self.physical_device_properties
+    }
 }
 
 impl VkContext {
@@ -132,6 +137,10 @@ impl VkContext {
         physical_device: vk::PhysicalDevice,
         device: Device,
     ) -> anyhow::Result<Self> {
+        let physical_device_properties =
+            unsafe { instance.get_physical_device_properties(physical_device) };
+
+        /*
         let get_physical_device_features2 =
             unsafe {
                 KhrGetPhysicalDeviceProperties2Fn::load(|name| {
@@ -141,6 +150,7 @@ impl VkContext {
                     ))
                 })
             };
+        */
 
         Ok(VkContext {
             _entry: entry,
@@ -151,7 +161,7 @@ impl VkContext {
             physical_device,
             device,
 
-            get_physical_device_features2,
+            physical_device_properties,
         })
     }
 }
