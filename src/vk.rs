@@ -1455,6 +1455,31 @@ impl VkEngine {
 
         Ok(())
     }
+
+    /// Given a desired uniform buffer size in bytes, return the
+    /// smallest size that matches the Vulkan implementations'
+    /// `minUniformBufferOffsetAlignment` limit.
+    ///
+    /// Any buffer that is used as a uniform buffer must have a size
+    /// that's divisible with that device limit.
+    pub fn aligned_ubo_size(ctx: &VkContext, ubo_size: usize) -> usize {
+        let dev_align =
+            ctx.phys_device_props()
+                .limits
+                .min_uniform_buffer_offset_alignment as usize;
+
+        if ubo_size == 0 {
+            return dev_align;
+        }
+
+        if ubo_size % dev_align == 0 {
+            return ubo_size;
+        }
+
+        let blocks = ubo_size / dev_align;
+
+        (1 + blocks) * dev_align
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
