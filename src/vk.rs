@@ -27,7 +27,9 @@ pub mod util;
 
 pub use resource::*;
 
-use context::{Queues, VkContext};
+use context::Queues;
+
+pub use context::VkContext;
 
 use crate::{compositor::Compositor, vk::descriptor::DescriptorLayoutInfo};
 

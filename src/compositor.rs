@@ -606,6 +606,65 @@ impl Layer {
         let ix = *self.sublayer_names.get(name)?;
         self.sublayers.get_mut(ix)
     }
+
+    pub fn sublayer_count(&self) -> usize {
+        // debug_assert!(self.sublayers.len() == self.sublayer_order.len());
+        self.sublayers.len()
+    }
+
+    /// Return the depth of the sublayer with the given name, if it exists.
+    ///
+    /// "Depth" is measured from the back, so a sublayer at depth `N`
+    /// will be drawn below all sublayers at depth `N + 1` and above.
+    pub fn get_sublayer_depth(&self, name: &str) -> Option<usize> {
+        let sl_ix = *self.sublayer_names.get(name)?;
+        self.sublayer_order.iter().position(|&i| i == sl_ix)
+    }
+
+    /// Move the given sublayer to a new depth, if it exists.
+    ///
+    /// "Depth" is measured from the back, so a sublayer at depth `N`
+    /// will be drawn below all sublayers at depth `N + 1` and above.
+    pub fn move_sublayer_to_depth(
+        &mut self,
+        name: &str,
+        depth: usize,
+    ) -> Option<()> {
+        let sl_ix = *self.sublayer_names.get(name)?;
+        let order_ix = self.sublayer_order.iter().position(|&i| i == sl_ix)?;
+
+        let _ = self.sublayer_order.remove(order_ix);
+
+        let tgt = depth.min(self.sublayer_order.len());
+
+        self.sublayer_order.insert(tgt, sl_ix);
+
+        Some(())
+    }
+
+    /// Moves a sublayer to the front, so it's drawn on top of all
+    /// sublayers in this layer.
+    ///
+    /// Equivalent to
+    /// `layer.move_sublayer_to_depth(name, layer.sublayer_count())`.
+    pub fn move_sublayer_to_front(&mut self, name: &str) -> Option<()> {
+        let sl_ix = *self.sublayer_names.get(name)?;
+        let order_ix = self.sublayer_order.iter().position(|&i| i == sl_ix)?;
+
+        let _ = self.sublayer_order.remove(order_ix);
+
+        self.sublayer_order.push(sl_ix);
+
+        Some(())
+    }
+
+    /// Moves a sublayer to the back, drawing it below all other
+    /// sublayers in this layer.
+    ///
+    /// Equivalent to `layer.move_sublayer_to_depth(name, 0)`.
+    pub fn move_sublayer_to_back(&mut self, name: &str) -> Option<()> {
+        self.move_sublayer_to_depth(name, 0)
+    }
 }
 
 #[derive(Clone)]
