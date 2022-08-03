@@ -1060,20 +1060,17 @@ impl SublayerDef {
                         vk::IndexType::UINT32,
                     );
 
-                    // no idea if this is correct but works with the line renderer at least
-                    let instance_count = if instance_count > 1 {
-                        ix_count as u32
+                    // i think this is correct, but it needs more testing
+                    let (instances, index_count) = if instance_count > 1 {
+                        (ix_count as u32, vertex_count as u32)
                     } else {
-                        1
+                        (1, ix_count as u32)
                     };
 
                     device.cmd_draw_indexed(
                         cmd,
-                        ix_count as u32,
-                        // 1,
-                        instance_count,
-                        // ix_count as u32,
-                        // instance_count as u32,
+                        index_count,
+                        instances,
                         0,
                         0,
                         0,
