@@ -1176,6 +1176,30 @@ impl SublayerDef {
         S: IntoIterator<Item = DescSetIx>,
         T: std::any::Any + Copy,
     {
+
+        let color_blend_attachment =
+            vk::PipelineColorBlendAttachmentState::builder()
+                .color_write_mask(vk::ColorComponentFlags::RGBA)
+                .blend_enable(true)
+                .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                .color_blend_op(vk::BlendOp::ADD)
+                .src_alpha_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                .alpha_blend_op(vk::BlendOp::ADD)
+                .build();
+
+        let color_blend_attachments = [color_blend_attachment];
+
+        let color_blending_info =
+            vk::PipelineColorBlendStateCreateInfo::builder()
+                // .logic_op_enable(false)
+                // .logic_op(vk::LogicOp::COPY)
+                .attachments(&color_blend_attachments)
+                .blend_constants([0.0, 0.0, 0.0, 0.0])
+                .build();
+
+        
         let (clear_pipeline, load_pipeline) =
             if let Some(rast_info) = rasterizer_info {
                 let clear = res.create_graphics_pipeline_impl(
@@ -1185,6 +1209,7 @@ impl SublayerDef {
                     clear_pass,
                     &vert_input_info,
                     rast_info,
+                    &color_blending_info,
                 )?;
 
                 let load = res.create_graphics_pipeline_impl(
@@ -1194,6 +1219,7 @@ impl SublayerDef {
                     load_pass,
                     &vert_input_info,
                     rast_info,
+                    &color_blending_info,
                 )?;
 
                 (clear, load)
