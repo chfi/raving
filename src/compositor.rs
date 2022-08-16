@@ -686,6 +686,27 @@ pub struct SublayerDrawData {
 }
 
 impl SublayerDrawData {
+
+    pub fn vertex_count(&self) -> usize {
+        self.vertex_count
+    }
+
+    pub fn instance_count(&self) -> usize {
+        self.instance_count
+    }
+
+    pub fn indices(&self) -> Option<(BufferIx, usize)> {
+        self.indices
+    }
+
+    pub fn sets(&self) -> &[DescSetIx] {
+        &self.sets
+    }
+
+    pub fn vertex_buffer(&self) -> BufferIx {
+        self.vertex_buffer
+    }
+
     pub fn update_sets(
         &mut self,
         new_sets: impl IntoIterator<Item = DescSetIx>,
@@ -907,6 +928,59 @@ pub struct SublayerDef {
 }
 
 impl SublayerDef {
+    /*
+    pub fn allocate_draw_data(
+        def: &Arc<SublayerDef>,
+        engine: &mut VkEngine,
+        vx_buf_size: usize,
+    ) -> Result<SublayerDrawData> {
+        let vertex_buffer = engine.with_allocators(|ctx, res, alloc| {
+            let mem_loc = gpu_allocator::MemoryLocation::CpuToGpu;
+            let usage = vk::BufferUsageFlags::VERTEX_BUFFER
+                // | vk::BufferUsageFlags::STORAGE_BUFFER
+                    | vk::BufferUsageFlags::TRANSFER_SRC
+                    | vk::BufferUsageFlags::TRANSFER_DST;
+            let buffer = res.allocate_buffer(
+                ctx,
+                alloc,
+                mem_loc,
+                def.vertex_stride,
+                vx_buf_size,
+                usage,
+                Some(&format!(
+                    "Vertex Buffer: Sublayer {}",
+                    def.name, sublayer_name
+                    // "Buffer: Sublayer {}.{}",
+                    // def.name, sublayer_name
+                )),
+            )?;
+
+            let buf_ix = res.insert_buffer(buffer);
+
+            Ok(buf_ix)
+        })?;
+
+        let data = SublayerDrawData {
+            instance_count: def.default_instance_count.unwrap_or_default(),
+            vertex_count: def.default_vertex_count.unwrap_or_default(),
+
+            vertex_data: Vec::new(),
+            vertex_buffer,
+
+            indices: None,
+
+            sets: Vec::new(),
+
+            need_write: false,
+
+            per_instance: def.per_instance,
+            vertex_stride: def.vertex_stride,
+        };
+
+        Ok(data)
+    }
+    */
+
     pub fn instantiate<'a>(
         def: &Arc<SublayerDef>,
         engine: &mut VkEngine,
